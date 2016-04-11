@@ -31,8 +31,10 @@ else
 fi
 DATA_DIR="/var/lib/rabbitmq/data"
 DATA_FILE="${DATA_DIR}/$(hostname -s)_queue_stats.dat"
+TMP_DATA_FILE="${DATA_DIR}/.$(hostname -s)_queue_stats.dat.tmp"
 LOG_DIR="/var/lib/rabbitmq/logs"
 RABBIT_STATS_DATA_FILE="${DATA_DIR}/$(hostname -s)_general_stats.dat"
+TMP_RABBIT_STATS_DATA_FILE="${DATA_DIR}/.$(hostname -s)_general_stats.dat.tmp"
 NOW=$(date +'%s')
 HOSTNAME=$(hostname -s)
 MNESIA_DB_SIZE=$(du -sm /var/lib/rabbitmq/mnesia | cut -f1)
@@ -43,11 +45,13 @@ fi
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
-echo "#Vhost Name Messages_ready Messages_unacknowledged Messages Consumers Memory Time" > $DATA_FILE
+echo "#Vhost Name Messages_ready Messages_unacknowledged Messages Consumers Memory Time" > $TMP_DATA_FILE
 /usr/sbin/rabbitmqctl -q list_vhosts | \
 while read VHOST; do
     /usr/sbin/rabbitmqctl -q list_queues -p $VHOST name messages_ready messages_unacknowledged messages consumers memory | \
-    awk "{print \"$VHOST \" \$0 \" $(date +'%s') \"}" >> $DATA_FILE 2>${LOG_DIR}/list_queues.log
+    awk "{print \"$VHOST \" \$0 \" $(date +'%s') \"}" >> $TMP_DATA_FILE 2>${LOG_DIR}/list_queues.log
 done
-echo "mnesia_size: ${MNESIA_DB_SIZE}@$NOW" > $RABBIT_STATS_DATA_FILE
-echo "rss_size: ${RABBIT_RSS}@$NOW" >> $RABBIT_STATS_DATA_FILE
+echo "mnesia_size: ${MNESIA_DB_SIZE}@$NOW" > $TMP_RABBIT_STATS_DATA_FILE
+echo "rss_size: ${RABBIT_RSS}@$NOW" >> $TMP_RABBIT_STATS_DATA_FILE
+mv $TMP_DATA_FILE $DATA_FILE
+mv $TMP_RABBIT_STATS_DATA_FILE $RABBIT_STATS_DATA_FILE
