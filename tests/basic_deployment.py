@@ -633,6 +633,27 @@ class RmqBasicDeployment(OpenStackAmuletDeployment):
 
         u.log.info('OK\n')
 
+    def check_unit_rmq_cluster_nodes(self, sentry, unit_node_names):
+        unit_name = sentry.info['unit_name']
+        nodes = []
+        errors = []
+        str_stat = u.get_rmq_cluster_status(sentry)
+        # make the interesting part of rabbitmqctl cluster_status output
+        # json-parseable.
+        if 'nodes,[{disc,' in str_stat:
+            pos_start = str_stat.find('nodes,[{disc,') + 13
+            pos_end = str_stat.find(']}]},', pos_start) + 1
+            str_nodes = str_stat[pos_start:pos_end].replace("'", '"')
+            nodes = json.loads(str_nodes)
+        for node in nodes:
+            if node not in unit_node_names:
+                errors.append('Cluster registration check failed on {}: '
+                              '{} should not be registered with RabbitMQ '
+                              'after unit removal.\n'
+                              ''.format(unit_name, node))
+
+        return errors
+
     def test_901_remove_unit(self):
         """Test if a unit correctly cleans up by removing itself from the
            RabbitMQ cluster on removal"""
@@ -655,22 +676,16 @@ class RmqBasicDeployment(OpenStackAmuletDeployment):
         errors = []
 
         for sentry in sentry_units:
-            unit_name = sentry.info['unit_name']
-            nodes = []
-            str_stat = u.get_rmq_cluster_status(sentry)
-            # make the interesting part of rabbitmqctl cluster_status output
-            # json-parseable.
-            if 'nodes,[{disc,' in str_stat:
-                pos_start = str_stat.find('nodes,[{disc,') + 13
-                pos_end = str_stat.find(']}]},', pos_start) + 1
-                str_nodes = str_stat[pos_start:pos_end].replace("'", '"')
-                nodes = json.loads(str_nodes)
-            for node in nodes:
-                if node not in unit_node_names:
-                    errors.append('Cluster registration check failed on {}: '
-                                  '{} should not be registered with RabbitMQ '
-                                  'after unit removal.\n'
-                                  ''.format(unit_name, node))
+            e = self.check_unit_rmq_cluster_nodes(sentry, unit_node_names)
+            if e:
+                # NOTE: cluster status may not have been updated yet so wait a
+                # little and try one more time. Need to find a better way to do
+                # this.
+                time.sleep(10)
+                e = self.check_unit_rmq_cluster_nodes(sentry, unit_node_names)
+                if e:
+                    errors.append(e)
+
         if errors:
             amulet.raise_status(amulet.FAIL, msg=errors)
         u.log.debug('OK')

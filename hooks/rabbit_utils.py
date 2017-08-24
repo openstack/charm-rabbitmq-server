@@ -83,6 +83,11 @@ from charmhelpers.contrib.peerstorage import (
     peer_retrieve
 )
 
+from charmhelpers.fetch import (
+    apt_update,
+    apt_install,
+)
+
 
 from charmhelpers.fetch import get_upstream_version
 
@@ -1079,3 +1084,35 @@ def leader_node_is_ready():
     return (rabbitmq_is_installed() and
             is_leader() and
             cluster_ready())
+
+
+def archive_upgrade_available():
+    """Check if the change in sources.list would warrant running
+    apt-get update/upgrade
+
+    @returns boolean:
+        True: the "source" had changed, so upgrade is available
+        False: the "source" had not changed, no upgrade needed
+    """
+    log('checking if upgrade is available', DEBUG)
+
+    c = config()
+    old_source = c.previous('source')
+    log('Previous "source" config options was: {}'.format(old_source), DEBUG)
+    new_source = c['source']
+    log('Current "source" config options is: {}'.format(new_source), DEBUG)
+
+    if old_source != new_source:
+        log('The "source" config option change warrants the upgrade.', INFO)
+
+    return old_source != new_source
+
+
+def install_or_upgrade_packages():
+    """Run apt-get update/upgrade mantra.
+    This is called from either install hook, or from config-changed,
+    if upgrade is warranted
+    """
+    status_set('maintenance', 'Installing/upgrading RabbitMQ packages')
+    apt_update(fatal=True)
+    apt_install(PACKAGES, fatal=True)

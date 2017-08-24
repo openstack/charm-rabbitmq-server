@@ -50,19 +50,19 @@ from charmhelpers.contrib.hardening.harden import harden
 
 from charmhelpers.fetch import (
     add_source,
-    apt_update,
-    apt_install,
 )
 
 from charmhelpers.core.hookenv import (
     open_port,
     close_port,
     log,
+    DEBUG,
     ERROR,
     INFO,
     relation_get,
     relation_clear,
     relation_set,
+    relation_id as get_relation_id,
     relation_ids,
     related_units,
     service_name,
@@ -94,6 +94,7 @@ from charmhelpers.contrib.peerstorage import (
     leader_get,
 )
 
+from charmhelpers.core.unitdata import kv
 
 hooks = Hooks()
 
@@ -114,12 +115,74 @@ STATS_DATAFILE = os.path.join(RABBIT_DIR, 'data',
 @harden()
 def install():
     pre_install_hooks()
-    # NOTE(jamespage) install actually happens in config_changed hook
+    add_source(config('source'), config('key'))
+    rabbit.install_or_upgrade_packages()
 
 
-def configure_amqp(username, vhost, admin=False):
+def validate_amqp_config_tracker(f):
+    """Decorator to mark all existing tracked amqp configs as stale so that
+    they are refreshed the next time the current unit leader. 
+    """
+    def _validate_amqp_config_tracker(*args, **kwargs):
+        if not is_leader():
+            kvstore = kv()
+            tracker = kvstore.get('amqp_config_tracker')
+            if tracker:
+                for rid in tracker:
+                    tracker[rid]['stale'] = True
+
+                kvstore.set(key='amqp_config_tracker', value=tracker)
+                kvstore.flush()
+
+        return f(*args, **kwargs)
+    return _validate_amqp_config_tracker
+
+
+def configure_amqp(username, vhost, relation_id, admin=False):
+    """Configure rabbitmq server.
+
+    This function creates user/password, vhost and sets user permissions. It
+    also enabales mirroring queues if requested.
+
+    Calls to rabbitmqctl are costly and as such we aim to limit them by only
+    doing them if we detect that a settings needs creating or updating. To
+    achieve this we track what we set by storing key/value pairs associated
+    with a particular relation id in a local database.
+
+    Since this function is only supposed to be called by the cluster leader,
+    the database is expected to be invalidated if it exists and we are no
+    longer leader so as to ensure that a leader switch results in a
+    rabbitmq configuraion consistent with the current leader's view.
+
+    :param username: client username.
+    :param vhost: vhost name.
+    :param relation_id: optional relation id used to identify the context of
+                        this operation. This should always be provided
+                        so that we can track what has been set.
+    :param admin: boolean value defining whether the new user is admin.
+    :returns: user password
+    """
+    log("Configuring rabbitmq for user '{}' vhost '{}' (rid={})".
+        format(username, vhost, relation_id), DEBUG)
+
+    if not relation_id:
+        raise Exception("Invalid relation id '{}' provided to "
+                        "{}()".format(relation_id, configure_amqp.__name__))
+
     # get and update service password
     password = rabbit.get_rabbit_password(username)
+
+    expected = {'username': username, 'vhost': vhost,
+                'mirroring-queues': config('mirroring-queues')}
+    kvstore = kv()
+    tracker = kvstore.get('amqp_config_tracker') or {}
+    val = tracker.get(relation_id)
+    if val == expected and not val.get('stale'):
+        log("Rabbit already configured for relation "
+            "'{}'".format(relation_id), DEBUG)
+        return password
+    else:
+        tracker[relation_id] = expected
 
     # update vhost
     rabbit.create_vhost(vhost)
@@ -131,6 +194,9 @@ def configure_amqp(username, vhost, admin=False):
     # http://www.rabbitmq.com/blog/2012/11/19/breaking-things-with-rabbitmq-3-0
     if config('mirroring-queues'):
         rabbit.set_ha_mode(vhost, 'all')
+
+    kvstore.set(key='amqp_config_tracker', value=tracker)
+    kvstore.flush()
 
     return password
 
@@ -147,91 +213,95 @@ def update_clients():
                 amqp_changed(relation_id=rid, remote_unit=unit)
 
 
+@validate_amqp_config_tracker
 @hooks.hook('amqp-relation-changed')
 def amqp_changed(relation_id=None, remote_unit=None):
+    singleset = set(['username', 'vhost'])
     host_addr = rabbit.get_unit_ip()
 
-    # TODO: Simplify what the non-leader needs to do
-    if not is_leader() and rabbit.client_node_is_ready():
-        # NOTE(jamespage) clear relation to deal with data being
-        #                 removed from peer storage
-        relation_clear(relation_id)
-        # Each unit needs to set the db information otherwise if the unit
-        # with the info dies the settings die with it Bug# 1355848
-        exc_list = ['hostname', 'private-address']
-        for rel_id in relation_ids('amqp'):
-            peerdb_settings = peer_retrieve_by_prefix(rel_id,
-                                                      exc_list=exc_list)
-            peerdb_settings['hostname'] = host_addr
-            peerdb_settings['private-address'] = host_addr
-            if 'password' in peerdb_settings:
-                relation_set(relation_id=rel_id, **peerdb_settings)
-
-        log('amqp_changed(): Deferring amqp_changed'
-            ' to the leader.')
-
+    if rabbit.leader_node_is_ready():
+        relation_settings = {'hostname': host_addr,
+                             'private-address': host_addr}
         # NOTE: active/active case
         if config('prefer-ipv6'):
-            relation_settings = {'private-address': host_addr}
-            relation_set(relation_id=relation_id,
-                         relation_settings=relation_settings)
+            relation_settings['private-address'] = host_addr
 
-        return
+        current = relation_get(rid=relation_id, unit=remote_unit)
+        if singleset.issubset(current):
+            if not all([current.get('username'), current.get('vhost')]):
+                log('Relation not ready.', DEBUG)
+                return
 
-    # Bail if not completely ready
-    if not rabbit.leader_node_is_ready():
-        return
+            # Provide credentials to relations. If password is already
+            # available on peer relation then use it instead of reconfiguring.
+            username = current['username']
+            vhost = current['vhost']
+            admin = current.get('admin', False)
+            amqp_rid = relation_id or get_relation_id()
+            password = configure_amqp(username, vhost, amqp_rid, admin=admin)
+            relation_settings['password'] = password
+        else:
+            # NOTE(hopem): we should look at removing this code since i don't
+            #              think it's ever used anymore and stems from the days
+            #              when we needed to ensure consistency between
+            #              peerstorage (replaced by leader get/set) and amqp
+            #              relations.
+            queues = {}
+            for k, v in current.iteritems():
+                amqp_rid = k.split('_')[0]
+                x = '_'.join(k.split('_')[1:])
+                if amqp_rid not in queues:
+                    queues[amqp_rid] = {}
 
-    relation_settings = {}
-    settings = relation_get(rid=relation_id, unit=remote_unit)
+                queues[amqp_rid][x] = v
 
-    singleset = set(['username', 'vhost'])
+            for amqp_rid in queues:
+                if singleset.issubset(queues[amqp_rid]):
+                    username = queues[amqp_rid]['username']
+                    vhost = queues[amqp_rid]['vhost']
+                    password = configure_amqp(username, vhost, amqp_rid,
+                                              admin=admin)
+                    key = '_'.join([amqp_rid, 'password'])
+                    relation_settings[key] = password
 
-    if singleset.issubset(settings):
-        if None in [settings['username'], settings['vhost']]:
-            log('amqp_changed(): Relation not ready.')
-            return
+        ssl_utils.configure_client_ssl(relation_settings)
 
-        relation_settings['password'] = configure_amqp(
-            username=settings['username'],
-            vhost=settings['vhost'],
-            admin=settings.get('admin', False))
-    else:
-        queues = {}
-        for k, v in settings.iteritems():
-            amqp = k.split('_')[0]
-            x = '_'.join(k.split('_')[1:])
-            if amqp not in queues:
-                queues[amqp] = {}
-            queues[amqp][x] = v
-        for amqp in queues:
-            if singleset.issubset(queues[amqp]):
-                relation_settings[
-                    '_'.join([amqp, 'password'])] = configure_amqp(
-                    queues[amqp]['username'],
-                    queues[amqp]['vhost'])
+        if is_clustered():
+            relation_settings['clustered'] = 'true'
+            # NOTE(dosaboy): this stanza can be removed once we fully remove
+            #                deprecated HA support.
+            if is_relation_made('ha'):
+                # active/passive settings
+                relation_settings['vip'] = config('vip')
+                # or ha-vip-only to support active/active, but
+                # accessed via a VIP for older clients.
+                if config('ha-vip-only') is True:
+                    relation_settings['ha-vip-only'] = 'true'
 
-    relation_settings['hostname'] = \
-        relation_settings['private-address'] = \
-        rabbit.get_unit_ip()
+        # set if need HA queues or not
+        if cmp_pkgrevno('rabbitmq-server', '3.0.1') < 0:
+            relation_settings['ha_queues'] = True
 
-    ssl_utils.configure_client_ssl(relation_settings)
+        log("Updating relation {} keys {}"
+            .format(relation_id or get_relation_id(),
+                    ','.join(relation_settings.keys())), DEBUG)
+        peer_store_and_set(relation_id=relation_id,
+                           relation_settings=relation_settings)
+    elif not is_leader() and rabbit.client_node_is_ready():
+        log("Propagating peer settings to all amqp relations", DEBUG)
 
-    if is_clustered():
-        relation_settings['clustered'] = 'true'
-        if is_relation_made('ha'):
-            # active/passive settings
-            relation_settings['vip'] = config('vip')
-            # or ha-vip-only to support active/active, but
-            # accessed via a VIP for older clients.
-            if config('ha-vip-only') is True:
-                relation_settings['ha-vip-only'] = 'true'
+        # NOTE(jamespage) clear relation to deal with data being
+        #                 removed from peer storage.
+        relation_clear(relation_id)
 
-    # set if need HA queues or not
-    if cmp_pkgrevno('rabbitmq-server', '3.0.1') < 0:
-        relation_settings['ha_queues'] = True
-    peer_store_and_set(relation_id=relation_id,
-                       relation_settings=relation_settings)
+        # Each unit needs to set the db information otherwise if the unit
+        # with the info dies the settings die with it Bug# 1355848
+        for rel_id in relation_ids('amqp'):
+            peerdb_settings = peer_retrieve_by_prefix(rel_id)
+            if 'password' in peerdb_settings:
+                peerdb_settings['hostname'] = host_addr
+                peerdb_settings['private-address'] = host_addr
+                relation_set(relation_id=rel_id, **peerdb_settings)
 
 
 @hooks.hook('cluster-relation-joined')
@@ -387,7 +457,7 @@ def ha_joined():
         log('ha_joined: No ceph relation yet, deferring.')
         return
 
-    ctxt = {rabbit.ENV_CONF: rabbit.CONFIG_FILES[rabbit.ENV_CONF]} 
+    ctxt = {rabbit.ENV_CONF: rabbit.CONFIG_FILES[rabbit.ENV_CONF]}
     rabbit.ConfigRenderer(ctxt).write(rabbit.ENV_CONF)
 
     relation_settings = {}
@@ -560,8 +630,6 @@ def update_nrpe_checks():
 @harden()
 def upgrade_charm():
     pre_install_hooks()
-    add_source(config('source'), config('key'))
-    apt_update(fatal=True)
 
     # Ensure older passwd files in /var/lib/juju are moved to
     # /var/lib/rabbitmq which will end up replicated if clustered
@@ -595,7 +663,6 @@ MAN_PLUGIN = 'rabbitmq_management'
 @rabbit.restart_on_change(rabbit.restart_map())
 @harden()
 def config_changed():
-
     # Update hosts with this unit's information
     rabbit.update_hosts_file(
         {rabbit.get_unit_ip(config_override=rabbit.CLUSTER_OVERRIDE_CONFIG,
@@ -604,15 +671,16 @@ def config_changed():
 
     # Add archive source if provided
     add_source(config('source'), config('key'))
-    apt_update(fatal=True)
     # Copy in defaults file for updated ulimits
     shutil.copyfile(
         'templates/rabbitmq-server',
         '/etc/default/rabbitmq-server')
+
     # Install packages to ensure any changes to source
-    # result in an upgrade if applicable.
-    status_set('maintenance', 'Installing/upgrading RabbitMQ packages')
-    apt_install(rabbit.PACKAGES, fatal=True)
+    # result in an upgrade if applicable only if we change the 'source' 
+    # config option
+    if rabbit.archive_upgrade_available():
+        rabbit.install_or_upgrade_packages()
 
     open_port(5672)
 

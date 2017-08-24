@@ -17,3 +17,4 @@ makefile: []
 #python-packages:
 requirements:
   - test-requirements.txt
+reset_timeout: 600

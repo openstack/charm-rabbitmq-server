@@ -18,15 +18,23 @@ If writing reactive charms, use the snap layer:
 https://lists.ubuntu.com/archives/snapcraft/2016-September/001114.html
 """
 import subprocess
-from os import environ
+import os
 from time import sleep
 from charmhelpers.core.hookenv import log
 
 __author__ = 'Joseph Borg <joseph.borg@canonical.com>'
 
-SNAP_NO_LOCK = 1  # The return code for "couldn't acquire lock" in Snap (hopefully this will be improved).
+# The return code for "couldn't acquire lock" in Snap
+# (hopefully this will be improved).
+SNAP_NO_LOCK = 1
 SNAP_NO_LOCK_RETRY_DELAY = 10  # Wait X seconds between Snap lock checks.
 SNAP_NO_LOCK_RETRY_COUNT = 30  # Retry to acquire the lock X times.
+SNAP_CHANNELS = [
+    'edge',
+    'beta',
+    'candidate',
+    'stable',
+]
 
 
 class CouldNotAcquireLockException(Exception):
@@ -47,13 +55,17 @@ def _snap_exec(commands):
 
     while return_code is None or return_code == SNAP_NO_LOCK:
         try:
-            return_code = subprocess.check_call(['snap'] + commands, env=environ)
+            return_code = subprocess.check_call(['snap'] + commands,
+                                                env=os.environ)
         except subprocess.CalledProcessError as e:
             retry_count += + 1
             if retry_count > SNAP_NO_LOCK_RETRY_COUNT:
-                raise CouldNotAcquireLockException('Could not aquire lock after %s attempts' % SNAP_NO_LOCK_RETRY_COUNT)
+                raise CouldNotAcquireLockException(
+                    'Could not aquire lock after {} attempts'
+                    .format(SNAP_NO_LOCK_RETRY_COUNT))
             return_code = e.returncode
-            log('Snap failed to acquire lock, trying again in %s seconds.' % SNAP_NO_LOCK_RETRY_DELAY, level='WARN')
+            log('Snap failed to acquire lock, trying again in {} seconds.'
+                .format(SNAP_NO_LOCK_RETRY_DELAY, level='WARN'))
             sleep(SNAP_NO_LOCK_RETRY_DELAY)
 
     return return_code

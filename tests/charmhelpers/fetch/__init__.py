@@ -48,6 +48,13 @@ class AptLockError(Exception):
     pass
 
 
+class GPGKeyError(Exception):
+    """Exception occurs when a GPG key cannot be fetched or used.  The message
+    indicates what the problem is.
+    """
+    pass
+
+
 class BaseFetchHandler(object):
 
     """Base class for FetchHandler implementations in fetch plugins"""
@@ -77,21 +84,22 @@ module = "charmhelpers.fetch.%s" % __platform__
 fetch = importlib.import_module(module)
 
 filter_installed_packages = fetch.filter_installed_packages
-install = fetch.install
-upgrade = fetch.upgrade
-update = fetch.update
-purge = fetch.purge
+install = fetch.apt_install
+upgrade = fetch.apt_upgrade
+update = _fetch_update = fetch.apt_update
+purge = fetch.apt_purge
 add_source = fetch.add_source
 
 if __platform__ == "ubuntu":
     apt_cache = fetch.apt_cache
-    apt_install = fetch.install
-    apt_update = fetch.update
-    apt_upgrade = fetch.upgrade
-    apt_purge = fetch.purge
+    apt_install = fetch.apt_install
+    apt_update = fetch.apt_update
+    apt_upgrade = fetch.apt_upgrade
+    apt_purge = fetch.apt_purge
     apt_mark = fetch.apt_mark
     apt_hold = fetch.apt_hold
     apt_unhold = fetch.apt_unhold
+    import_key = fetch.import_key
     get_upstream_version = fetch.get_upstream_version
 elif __platform__ == "centos":
     yum_search = fetch.yum_search
@@ -135,7 +143,7 @@ def configure_sources(update=False,
         for source, key in zip(sources, keys):
             add_source(source, key)
     if update:
-        fetch.update(fatal=True)
+        _fetch_update(fatal=True)
 
 
 def install_remote(source, *args, **kwargs):

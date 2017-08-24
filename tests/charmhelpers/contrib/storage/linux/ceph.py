@@ -63,6 +63,7 @@ from charmhelpers.core.host import (
 from charmhelpers.fetch import (
     apt_install,
 )
+from charmhelpers.core.unitdata import kv
 
 from charmhelpers.core.kernel import modprobe
 from charmhelpers.contrib.openstack.utils import config_flags_parser
@@ -1314,6 +1315,47 @@ def send_request_if_needed(request, relation='ceph'):
             relation_set(relation_id=rid, broker_req=request.request)
 
 
+def is_broker_action_done(action, rid=None, unit=None):
+    """Check whether broker action has completed yet.
+
+    @param action: name of action to be performed
+    @returns True if action complete otherwise False
+    """
+    rdata = relation_get(rid, unit) or {}
+    broker_rsp = rdata.get(get_broker_rsp_key())
+    if not broker_rsp:
+        return False
+
+    rsp = CephBrokerRsp(broker_rsp)
+    unit_name = local_unit().partition('/')[2]
+    key = "unit_{}_ceph_broker_action.{}".format(unit_name, action)
+    kvstore = kv()
+    val = kvstore.get(key=key)
+    if val and val == rsp.request_id:
+        return True
+
+    return False
+
+
+def mark_broker_action_done(action, rid=None, unit=None):
+    """Mark action as having been completed.
+
+    @param action: name of action to be performed
+    @returns None
+    """
+    rdata = relation_get(rid, unit) or {}
+    broker_rsp = rdata.get(get_broker_rsp_key())
+    if not broker_rsp:
+        return
+
+    rsp = CephBrokerRsp(broker_rsp)
+    unit_name = local_unit().partition('/')[2]
+    key = "unit_{}_ceph_broker_action.{}".format(unit_name, action)
+    kvstore = kv()
+    kvstore.set(key=key, value=rsp.request_id)
+    kvstore.flush()
+
+
 class CephConfContext(object):
     """Ceph config (ceph.conf) context.
 
@@ -1330,7 +1372,7 @@ class CephConfContext(object):
             return {}
 
         conf = config_flags_parser(conf)
-        if type(conf) != dict:
+        if not isinstance(conf, dict):
             log("Provided config-flags is not a dictionary - ignoring",
                 level=WARNING)
             return {}

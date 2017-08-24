@@ -25,9 +25,12 @@ import urlparse
 import cinderclient.v1.client as cinder_client
 import glanceclient.v1.client as glance_client
 import heatclient.v1.client as heat_client
-import keystoneclient.v2_0 as keystone_client
-from keystoneclient.auth.identity import v3 as keystone_id_v3
-from keystoneclient import session as keystone_session
+from keystoneclient.v2_0 import client as keystone_client
+from keystoneauth1.identity import (
+    v3,
+    v2,
+)
+from keystoneauth1 import session as keystone_session
 from keystoneclient.v3 import client as keystone_client_v3
 from novaclient import exceptions
 
@@ -368,12 +371,20 @@ class OpenStackAmuletUtils(AmuletUtils):
                                         port)
         if not api_version or api_version == 2:
             ep = base_ep + "/v2.0"
-            return keystone_client.Client(username=username, password=password,
-                                          tenant_name=project_name,
-                                          auth_url=ep)
+            auth = v2.Password(
+                username=username,
+                password=password,
+                tenant_name=project_name,
+                auth_url=ep
+            )
+            sess = keystone_session.Session(auth=auth)
+            client = keystone_client.Client(session=sess)
+            # This populates the client.service_catalog
+            client.auth_ref = auth.get_access(sess)
+            return client
         else:
             ep = base_ep + "/v3"
-            auth = keystone_id_v3.Password(
+            auth = v3.Password(
                 user_domain_name=user_domain_name,
                 username=username,
                 password=password,
@@ -382,36 +393,45 @@ class OpenStackAmuletUtils(AmuletUtils):
                 project_name=project_name,
                 auth_url=ep
             )
-            return keystone_client_v3.Client(
-                session=keystone_session.Session(auth=auth)
-            )
+            sess = keystone_session.Session(auth=auth)
+            client = keystone_client_v3.Client(session=sess)
+            # This populates the client.service_catalog
+            client.auth_ref = auth.get_access(sess)
+            return client
 
     def authenticate_keystone_admin(self, keystone_sentry, user, password,
                                     tenant=None, api_version=None,
-                                    keystone_ip=None):
+                                    keystone_ip=None, user_domain_name=None,
+                                    project_domain_name=None,
+                                    project_name=None):
         """Authenticates admin user with the keystone admin endpoint."""
         self.log.debug('Authenticating keystone admin...')
         if not keystone_ip:
             keystone_ip = keystone_sentry.info['public-address']
 
-        user_domain_name = None
-        domain_name = None
-        if api_version == 3:
+        # To support backward compatibility usage of this function
+        if not project_name:
+            project_name = tenant
+        if api_version == 3 and not user_domain_name:
             user_domain_name = 'admin_domain'
-            domain_name = user_domain_name
+        if api_version == 3 and not project_domain_name:
+            project_domain_name = 'admin_domain'
+        if api_version == 3 and not project_name:
+            project_name = 'admin'
 
-        return self.authenticate_keystone(keystone_ip, user, password,
-                                          project_name=tenant,
-                                          api_version=api_version,
-                                          user_domain_name=user_domain_name,
-                                          domain_name=domain_name,
-                                          admin_port=True)
+        return self.authenticate_keystone(
+            keystone_ip, user, password,
+            api_version=api_version,
+            user_domain_name=user_domain_name,
+            project_domain_name=project_domain_name,
+            project_name=project_name,
+            admin_port=True)
 
     def authenticate_keystone_user(self, keystone, user, password, tenant):
         """Authenticates a regular user with the keystone public endpoint."""
         self.log.debug('Authenticating keystone user ({})...'.format(user))
         ep = keystone.service_catalog.url_for(service_type='identity',
-                                              endpoint_type='publicURL')
+                                              interface='publicURL')
         keystone_ip = urlparse.urlparse(ep).hostname
 
         return self.authenticate_keystone(keystone_ip, user, password,
@@ -421,22 +441,32 @@ class OpenStackAmuletUtils(AmuletUtils):
         """Authenticates admin user with glance."""
         self.log.debug('Authenticating glance admin...')
         ep = keystone.service_catalog.url_for(service_type='image',
-                                              endpoint_type='adminURL')
-        return glance_client.Client(ep, token=keystone.auth_token)
+                                              interface='adminURL')
+        if keystone.session:
+            return glance_client.Client(ep, session=keystone.session)
+        else:
+            return glance_client.Client(ep, token=keystone.auth_token)
 
     def authenticate_heat_admin(self, keystone):
         """Authenticates the admin user with heat."""
         self.log.debug('Authenticating heat admin...')
         ep = keystone.service_catalog.url_for(service_type='orchestration',
-                                              endpoint_type='publicURL')
-        return heat_client.Client(endpoint=ep, token=keystone.auth_token)
+                                              interface='publicURL')
+        if keystone.session:
+            return heat_client.Client(endpoint=ep, session=keystone.session)
+        else:
+            return heat_client.Client(endpoint=ep, token=keystone.auth_token)
 
     def authenticate_nova_user(self, keystone, user, password, tenant):
         """Authenticates a regular user with nova-api."""
         self.log.debug('Authenticating nova user ({})...'.format(user))
         ep = keystone.service_catalog.url_for(service_type='identity',
-                                              endpoint_type='publicURL')
-        if novaclient.__version__[0] >= "7":
+                                              interface='publicURL')
+        if keystone.session:
+            return nova_client.Client(NOVA_CLIENT_VERSION,
+                                      session=keystone.session,
+                                      auth_url=ep)
+        elif novaclient.__version__[0] >= "7":
             return nova_client.Client(NOVA_CLIENT_VERSION,
                                       username=user, password=password,
                                       project_name=tenant, auth_url=ep)
@@ -449,12 +479,15 @@ class OpenStackAmuletUtils(AmuletUtils):
         """Authenticates a regular user with swift api."""
         self.log.debug('Authenticating swift user ({})...'.format(user))
         ep = keystone.service_catalog.url_for(service_type='identity',
-                                              endpoint_type='publicURL')
-        return swiftclient.Connection(authurl=ep,
-                                      user=user,
-                                      key=password,
-                                      tenant_name=tenant,
-                                      auth_version='2.0')
+                                              interface='publicURL')
+        if keystone.session:
+            return swiftclient.Connection(session=keystone.session)
+        else:
+            return swiftclient.Connection(authurl=ep,
+                                          user=user,
+                                          key=password,
+                                          tenant_name=tenant,
+                                          auth_version='2.0')
 
     def create_flavor(self, nova, name, ram, vcpus, disk, flavorid="auto",
                       ephemeral=0, swap=0, rxtx_factor=1.0, is_public=True):

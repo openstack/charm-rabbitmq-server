@@ -13,7 +13,6 @@ series:
   - xenial
   - zesty
   - trusty
-  - yakkety
 provides:
   amqp:
     interface: rabbitmq

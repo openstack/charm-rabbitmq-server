@@ -710,3 +710,13 @@ class UtilsTests(CharmTestCase):
                                            '/etc/rabbitmq/rabbitmq-env.conf',
                                            ctxt,
                                            perms=420)
+
+    def test_archive_upgrade_available(self):
+        self.config.side_effect = self.test_config.get
+        self.test_config.set("source", "new-config")
+        self.test_config.set_previous("source", "old-config")
+        self.assertTrue(rabbit_utils.archive_upgrade_available())
+
+        self.test_config.set("source", "same")
+        self.test_config.set_previous("source", "same")
+        self.assertFalse(rabbit_utils.archive_upgrade_available())

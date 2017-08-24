@@ -41,9 +41,9 @@ from charmhelpers.core.hookenv import (
     charm_name,
     DEBUG,
     INFO,
-    WARNING,
     ERROR,
     status_set,
+    network_get_primary_address
 )
 
 from charmhelpers.core.sysctl import create as sysctl_create
@@ -80,6 +80,9 @@ from charmhelpers.contrib.openstack.neutron import (
 from charmhelpers.contrib.openstack.ip import (
     resolve_address,
     INTERNAL,
+    ADMIN,
+    PUBLIC,
+    ADDRESS_MAP,
 )
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
@@ -87,7 +90,6 @@ from charmhelpers.contrib.network.ip import (
     get_ipv6_addr,
     get_netmask_for_address,
     format_ipv6_addr,
-    is_address_in_network,
     is_bridge_member,
     is_ipv6_disabled,
 )
@@ -97,6 +99,7 @@ from charmhelpers.contrib.openstack.utils import (
     git_determine_usr_bin,
     git_determine_python_path,
     enable_memcache,
+    snap_install_requested,
 )
 from charmhelpers.core.unitdata import kv
 
@@ -244,6 +247,11 @@ class SharedDBContext(OSContextGenerator):
                     'database_password': rdata.get(password_setting),
                     'database_type': 'mysql'
                 }
+                # Note(coreycb): We can drop mysql+pymysql if we want when the
+                # following review lands, though it seems mysql+pymysql would
+                # be preferred. https://review.openstack.org/#/c/462190/
+                if snap_install_requested():
+                    ctxt['database_type'] = 'mysql+pymysql'
                 if self.context_complete(ctxt):
                     db_ssl(rdata, ctxt, self.ssl_dir)
                     return ctxt
@@ -510,6 +518,10 @@ class CephContext(OSContextGenerator):
                     ctxt['auth'] = relation_get('auth', rid=rid, unit=unit)
                 if not ctxt.get('key'):
                     ctxt['key'] = relation_get('key', rid=rid, unit=unit)
+                if not ctxt.get('rbd_features'):
+                    default_features = relation_get('rbd-features', rid=rid, unit=unit)
+                    if default_features is not None:
+                        ctxt['rbd_features'] = default_features
 
                 ceph_addrs = relation_get('ceph-public-address', rid=rid,
                                           unit=unit)
@@ -726,10 +738,16 @@ class ApacheSSLContext(OSContextGenerator):
         return sorted(list(set(cns)))
 
     def get_network_addresses(self):
-        """For each network configured, return corresponding address and vip
-           (if available).
+        """For each network configured, return corresponding address and
+           hostnamr or vip (if available).
 
         Returns a list of tuples of the form:
+
+            [(address_in_net_a, hostname_in_net_a),
+             (address_in_net_b, hostname_in_net_b),
+             ...]
+
+            or, if no hostnames(s) available:
 
             [(address_in_net_a, vip_in_net_a),
              (address_in_net_b, vip_in_net_b),
@@ -742,32 +760,27 @@ class ApacheSSLContext(OSContextGenerator):
              ...]
         """
         addresses = []
-        if config('vip'):
-            vips = config('vip').split()
-        else:
-            vips = []
-
-        for net_type in ['os-internal-network', 'os-admin-network',
-                         'os-public-network']:
-            addr = get_address_in_network(config(net_type),
-                                          unit_get('private-address'))
-            if len(vips) > 1 and is_clustered():
-                if not config(net_type):
-                    log("Multiple networks configured but net_type "
-                        "is None (%s)." % net_type, level=WARNING)
-                    continue
-
-                for vip in vips:
-                    if is_address_in_network(config(net_type), vip):
-                        addresses.append((addr, vip))
-                        break
-
-            elif is_clustered() and config('vip'):
-                addresses.append((addr, config('vip')))
+        for net_type in [INTERNAL, ADMIN, PUBLIC]:
+            net_config = config(ADDRESS_MAP[net_type]['config'])
+            # NOTE(jamespage): Fallback must always be private address
+            #                  as this is used to bind services on the
+            #                  local unit.
+            fallback = unit_get("private-address")
+            if net_config:
+                addr = get_address_in_network(net_config,
+                                              fallback)
             else:
-                addresses.append((addr, addr))
+                try:
+                    addr = network_get_primary_address(
+                        ADDRESS_MAP[net_type]['binding']
+                    )
+                except NotImplementedError:
+                    addr = fallback
 
-        return sorted(addresses)
+            endpoint = resolve_address(net_type)
+            addresses.append((addr, endpoint))
+
+        return sorted(set(addresses))
 
     def __call__(self):
         if isinstance(self.external_ports, six.string_types):
@@ -794,7 +807,7 @@ class ApacheSSLContext(OSContextGenerator):
             self.configure_cert(cn)
 
         addresses = self.get_network_addresses()
-        for address, endpoint in sorted(set(addresses)):
+        for address, endpoint in addresses:
             for api_port in self.external_ports:
                 ext_port = determine_apache_port(api_port,
                                                  singlenode_mode=True)
@@ -1397,13 +1410,37 @@ class NeutronAPIContext(OSContextGenerator):
                 'rel_key': 'dns-domain',
                 'default': None,
             },
+            'polling_interval': {
+                'rel_key': 'polling-interval',
+                'default': 2,
+            },
+            'rpc_response_timeout': {
+                'rel_key': 'rpc-response-timeout',
+                'default': 60,
+            },
+            'report_interval': {
+                'rel_key': 'report-interval',
+                'default': 30,
+            },
+            'enable_qos': {
+                'rel_key': 'enable-qos',
+                'default': False,
+            },
         }
         ctxt = self.get_neutron_options({})
         for rid in relation_ids('neutron-plugin-api'):
             for unit in related_units(rid):
                 rdata = relation_get(rid=rid, unit=unit)
+                # The l2-population key is used by the context as a way of
+                # checking if the api service on the other end is sending data
+                # in a recent format.
                 if 'l2-population' in rdata:
                     ctxt.update(self.get_neutron_options(rdata))
+
+        if ctxt['enable_qos']:
+            ctxt['extension_drivers'] = 'qos'
+        else:
+            ctxt['extension_drivers'] = ''
 
         return ctxt
 

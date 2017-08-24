@@ -125,7 +125,7 @@ class CheckException(Exception):
 
 
 class Check(object):
-    shortname_re = '[A-Za-z0-9-_]+$'
+    shortname_re = '[A-Za-z0-9-_.]+$'
     service_template = ("""
 #---------------------------------------------------
 # This file is Juju managed

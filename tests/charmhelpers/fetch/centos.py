@@ -132,7 +132,7 @@ def add_source(source, key=None):
                 key_file.write(key)
                 key_file.flush()
                 key_file.seek(0)
-            subprocess.check_call(['rpm', '--import', key_file])
+                subprocess.check_call(['rpm', '--import', key_file.name])
         else:
             subprocess.check_call(['rpm', '--import', key])
 

@@ -29,7 +29,7 @@ def get_api_suffix(api_version):
     @returns the api suffix formatted according to the given api
     version
     """
-    return 'v2.0' if api_version in (2, "2.0") else 'v3'
+    return 'v2.0' if api_version in (2, "2", "2.0") else 'v3'
 
 
 def format_endpoint(schema, addr, port, api_version):
