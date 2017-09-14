@@ -77,6 +77,40 @@ class ClusterStatusTestCase(CharmTestCase):
         self.action_fail.assert_called()
 
 
+class CheckQueuesTestCase(CharmTestCase):
+    TEST_QUEUE_RESULT = 'Listing queues ...\ntest\t0\ntest\t0\n""'
+
+    def dummy_action_get(self, key):
+        action_values = {"queue-depth": -1, "vhost": "/"}
+        return action_values[key]
+
+    def setUp(self):
+        super(CheckQueuesTestCase, self).setUp(
+            actions, ["check_output", "action_set", "action_fail",
+                      "ConfigRenderer", "action_get"])
+
+    def test_check_queues(self):
+        self.action_get.side_effect = self.dummy_action_get
+        self.check_output.return_value = self.TEST_QUEUE_RESULT
+
+        actions.check_queues([])
+        self.check_output.assert_called_once_with(['rabbitmqctl',
+                                                   'list_queues',
+                                                   '-p', "/"])
+        self.action_set.assert_called()
+
+    def test_check_queues_execption(self):
+        self.action_get.side_effect = self.dummy_action_get
+        self.check_output.return_value = self.TEST_QUEUE_RESULT
+
+        self.check_output.side_effect = actions.CalledProcessError(1,
+                                                                   "Failure")
+        actions.check_queues([])
+        self.check_output.assert_called_once_with(['rabbitmqctl',
+                                                   'list_queues',
+                                                   '-p', '/'])
+
+
 class MainTestCase(CharmTestCase):
 
     def setUp(self):

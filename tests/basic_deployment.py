@@ -715,3 +715,10 @@ class RmqBasicDeployment(OpenStackAmuletDeployment):
         assert u.wait_on_action(action_id), "Cluster status action failed."
 
         u.log.debug('OK')
+
+    def test_912_check_queues(self):
+        """ rabbitmqctl check_queues action can be returned. """
+        u.log.debug('Checking cluster status action...')
+
+        action_id = u.run_action(self.rmq0_sentry, "check-queues")
+        assert u.wait_on_action(action_id), "Check queues action failed."
