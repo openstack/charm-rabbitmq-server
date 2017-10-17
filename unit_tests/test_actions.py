@@ -52,6 +52,31 @@ class ResumeTestCase(CharmTestCase):
         self.resume_unit_helper.assert_called_once_with('test-config')
 
 
+class ClusterStatusTestCase(CharmTestCase):
+
+    def setUp(self):
+        super(ClusterStatusTestCase, self).setUp(
+            actions, ["check_output", "action_set", "action_fail"])
+
+    def test_cluster_status(self):
+        self.check_output.return_value = 'Cluster status OK'
+        actions.cluster_status([])
+        self.check_output.assert_called_once_with(['rabbitmqctl',
+                                                   'cluster_status'],
+                                                  universal_newlines=True)
+        self.action_set.assert_called()
+
+    def test_cluster_status_execption(self):
+        self.check_output.side_effect = actions.CalledProcessError(1,
+                                                                   "Failure")
+        actions.cluster_status([])
+        self.check_output.assert_called_once_with(['rabbitmqctl',
+                                                   'cluster_status'],
+                                                  universal_newlines=True)
+        self.action_set.assert_called()
+        self.action_fail.assert_called()
+
+
 class MainTestCase(CharmTestCase):
 
     def setUp(self):

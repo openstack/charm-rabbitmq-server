@@ -2,3 +2,5 @@ pause:
   description: Pause the rabbitmq unit.
 resume:
   descrpition: Resume the rabbitmq unit.
+cluster-status:
+  description: Show the current cluster status.

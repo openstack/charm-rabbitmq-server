@@ -70,12 +70,12 @@ class DisabledModuleAudit(BaseAudit):
         """Returns the modules which are enabled in Apache."""
         output = subprocess.check_output(['apache2ctl', '-M'])
         modules = []
-        for line in output.strip().split():
+        for line in output.splitlines():
             # Each line of the enabled module output looks like:
             #  module_name (static|shared)
             # Plus a header line at the top of the output which is stripped
             # out by the regex.
-            matcher = re.search(r'^ (\S*)', line)
+            matcher = re.search(r'^ (\S*)_module (\S*)', line)
             if matcher:
                 modules.append(matcher.group(1))
         return modules

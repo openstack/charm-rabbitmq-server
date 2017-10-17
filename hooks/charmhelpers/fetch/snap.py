@@ -41,6 +41,10 @@ class CouldNotAcquireLockException(Exception):
     pass
 
 
+class InvalidSnapChannel(Exception):
+    pass
+
+
 def _snap_exec(commands):
     """
     Execute snap commands.
@@ -132,3 +136,15 @@ def snap_refresh(packages, *flags):
 
     log(message, level='INFO')
     return _snap_exec(['refresh'] + flags + packages)
+
+
+def valid_snap_channel(channel):
+    """ Validate snap channel exists
+
+    :raises InvalidSnapChannel: When channel does not exist
+    :return: Boolean
+    """
+    if channel.lower() in SNAP_CHANNELS:
+        return True
+    else:
+        raise InvalidSnapChannel("Invalid Snap Channel: {}".format(channel))

@@ -8,4 +8,4 @@ revision
 *.pyc
 .project
 .pydevproject
-
+.stestr

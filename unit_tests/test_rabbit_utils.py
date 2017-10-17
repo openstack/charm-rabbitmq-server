@@ -228,6 +228,7 @@ class UtilsTests(CharmTestCase):
         self.assertEqual(rabbit_utils.leader_node(),
                          'rabbit@juju-devel3-machine-15')
 
+    @mock.patch('rabbit_utils.cluster_wait')
     @mock.patch('rabbit_utils.relation_set')
     @mock.patch('rabbit_utils.wait_app')
     @mock.patch('rabbit_utils.subprocess.check_call')
@@ -242,12 +243,13 @@ class UtilsTests(CharmTestCase):
                                         mock_running_nodes, mock_time,
                                         mock_check_output, mock_check_call,
                                         mock_wait_app,
-                                        mock_relation_set):
+                                        mock_relation_set, mock_cluster_wait):
         mock_cmp_pkgrevno.return_value = True
         mock_clustered.return_value = False
         mock_leader_node.return_value = 'rabbit@juju-devel7-machine-11'
         mock_running_nodes.return_value = ['rabbit@juju-devel5-machine-19']
         rabbit_utils.cluster_with()
+        mock_cluster_wait.assert_called_once_with()
         mock_check_output.assert_called_with([rabbit_utils.RABBITMQ_CTL,
                                               'join_cluster',
                                               'rabbit@juju-devel7-machine-11'],
@@ -720,3 +722,31 @@ class UtilsTests(CharmTestCase):
         self.test_config.set("source", "same")
         self.test_config.set_previous("source", "same")
         self.assertFalse(rabbit_utils.archive_upgrade_available())
+
+    @mock.patch.object(rabbit_utils, 'distributed_wait')
+    def test_cluster_wait(self, mock_distributed_wait):
+        self.relation_ids.return_value = ['amqp:27']
+        self.related_units.return_value = ['unit/1', 'unit/2', 'unit/3']
+        # Default check peer relation
+        _config = {'known-wait': 30}
+        self.config.side_effect = lambda key: _config.get(key)
+        rabbit_utils.cluster_wait()
+        mock_distributed_wait.assert_called_with(modulo=4, wait=30)
+
+        # Use Min Cluster Size
+        _config = {'min-cluster-size': 5, 'known-wait': 30}
+        self.config.side_effect = lambda key: _config.get(key)
+        rabbit_utils.cluster_wait()
+        mock_distributed_wait.assert_called_with(modulo=5, wait=30)
+
+        # Override with modulo-nodes
+        _config = {'min-cluster-size': 5, 'modulo-nodes': 10, 'known-wait': 60}
+        self.config.side_effect = lambda key: _config.get(key)
+        rabbit_utils.cluster_wait()
+        mock_distributed_wait.assert_called_with(modulo=10, wait=60)
+
+        # Just modulo-nodes
+        _config = {'modulo-nodes': 10, 'known-wait': 60}
+        self.config.side_effect = lambda key: _config.get(key)
+        rabbit_utils.cluster_wait()
+        mock_distributed_wait.assert_called_with(modulo=10, wait=60)

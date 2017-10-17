@@ -29,3 +29,16 @@ def install_alternative(name, target, source, priority=50):
         target, name, source, str(priority)
     ]
     subprocess.check_call(cmd)
+
+
+def remove_alternative(name, source):
+    """Remove an installed alternative configuration file
+
+    :param name: string name of the alternative to remove
+    :param source: string full path to alternative to remove
+    """
+    cmd = [
+        'update-alternatives', '--remove',
+        name, source
+    ]
+    subprocess.check_call(cmd)

@@ -20,7 +20,8 @@ from charmhelpers.fetch import apt_install, apt_update
 from charmhelpers.core.hookenv import (
     log,
     ERROR,
-    INFO
+    INFO,
+    TRACE
 )
 from charmhelpers.contrib.openstack.utils import OPENSTACK_CODENAMES
 
@@ -80,8 +81,10 @@ def get_loader(templates_dir, os_release):
             loaders.insert(0, FileSystemLoader(tmpl_dir))
         if rel == os_release:
             break
+    # demote this log to the lowest level; we don't really need to see these
+    # lots in production even when debugging.
     log('Creating choice loader with dirs: %s' %
-        [l.searchpath for l in loaders], level=INFO)
+        [l.searchpath for l in loaders], level=TRACE)
     return ChoiceLoader(loaders)
 
 

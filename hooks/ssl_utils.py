@@ -66,7 +66,8 @@ def reconfigure_client_ssl(ssl_enabled=False):
         rdata = relation_get(rid=rid, unit=local_unit())
         if not ssl_enabled and ssl_config_keys.intersection(rdata):
             # No clean way to remove entirely, but blank them.
-            relation_set(relation_id=rid, ssl_key='', ssl_cert='', ssl_ca='')
+            relation_set(relation_id=rid, ssl_key='', ssl_cert='', ssl_ca='',
+                         ssl_port='')
         elif ssl_enabled and not ssl_config_keys.intersection(rdata):
             configure_client_ssl(rdata)
             relation_set(relation_id=rid, **rdata)

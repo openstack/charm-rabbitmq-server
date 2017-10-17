@@ -109,6 +109,9 @@ STATS_CRONFILE = '/etc/cron.d/rabbitmq-stats'
 STATS_DATAFILE = os.path.join(RABBIT_DIR, 'data',
                               '{}_queue_stats.dat'
                               ''.format(rabbit.get_unit_hostname()))
+CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
+               "{command} 2>&1 | logger -p local0.notice\n")
+INITIAL_CLIENT_UPDATE_KEY = 'initial_client_update_done'
 
 
 @hooks.hook('install.real')
@@ -121,7 +124,7 @@ def install():
 
 def validate_amqp_config_tracker(f):
     """Decorator to mark all existing tracked amqp configs as stale so that
-    they are refreshed the next time the current unit leader. 
+    they are refreshed the next time the current unit leader.
     """
     def _validate_amqp_config_tracker(*args, **kwargs):
         if not is_leader():
@@ -211,6 +214,11 @@ def update_clients():
         for rid in relation_ids('amqp'):
             for unit in related_units(rid):
                 amqp_changed(relation_id=rid, remote_unit=unit)
+        kvstore = kv()
+        update_done = kvstore.get(INITIAL_CLIENT_UPDATE_KEY, False)
+        if not update_done:
+            kvstore.set(key=INITIAL_CLIENT_UPDATE_KEY, value=True)
+            kvstore.flush()
 
 
 @validate_amqp_config_tracker
@@ -584,7 +592,9 @@ def update_nrpe_checks():
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
     if config('stats_cron_schedule'):
         script = os.path.join(SCRIPTS_DIR, 'collect_rabbitmq_stats.sh')
-        cronjob = "{} root {}\n".format(config('stats_cron_schedule'), script)
+        cronjob = CRONJOB_CMD.format(schedule=config('stats_cron_schedule'),
+                                     timeout=config('cron-timeout'),
+                                     command=script)
         rsync(os.path.join(charm_dir(), 'scripts',
                            'collect_rabbitmq_stats.sh'), script)
         write_file(STATS_CRONFILE, cronjob)
@@ -655,6 +665,9 @@ def upgrade_charm():
     # 'clustered' for existing deployments (LP: #1691510).
     rabbit.cluster_with()
 
+    # Ensure all client connections are up to date on upgrade
+    update_clients()
+
 
 MAN_PLUGIN = 'rabbitmq_management'
 
@@ -677,7 +690,7 @@ def config_changed():
         '/etc/default/rabbitmq-server')
 
     # Install packages to ensure any changes to source
-    # result in an upgrade if applicable only if we change the 'source' 
+    # result in an upgrade if applicable only if we change the 'source'
     # config option
     if rabbit.archive_upgrade_available():
         rabbit.install_or_upgrade_packages()
@@ -782,6 +795,13 @@ if __name__ == '__main__':
         hooks.execute(sys.argv)
     except UnregisteredHookError as e:
         log('Unknown hook {} - skipping.'.format(e))
-    # Gated client updates
-    update_clients()
+    # This solves one off problems waiting for the cluster to complete
+    # It will get executed only once as soon as leader_node_is_ready()
+    # or client_node_is_ready() returns True
+    # Subsequent client requests will be handled by normal
+    # amqp-relation-changed hooks
+    kvstore = kv()
+    if not kvstore.get(INITIAL_CLIENT_UPDATE_KEY, False):
+        update_clients()
+
     rabbit.assess_status(rabbit.ConfigRenderer(rabbit.CONFIG_FILES))

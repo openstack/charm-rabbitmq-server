@@ -83,6 +83,14 @@ options:
     description: |
       Cron schedule used to generate rabbitmq stats. To disable,
       either unset this config option or set it to an empty string ('').
+  cron-timeout:
+    type: int
+    default: 300
+    description: |
+      Run a command with a time limit specified in seconds in cron.
+      This timeout will govern to the rabbitmq stats capture, and that once
+      the timeout is reached a SIGINT is sent to the program, if it doesn't
+      exits before 10 seconds a SIGKILL is sent.
   queue_thresholds:
     type: string
     default: "[['\\*', '\\*', 100, 200]]"
@@ -254,3 +262,26 @@ options:
       rbd pool has been created, changing this value will not have any effect
       (although it can be changed in ceph by manually configuring your ceph
       cluster).
+  modulo-nodes:
+    type: int
+    default:
+    description: |
+      This config option is rarely required but is provided for fine tuning, it
+      is safe to leave unset. Modulo nodes is used to help avoid restart
+      collisions as well as distribute load on the cloud at larger scale.
+      During restarts and cluster joins rabbitmq needs to execute these
+      operations serially. By setting modulo-nodes to the size of the cluster
+      and known-wait to a reasonable value, the charm will distribute the
+      operations serially. If this value is unset, the charm will check
+      min-cluster-size or else finally default to the size of the cluster
+      based on peer relations. Setting this value to 0 will execute operations
+      with no wait time. Setting this value to less than the cluster size will
+      distribute load but may lead to restart collisions.
+  known-wait:
+    type: int
+    default: 30
+    description: |
+      Known wait along with modulo nodes is used to help avoid restart
+      collisions. Known wait is the amount of time between one node executing
+      an operation and another. On slower hardware this value may need to be
+      larger than the default of 30 seconds.

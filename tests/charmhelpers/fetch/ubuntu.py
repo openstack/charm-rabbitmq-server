@@ -27,6 +27,7 @@ from charmhelpers.core.host import (
 from charmhelpers.core.hookenv import (
     log,
     DEBUG,
+    WARNING,
 )
 from charmhelpers.fetch import SourceConfigError, GPGKeyError
 
@@ -261,34 +262,47 @@ def apt_unhold(packages, fatal=False):
     return apt_mark(packages, 'unhold', fatal=fatal)
 
 
-def import_key(keyid):
-    """Import a key in either ASCII Armor or Radix64 format.
+def import_key(key):
+    """Import an ASCII Armor key.
 
-    `keyid` is either the keyid to fetch from a PGP server, or
-    the key in ASCII armor foramt.
+    /!\ A Radix64 format keyid is also supported for backwards
+    compatibility, but should never be used; the key retrieval
+    mechanism is insecure and subject to man-in-the-middle attacks
+    voiding all signature checks using that key.
 
-    :param keyid: String of key (or key id).
+    :param keyid: The key in ASCII armor format,
+                  including BEGIN and END markers.
     :raises: GPGKeyError if the key could not be imported
     """
-    key = keyid.strip()
-    if (key.startswith('-----BEGIN PGP PUBLIC KEY BLOCK-----') and
-            key.endswith('-----END PGP PUBLIC KEY BLOCK-----')):
+    key = key.strip()
+    if '-' in key or '\n' in key:
+        # Send everything not obviously a keyid to GPG to import, as
+        # we trust its validation better than our own. eg. handling
+        # comments before the key.
         log("PGP key found (looks like ASCII Armor format)", level=DEBUG)
-        log("Importing ASCII Armor PGP key", level=DEBUG)
-        with NamedTemporaryFile() as keyfile:
-            with open(keyfile.name, 'w') as fd:
-                fd.write(key)
-                fd.write("\n")
-            cmd = ['apt-key', 'add', keyfile.name]
-            try:
-                subprocess.check_call(cmd)
-            except subprocess.CalledProcessError:
-                error = "Error importing PGP key '{}'".format(key)
-                log(error)
-                raise GPGKeyError(error)
+        if ('-----BEGIN PGP PUBLIC KEY BLOCK-----' in key and
+                '-----END PGP PUBLIC KEY BLOCK-----' in key):
+            log("Importing ASCII Armor PGP key", level=DEBUG)
+            with NamedTemporaryFile() as keyfile:
+                with open(keyfile.name, 'w') as fd:
+                    fd.write(key)
+                    fd.write("\n")
+                cmd = ['apt-key', 'add', keyfile.name]
+                try:
+                    subprocess.check_call(cmd)
+                except subprocess.CalledProcessError:
+                    error = "Error importing PGP key '{}'".format(key)
+                    log(error)
+                    raise GPGKeyError(error)
+        else:
+            raise GPGKeyError("ASCII armor markers missing from GPG key")
     else:
-        log("PGP key found (looks like Radix64 format)", level=DEBUG)
-        log("Importing PGP key from keyserver", level=DEBUG)
+        # We should only send things obviously not a keyid offsite
+        # via this unsecured protocol, as it may be a secret or part
+        # of one.
+        log("PGP key found (looks like Radix64 format)", level=WARNING)
+        log("INSECURLY importing PGP key from keyserver; "
+            "full key not provided.", level=WARNING)
         cmd = ['apt-key', 'adv', '--keyserver',
                'hkp://keyserver.ubuntu.com:80', '--recv-keys', key]
         try:

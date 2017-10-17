@@ -43,6 +43,7 @@ ERROR = "ERROR"
 WARNING = "WARNING"
 INFO = "INFO"
 DEBUG = "DEBUG"
+TRACE = "TRACE"
 MARKER = object()
 
 cache = {}
@@ -217,6 +218,8 @@ def principal_unit():
         for rid in relation_ids(reltype):
             for unit in related_units(rid):
                 md = _metadata_unit(unit)
+                if not md:
+                    continue
                 subordinate = md.pop('subordinate', None)
                 if not subordinate:
                     return unit
@@ -510,7 +513,10 @@ def _metadata_unit(unit):
     """
     basedir = os.sep.join(charm_dir().split(os.sep)[:-2])
     unitdir = 'unit-{}'.format(unit.replace(os.sep, '-'))
-    with open(os.path.join(basedir, unitdir, 'charm', 'metadata.yaml')) as md:
+    joineddir = os.path.join(basedir, unitdir, 'charm', 'metadata.yaml')
+    if not os.path.exists(joineddir):
+        return None
+    with open(joineddir) as md:
         return yaml.safe_load(md)
 
 
@@ -664,6 +670,17 @@ def close_ports(start, end, protocol="TCP"):
     _args = ['close-port']
     _args.append('{}-{}/{}'.format(start, end, protocol))
     subprocess.check_call(_args)
+
+
+def opened_ports():
+    """Get the opened ports
+
+    *Note that this will only show ports opened in a previous hook*
+
+    :returns: Opened ports as a list of strings: ``['8080/tcp', '8081-8083/tcp']``
+    """
+    _args = ['opened-ports', '--format=json']
+    return json.loads(subprocess.check_output(_args).decode('UTF-8'))
 
 
 @cached

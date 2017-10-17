@@ -706,3 +706,12 @@ class RmqBasicDeployment(OpenStackAmuletDeployment):
         self.d.sentry.wait(timeout=900)
         u.rmq_wait_for_cluster(self)
         u.log.debug('OK')
+
+    def test_911_cluster_status(self):
+        """ rabbitmqctl cluster_status action can be returned. """
+        u.log.debug('Checking cluster status action...')
+
+        action_id = u.run_action(self.rmq0_sentry, "cluster-status")
+        assert u.wait_on_action(action_id), "Cluster status action failed."
+
+        u.log.debug('OK')

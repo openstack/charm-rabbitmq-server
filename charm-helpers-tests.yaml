@@ -1,4 +1,4 @@
-branch: lp:charm-helpers
+repo: https://github.com/juju/charm-helpers
 destination: tests/charmhelpers
 include:
     - fetch

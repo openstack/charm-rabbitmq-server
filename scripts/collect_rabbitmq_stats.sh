@@ -43,11 +43,13 @@ fi
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
+TMP_DATA_FILE=$(mktemp -p ${DATA_DIR})
 echo "#Vhost Name Messages_ready Messages_unacknowledged Messages Consumers Memory Time" > $DATA_FILE
 /usr/sbin/rabbitmqctl -q list_vhosts | \
 while read VHOST; do
     /usr/sbin/rabbitmqctl -q list_queues -p $VHOST name messages_ready messages_unacknowledged messages consumers memory | \
-    awk "{print \"$VHOST \" \$0 \" $(date +'%s') \"}" >> $DATA_FILE 2>${LOG_DIR}/list_queues.log
+    awk "{print \"$VHOST \" \$0 \" $(date +'%s') \"}" >> ${TMP_DATA_FILE} 2>${LOG_DIR}/list_queues.log
 done
+mv ${TMP_DATA_FILE} ${DATA_FILE}
 echo "mnesia_size: ${MNESIA_DB_SIZE}@$NOW" > $RABBIT_STATS_DATA_FILE
 echo "rss_size: ${RABBIT_RSS}@$NOW" >> $RABBIT_STATS_DATA_FILE

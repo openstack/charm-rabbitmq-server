@@ -95,7 +95,7 @@ from charmhelpers.fetch import (
 from charmhelpers.fetch.snap import (
     snap_install,
     snap_refresh,
-    SNAP_CHANNELS,
+    valid_snap_channel,
 )
 
 from charmhelpers.contrib.storage.linux.utils import is_block_device, zap_disk
@@ -579,6 +579,9 @@ def configure_installation_source(source_plus_key):
     Note that the behaviour on error is to log the error to the juju log and
     then call sys.exit(1).
     """
+    if source_plus_key.startswith('snap'):
+        # Do nothing for snap installs
+        return
     # extract the key if there is one, denoted by a '|' in the rel
     source, key = get_source_and_pgp_key(source_plus_key)
 
@@ -2048,7 +2051,7 @@ def update_json_file(filename, items):
 def snap_install_requested():
     """ Determine if installing from snaps
 
-    If openstack-origin is of the form snap:channel-series-release
+    If openstack-origin is of the form snap:track/channel
     and channel is in SNAPS_CHANNELS return True.
     """
     origin = config('openstack-origin') or ""
@@ -2056,10 +2059,12 @@ def snap_install_requested():
         return False
 
     _src = origin[5:]
-    channel, series, release = _src.split('-')
-    if channel.lower() in SNAP_CHANNELS:
-        return True
-    return False
+    if '/' in _src:
+        _track, channel = _src.split('/')
+    else:
+        # Hanlde snap:track with no channel
+        channel = 'stable'
+    return valid_snap_channel(channel)
 
 
 def get_snaps_install_info_from_origin(snaps, src, mode='classic'):
@@ -2067,7 +2072,7 @@ def get_snaps_install_info_from_origin(snaps, src, mode='classic'):
 
     @param snaps: List of snaps
     @param src: String of openstack-origin or source of the form
-        snap:channel-series-track
+        snap:track/channel
     @param mode: String classic, devmode or jailmode
     @returns: Dictionary of snaps with channels and modes
     """
@@ -2077,8 +2082,7 @@ def get_snaps_install_info_from_origin(snaps, src, mode='classic'):
         return {}
 
     _src = src[5:]
-    _channel, _series, _release = _src.split('-')
-    channel = '--channel={}/{}'.format(_release, _channel)
+    channel = '--channel={}'.format(_src)
 
     return {snap: {'channel': channel, 'mode': mode}
             for snap in snaps}
@@ -2090,8 +2094,8 @@ def install_os_snaps(snaps, refresh=False):
     @param snaps: Dictionary of snaps with channels and modes of the form:
         {'snap_name': {'channel': 'snap_channel',
                        'mode': 'snap_mode'}}
-        Where channel a snapstore channel and mode is --classic, --devmode or
-        --jailmode.
+        Where channel is a snapstore channel and mode is --classic, --devmode
+        or --jailmode.
     @param post_snap_install: Callback function to run after snaps have been
     installed
     """

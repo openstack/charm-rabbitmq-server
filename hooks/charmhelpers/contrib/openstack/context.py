@@ -622,7 +622,6 @@ class HAProxyContext(OSContextGenerator):
             ctxt['haproxy_connect_timeout'] = config('haproxy-connect-timeout')
 
         if config('prefer-ipv6'):
-            ctxt['ipv6'] = True
             ctxt['local_host'] = 'ip6-localhost'
             ctxt['haproxy_host'] = '::'
         else:
@@ -803,8 +802,9 @@ class ApacheSSLContext(OSContextGenerator):
         else:
             # Expect cert/key provided in config (currently assumed that ca
             # uses ip for cn)
-            cn = resolve_address(endpoint_type=INTERNAL)
-            self.configure_cert(cn)
+            for net_type in (INTERNAL, ADMIN, PUBLIC):
+                cn = resolve_address(endpoint_type=net_type)
+                self.configure_cert(cn)
 
         addresses = self.get_network_addresses()
         for address, endpoint in addresses:

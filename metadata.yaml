@@ -11,6 +11,7 @@ tags:
   - misc
 series:
   - xenial
+  - artful
   - zesty
   - trusty
 provides:

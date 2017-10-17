@@ -46,8 +46,9 @@ def get_audits():
     context = ApacheConfContext()
     settings = utils.get_settings('apache')
     audits = [
-        FilePermissionAudit(paths='/etc/apache2/apache2.conf', user='root',
-                            group='root', mode=0o0640),
+        FilePermissionAudit(paths=os.path.join(
+                            settings['common']['apache_dir'], 'apache2.conf'),
+                            user='root', group='root', mode=0o0640),
 
         TemplatedFile(os.path.join(settings['common']['apache_dir'],
                                    'mods-available/alias.conf'),

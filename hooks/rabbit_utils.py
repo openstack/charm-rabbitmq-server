@@ -18,7 +18,6 @@ import sys
 import subprocess
 import glob
 import tempfile
-import random
 import time
 import socket
 from collections import OrderedDict
@@ -38,6 +37,10 @@ from charmhelpers.contrib.openstack.utils import (
     pause_unit,
     resume_unit,
     is_unit_paused_set,
+)
+
+from charmhelpers.contrib.hahelpers.cluster import (
+    distributed_wait,
 )
 
 from charmhelpers.contrib.network.ip import (
@@ -401,6 +404,37 @@ def wait_app():
         raise ex
 
 
+def cluster_wait():
+    ''' Wait for operations based on modulo distribution
+
+    Use the distributed_wait function to determine how long to wait before
+    running an operation like restart or cluster join. By setting modulo to
+    the exact number of nodes in the cluster we get serial operations.
+
+    Check for explicit configuration parameters for modulo distribution.
+    The config setting modulo-nodes has first priority. If modulo-nodes is not
+    set, check min-cluster-size. Finally, if neither value is set, determine
+    how many peers there are from the cluster relation.
+
+    @side_effect: distributed_wait is called which calls time.sleep()
+    @return: None
+    '''
+    wait = config('known-wait')
+    if config('modulo-nodes') is not None:
+        # modulo-nodes has first priority
+        num_nodes = config('modulo-nodes')
+    elif config('min-cluster-size'):
+        # min-cluster-size is consulted next
+        num_nodes = config('min-cluster-size')
+    else:
+        # If nothing explicit is configured, determine cluster size based on
+        # peer relations
+        num_nodes = 1
+        for rid in relation_ids('cluster'):
+            num_nodes += len(related_units(rid))
+    distributed_wait(modulo=num_nodes, wait=wait)
+
+
 def start_app():
     ''' Start the rabbitmq app and wait until it is fully started '''
     status_set('maintenance', 'Starting rabbitmq applilcation')
@@ -450,11 +484,8 @@ def cluster_with():
         # NOTE: The primary problem rabbitmq has clustering is when
         # more than one node attempts to cluster at the same time.
         # The asynchronous nature of hook firing nearly guarantees
-        # this. Using random time wait is a hack until we can
-        # implement charmhelpers.coordinator.
-        status_set('maintenance',
-                   'Random wait for join_cluster to avoid collisions')
-        time.sleep(random.random() * 100)
+        # this. Using cluster_wait based on modulo_distribution
+        cluster_wait()
         try:
             join_cluster(node)
             # NOTE: toggle the cluster relation to ensure that any peers
@@ -826,9 +857,7 @@ def restart_on_change(restart_map, stopstart=False):
                 if path_hash(path) != checksums[path]:
                     restarts += restart_map[path]
             services_list = list(OrderedDict.fromkeys(restarts))
-            status_set('maintenance',
-                       'Random wait for restart to avoid collisions')
-            time.sleep(random.random() * 100)
+            cluster_wait()
             if not stopstart:
                 for svc_name in services_list:
                     system_service('restart', svc_name)

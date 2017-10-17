@@ -34,7 +34,7 @@ import six
 
 from contextlib import contextmanager
 from collections import OrderedDict
-from .hookenv import log
+from .hookenv import log, DEBUG, local_unit
 from .fstab import Fstab
 from charmhelpers.osplatform import get_platform
 
@@ -487,13 +487,37 @@ def mkdir(path, owner='root', group='root', perms=0o555, force=False):
 
 def write_file(path, content, owner='root', group='root', perms=0o444):
     """Create or overwrite a file with the contents of a byte string."""
-    log("Writing file {} {}:{} {:o}".format(path, owner, group, perms))
     uid = pwd.getpwnam(owner).pw_uid
     gid = grp.getgrnam(group).gr_gid
-    with open(path, 'wb') as target:
-        os.fchown(target.fileno(), uid, gid)
-        os.fchmod(target.fileno(), perms)
-        target.write(content)
+    # lets see if we can grab the file and compare the context, to avoid doing
+    # a write.
+    existing_content = None
+    existing_uid, existing_gid = None, None
+    try:
+        with open(path, 'rb') as target:
+            existing_content = target.read()
+        stat = os.stat(path)
+        existing_uid, existing_gid = stat.st_uid, stat.st_gid
+    except:
+        pass
+    if content != existing_content:
+        log("Writing file {} {}:{} {:o}".format(path, owner, group, perms),
+            level=DEBUG)
+        with open(path, 'wb') as target:
+            os.fchown(target.fileno(), uid, gid)
+            os.fchmod(target.fileno(), perms)
+            target.write(content)
+        return
+    # the contents were the same, but we might still need to change the
+    # ownership.
+    if existing_uid != uid:
+        log("Changing uid on already existing content: {} -> {}"
+            .format(existing_uid, uid), level=DEBUG)
+        os.chown(path, uid, -1)
+    if existing_gid != gid:
+        log("Changing gid on already existing content: {} -> {}"
+            .format(existing_gid, gid), level=DEBUG)
+        os.chown(path, -1, gid)
 
 
 def fstab_remove(mp):
@@ -922,3 +946,31 @@ def updatedb(updatedb_text, new_path):
                 lines[i] = 'PRUNEPATHS="{}"'.format(' '.join(paths))
     output = "\n".join(lines)
     return output
+
+
+def modulo_distribution(modulo=3, wait=30):
+    """ Modulo distribution
+
+    This helper uses the unit number, a modulo value and a constant wait time
+    to produce a calculated wait time distribution. This is useful in large
+    scale deployments to distribute load during an expensive operation such as
+    service restarts.
+
+    If you have 1000 nodes that need to restart 100 at a time 1 minute at a
+    time:
+
+      time.wait(modulo_distribution(modulo=100, wait=60))
+      restart()
+
+    If you need restarts to happen serially set modulo to the exact number of
+    nodes and set a high constant wait time:
+
+      time.wait(modulo_distribution(modulo=10, wait=120))
+      restart()
+
+    @param modulo: int The modulo number creates the group distribution
+    @param wait: int The constant time wait value
+    @return: int Calculated time to wait for unit operation
+    """
+    unit_number = int(local_unit().split('/')[1])
+    return (unit_number % modulo) * wait
