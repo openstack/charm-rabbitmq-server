@@ -346,7 +346,6 @@ class RelationUtil(CharmTestCase):
         mock_local_unit.return_value = 'unit/0'
 
         rabbitmq_server_relations.update_nrpe_checks()
-
         mock_check_output.assert_any_call(
             ['/usr/bin/rsync', '-r', '--delete', '--executability',
              '%s/files/collect_rabbitmq_stats.sh' % self.tmp_dir,
@@ -362,7 +361,9 @@ class RelationUtil(CharmTestCase):
 
         mock_add_check.assert_any_call(
             shortname=rabbit_utils.RABBIT_USER,
-            description='Check RabbitMQ {%s}' % 'bar-0', check_cmd=cmd)
+            description='Check RabbitMQ {} {}'.format('bar-0',
+                                                      'nagios-unit-0'),
+            check_cmd=cmd)
 
         # check on ssl port 5671
         cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
@@ -376,4 +377,6 @@ class RelationUtil(CharmTestCase):
                    ssl_ca=rabbitmq_server_relations.SSL_CA_FILE)
         mock_add_check.assert_any_call(
             shortname=rabbit_utils.RABBIT_USER + "_ssl",
-            description='Check RabbitMQ (SSL) {%s}' % 'bar-0', check_cmd=cmd)
+            description='Check RabbitMQ (SSL) {} {}'.format('bar-0',
+                                                            'nagios-unit-0'),
+            check_cmd=cmd)

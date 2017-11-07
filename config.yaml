@@ -298,3 +298,10 @@ options:
       1 hour, but can be tuned up or down depending on deployment requirements.
       This ensures that any un-consumed notifications don't build up over
       time, causing disk capacity issues.
+  check-vhosts:
+    type: string
+    default:
+    description: |
+      When using nrpe to monitor the Rabbitmq host, we monitor functionality on
+      one vhost.  This option configures additional vhost name(s) to check.
+      Space separated list.

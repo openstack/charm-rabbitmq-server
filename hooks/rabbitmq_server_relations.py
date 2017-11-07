@@ -676,41 +676,45 @@ def update_nrpe_checks():
 
     # create unique user and vhost for each unit
     current_unit = local_unit().replace('/', '-')
-    user = 'nagios-%s' % current_unit
-    vhost = 'nagios-%s' % current_unit
+    user = 'nagios-{}'.format(current_unit)
+    vhosts = [{'vhost': user, 'shortname': rabbit.RABBIT_USER}]
     password = rabbit.get_rabbit_password(user, local=True)
 
-    rabbit.create_vhost(vhost)
-    rabbit.create_user(user, password, ['monitoring'])
-    rabbit.grant_permissions(user, vhost)
-
     nrpe_compat = nrpe.NRPE(hostname=hostname)
-    if config('ssl') in ['off', 'on']:
-        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
-               '--password {password} --vhost {vhost}')
-        cmd = cmd.format(plugins_dir=NAGIOS_PLUGINS, user=user,
-                         password=password, vhost=vhost)
-        nrpe_compat.add_check(
-            shortname=rabbit.RABBIT_USER,
-            description='Check RabbitMQ {%s}' % myunit,
-            check_cmd=cmd
-        )
-    if config('ssl') in ['only', 'on']:
-        log('Adding rabbitmq SSL check', level=DEBUG)
-        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
-               '--password {password} --vhost {vhost} '
-               '--ssl --ssl-ca {ssl_ca} --port {port}')
-        cmd = cmd.format(plugins_dir=NAGIOS_PLUGINS,
-                         user=user,
-                         password=password,
-                         port=int(config('ssl_port')),
-                         vhost=vhost,
-                         ssl_ca=SSL_CA_FILE)
-        nrpe_compat.add_check(
-            shortname=rabbit.RABBIT_USER + "_ssl",
-            description='Check RabbitMQ (SSL) {%s}' % myunit,
-            check_cmd=cmd
-        )
+    rabbit.create_user(user, password, ['monitoring'])
+
+    if config('check-vhosts'):
+        for other_vhost in config('check-vhosts').split(' '):
+            if other_vhost:
+                item = {'vhost': other_vhost,
+                        'shortname': 'rabbit_{}'.format(other_vhost)}
+                vhosts.append(item)
+
+    for vhost in vhosts:
+        rabbit.create_vhost(vhost['vhost'])
+        rabbit.grant_permissions(user, vhost['vhost'])
+        if config('ssl') in ['off', 'on']:
+            cmd = ('{}/check_rabbitmq.py --user {} --password {} '
+                   '--vhost {}'.format(NAGIOS_PLUGINS, user,
+                                       password, vhost['vhost']))
+            log('Adding rabbitmq non-SSL check for {}'.format(vhost['vhost']), level=DEBUG)
+            description = 'Check RabbitMQ {} {}'.format(myunit, vhost['vhost'])
+            nrpe_compat.add_check(
+                shortname=vhost['shortname'],
+                description=description,
+                check_cmd=cmd)
+
+        if config('ssl') in ['only', 'on']:
+            cmd = ('{}/check_rabbitmq.py --user {} --password {} '
+                   '--vhost {} --ssl --ssl-ca {} --port {}'.format(
+                       NAGIOS_PLUGINS, user, password, vhost['vhost'],
+                       SSL_CA_FILE, int(config('ssl_port'))))
+            log('Adding rabbitmq SSL check for {}'.format(vhost['vhost']), level=DEBUG)
+            description = 'Check RabbitMQ (SSL) {} {}'.format(myunit, vhost['vhost'])
+            nrpe_compat.add_check(
+                shortname=vhost['shortname'] + "_ssl",
+                description=description,
+                check_cmd=cmd)
 
     if config('queue_thresholds'):
         cmd = ""
@@ -960,6 +964,7 @@ def certs_changed(relation_id=None, unit=None):
 @harden()
 def update_status():
     log('Updating status.')
+
 
 
 if __name__ == '__main__':
