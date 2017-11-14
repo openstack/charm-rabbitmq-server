@@ -441,6 +441,49 @@ def add_user_to_group(username, group):
     subprocess.check_call(cmd)
 
 
+def chage(username, lastday=None, expiredate=None, inactive=None,
+           mindays=None, maxdays=None, root=None, warndays=None):
+    """Change user password expiry information
+
+    :param str username: User to update
+    :param str lastday: Set when password was changed in YYYY-MM-DD format
+    :param str expiredate: Set when user's account will no longer be
+                           accessible in YYYY-MM-DD format.
+                           -1 will remove an account expiration date.
+    :param str inactive: Set the number of days of inactivity after a password
+                         has expired before the account is locked.
+                         -1 will remove an account's inactivity.
+    :param str mindays: Set the minimum number of days between password
+                        changes to MIN_DAYS.
+                        0 indicates the password can be changed anytime.
+    :param str maxdays: Set the maximum number of days during which a
+                        password is valid.
+                        -1 as MAX_DAYS will remove checking maxdays
+    :param str root: Apply changes in the CHROOT_DIR directory
+    :param str warndays: Set the number of days of warning before a password
+                         change is required
+    :raises subprocess.CalledProcessError: if call to chage fails
+    """
+    cmd = ['chage']
+    if root:
+        cmd.extend(['--root', root])
+    if lastday:
+        cmd.extend(['--lastday', lastday])
+    if expiredate:
+        cmd.extend(['--expiredate', expiredate])
+    if inactive:
+        cmd.extend(['--inactive', inactive])
+    if mindays:
+        cmd.extend(['--mindays', mindays])
+    if maxdays:
+        cmd.extend(['--maxdays', maxdays])
+    if warndays:
+        cmd.extend(['--warndays', warndays])
+    cmd.append(username)
+    subprocess.check_call(cmd)
+
+remove_password_expiry = functools.partial(chage, expiredate='-1', inactive='-1', mindays='0', maxdays='-1')
+
 def rsync(from_path, to_path, flags='-r', options=None, timeout=None):
     """Replicate the contents of a path"""
     options = options or ['--delete', '--executability']

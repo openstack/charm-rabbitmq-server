@@ -23,6 +23,7 @@ import urllib
 import urlparse
 
 import cinderclient.v1.client as cinder_client
+import cinderclient.v2.client as cinder_clientv2
 import glanceclient.v1.client as glance_client
 import heatclient.v1.client as heat_client
 from keystoneclient.v2_0 import client as keystone_client
@@ -351,12 +352,15 @@ class OpenStackAmuletUtils(AmuletUtils):
         self.keystone_wait_for_propagation(sentry_relation_pairs, api_version)
 
     def authenticate_cinder_admin(self, keystone_sentry, username,
-                                  password, tenant):
+                                  password, tenant, api_version=2):
         """Authenticates admin user with cinder."""
         # NOTE(beisner): cinder python client doesn't accept tokens.
         keystone_ip = keystone_sentry.info['public-address']
         ept = "http://{}:5000/v2.0".format(keystone_ip.strip().decode('utf-8'))
-        return cinder_client.Client(username, password, tenant, ept)
+        _clients = {
+            1: cinder_client.Client,
+            2: cinder_clientv2.Client}
+        return _clients[api_version](username, password, tenant, ept)
 
     def authenticate_keystone(self, keystone_ip, username, password,
                               api_version=False, admin_port=False,
@@ -617,12 +621,24 @@ class OpenStackAmuletUtils(AmuletUtils):
             self.log.debug('Keypair ({}) already exists, '
                            'using it.'.format(keypair_name))
             return _keypair
-        except:
+        except Exception:
             self.log.debug('Keypair ({}) does not exist, '
                            'creating it.'.format(keypair_name))
 
         _keypair = nova.keypairs.create(name=keypair_name)
         return _keypair
+
+    def _get_cinder_obj_name(self, cinder_object):
+        """Retrieve name of cinder object.
+
+        :param cinder_object: cinder snapshot or volume object
+        :returns: str cinder object name
+        """
+        # v1 objects store name in 'display_name' attr but v2+ use 'name'
+        try:
+            return cinder_object.display_name
+        except AttributeError:
+            return cinder_object.name
 
     def create_cinder_volume(self, cinder, vol_name="demo-vol", vol_size=1,
                              img_id=None, src_vol_id=None, snap_id=None):
@@ -674,6 +690,13 @@ class OpenStackAmuletUtils(AmuletUtils):
                                             source_volid=src_vol_id,
                                             snapshot_id=snap_id)
             vol_id = vol_new.id
+        except TypeError:
+            vol_new = cinder.volumes.create(name=vol_name,
+                                            imageRef=img_id,
+                                            size=vol_size,
+                                            source_volid=src_vol_id,
+                                            snapshot_id=snap_id)
+            vol_id = vol_new.id
         except Exception as e:
             msg = 'Failed to create volume: {}'.format(e)
             amulet.raise_status(amulet.FAIL, msg=msg)
@@ -688,7 +711,7 @@ class OpenStackAmuletUtils(AmuletUtils):
 
         # Re-validate new volume
         self.log.debug('Validating volume attributes...')
-        val_vol_name = cinder.volumes.get(vol_id).display_name
+        val_vol_name = self._get_cinder_obj_name(cinder.volumes.get(vol_id))
         val_vol_boot = cinder.volumes.get(vol_id).bootable
         val_vol_stat = cinder.volumes.get(vol_id).status
         val_vol_size = cinder.volumes.get(vol_id).size

@@ -64,6 +64,6 @@ def is_device_mounted(device):
     '''
     try:
         out = check_output(['lsblk', '-P', device]).decode('UTF-8')
-    except:
+    except Exception:
         return False
     return bool(re.search(r'MOUNTPOINT=".+"', out))

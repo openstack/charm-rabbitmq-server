@@ -303,20 +303,27 @@ class OpenStackAmuletDeployment(AmuletDeployment):
         test scenario, based on OpenStack release and whether ceph radosgw
         is flagged as present or not."""
 
-        if self._get_openstack_release() >= self.trusty_kilo:
-            # Kilo or later
-            pools = [
-                'rbd',
-                'cinder',
-                'glance'
-            ]
-        else:
+        if self._get_openstack_release() <= self.trusty_juno:
             # Juno or earlier
             pools = [
                 'data',
                 'metadata',
                 'rbd',
-                'cinder',
+                'cinder-ceph',
+                'glance'
+            ]
+        elif (self.trust_kilo <= self._get_openstack_release() <=
+              self.zesty_ocata):
+            # Kilo through Ocata
+            pools = [
+                'rbd',
+                'cinder-ceph',
+                'glance'
+            ]
+        else:
+            # Pike and later
+            pools = [
+                'cinder-ceph',
                 'glance'
             ]
 

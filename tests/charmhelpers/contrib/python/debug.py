@@ -49,6 +49,6 @@ def set_trace(addr=DEFAULT_ADDR, port=DEFAULT_PORT):
         open_port(port)
         debugger = Rpdb(addr=addr, port=port)
         debugger.set_trace(sys._getframe().f_back)
-    except:
+    except Exception:
         _error("Cannot start a remote debug session on %s:%s" % (addr,
                                                                  port))

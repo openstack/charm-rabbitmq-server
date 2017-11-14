@@ -82,15 +82,18 @@ def update_dns_ha_resource_params(resources, resource_params,
             continue
         m = re.search('os-(.+?)-hostname', setting)
         if m:
-            networkspace = m.group(1)
+            endpoint_type = m.group(1)
+            # resolve_address's ADDRESS_MAP uses 'int' not 'internal'
+            if endpoint_type == 'internal':
+                endpoint_type = 'int'
         else:
             msg = ('Unexpected DNS hostname setting: {}. '
-                   'Cannot determine network space name'
+                   'Cannot determine endpoint_type name'
                    ''.format(setting))
             status_set('blocked', msg)
             raise DNSHAException(msg)
 
-        hostname_key = 'res_{}_{}_hostname'.format(charm_name(), networkspace)
+        hostname_key = 'res_{}_{}_hostname'.format(charm_name(), endpoint_type)
         if hostname_key in hostname_group:
             log('DNS HA: Resource {}: {} already exists in '
                 'hostname group - skipping'.format(hostname_key, hostname),
@@ -101,7 +104,7 @@ def update_dns_ha_resource_params(resources, resource_params,
         resources[hostname_key] = crm_ocf
         resource_params[hostname_key] = (
             'params fqdn="{}" ip_address="{}" '
-            ''.format(hostname, resolve_address(endpoint_type=networkspace,
+            ''.format(hostname, resolve_address(endpoint_type=endpoint_type,
                                                 override=False)))
 
     if len(hostname_group) >= 1:

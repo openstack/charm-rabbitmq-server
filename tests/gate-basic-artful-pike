@@ -21,3 +21,6 @@ from basic_deployment import RmqBasicDeployment
 if __name__ == '__main__':
     deployment = RmqBasicDeployment(series='artful')
     deployment.run_tests()
+
+# NOTE(admcleod):  Artful target disabled, pending bug:
+# https://bugs.launchpad.net/charm-percona-cluster/+bug/1728132

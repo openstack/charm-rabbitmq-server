@@ -74,10 +74,10 @@ def list_lvm_volume_group(block_device):
     '''
     vg = None
     pvd = check_output(['pvdisplay', block_device]).splitlines()
-    for l in pvd:
-        l = l.decode('UTF-8')
-        if l.strip().startswith('VG Name'):
-            vg = ' '.join(l.strip().split()[2:])
+    for lvm in pvd:
+        lvm = lvm.decode('UTF-8')
+        if lvm.strip().startswith('VG Name'):
+            vg = ' '.join(lvm.strip().split()[2:])
     return vg
 
 

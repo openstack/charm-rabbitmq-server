@@ -358,7 +358,7 @@ class Storage(object):
         try:
             yield self.revision
             self.revision = None
-        except:
+        except Exception:
             self.flush(False)
             self.revision = None
             raise

@@ -370,9 +370,10 @@ def get_mon_map(service):
       Also raises CalledProcessError if our ceph command fails
     """
     try:
-        mon_status = check_output(
-            ['ceph', '--id', service,
-             'mon_status', '--format=json'])
+        mon_status = check_output(['ceph', '--id', service,
+                                   'mon_status', '--format=json'])
+        if six.PY3:
+            mon_status = mon_status.decode('UTF-8')
         try:
             return json.loads(mon_status)
         except ValueError as v:
@@ -457,7 +458,7 @@ def monitor_key_get(service, key):
     try:
         output = check_output(
             ['ceph', '--id', service,
-             'config-key', 'get', str(key)])
+             'config-key', 'get', str(key)]).decode('UTF-8')
         return output
     except CalledProcessError as e:
         log("Monitor config-key get failed with message: {}".format(
@@ -500,6 +501,8 @@ def get_erasure_profile(service, name):
         out = check_output(['ceph', '--id', service,
                             'osd', 'erasure-code-profile', 'get',
                             name, '--format=json'])
+        if six.PY3:
+            out = out.decode('UTF-8')
         return json.loads(out)
     except (CalledProcessError, OSError, ValueError):
         return None
@@ -686,7 +689,10 @@ def get_cache_mode(service, pool_name):
     """
     validator(value=service, valid_type=six.string_types)
     validator(value=pool_name, valid_type=six.string_types)
-    out = check_output(['ceph', '--id', service, 'osd', 'dump', '--format=json'])
+    out = check_output(['ceph', '--id', service,
+                        'osd', 'dump', '--format=json'])
+    if six.PY3:
+        out = out.decode('UTF-8')
     try:
         osd_json = json.loads(out)
         for pool in osd_json['pools']:
@@ -700,8 +706,9 @@ def get_cache_mode(service, pool_name):
 def pool_exists(service, name):
     """Check to see if a RADOS pool already exists."""
     try:
-        out = check_output(['rados', '--id', service,
-                            'lspools']).decode('UTF-8')
+        out = check_output(['rados', '--id', service, 'lspools'])
+        if six.PY3:
+            out = out.decode('UTF-8')
     except CalledProcessError:
         return False
 
@@ -714,9 +721,12 @@ def get_osds(service):
     """
     version = ceph_version()
     if version and version >= '0.56':
-        return json.loads(check_output(['ceph', '--id', service,
-                                        'osd', 'ls',
-                                        '--format=json']).decode('UTF-8'))
+        out = check_output(['ceph', '--id', service,
+                            'osd', 'ls',
+                            '--format=json'])
+        if six.PY3:
+            out = out.decode('UTF-8')
+        return json.loads(out)
 
     return None
 
@@ -734,7 +744,9 @@ def rbd_exists(service, pool, rbd_img):
     """Check to see if a RADOS block device exists."""
     try:
         out = check_output(['rbd', 'list', '--id',
-                            service, '--pool', pool]).decode('UTF-8')
+                            service, '--pool', pool])
+        if six.PY3:
+            out = out.decode('UTF-8')
     except CalledProcessError:
         return False
 
@@ -859,7 +871,9 @@ def configure(service, key, auth, use_syslog):
 def image_mapped(name):
     """Determine whether a RADOS block device is mapped locally."""
     try:
-        out = check_output(['rbd', 'showmapped']).decode('UTF-8')
+        out = check_output(['rbd', 'showmapped'])
+        if six.PY3:
+            out = out.decode('UTF-8')
     except CalledProcessError:
         return False
 
@@ -1018,7 +1032,9 @@ def ceph_version():
     """Retrieve the local version of ceph."""
     if os.path.exists('/usr/bin/ceph'):
         cmd = ['ceph', '-v']
-        output = check_output(cmd).decode('US-ASCII')
+        output = check_output(cmd)
+        if six.PY3:
+            output = output.decode('UTF-8')
         output = output.split()
         if len(output) > 3:
             return output[2]

@@ -426,7 +426,7 @@ def get_os_codename_package(package, fatal=True):
 
     try:
         pkg = cache[package]
-    except:
+    except Exception:
         if not fatal:
             return None
         # the package is unknown to the current apt cache.
@@ -618,7 +618,7 @@ def save_script_rc(script_path="scripts/scriptrc", **env_vars):
     juju_rc_path = "%s/%s" % (charm_dir(), script_path)
     if not os.path.exists(os.path.dirname(juju_rc_path)):
         os.mkdir(os.path.dirname(juju_rc_path))
-    with open(juju_rc_path, 'wb') as rc_script:
+    with open(juju_rc_path, 'wt') as rc_script:
         rc_script.write(
             "#!/bin/bash\n")
         [rc_script.write('export %s=%s\n' % (u, p))
@@ -797,7 +797,7 @@ def git_default_repos(projects_yaml):
     service = service_name()
     core_project = service
 
-    for default, branch in GIT_DEFAULT_BRANCHES.iteritems():
+    for default, branch in six.iteritems(GIT_DEFAULT_BRANCHES):
         if projects_yaml == default:
 
             # add the requirements repo first
@@ -1618,7 +1618,7 @@ def do_action_openstack_upgrade(package, upgrade_callback, configs):
                     upgrade_callback(configs=configs)
                     action_set({'outcome': 'success, upgrade completed.'})
                     ret = True
-                except:
+                except Exception:
                     action_set({'outcome': 'upgrade failed, see traceback.'})
                     action_set({'traceback': traceback.format_exc()})
                     action_fail('do_openstack_upgrade resulted in an '
@@ -1723,7 +1723,7 @@ def is_unit_paused_set():
             kv = t[0]
             # transform something truth-y into a Boolean.
             return not(not(kv.get('unit-paused')))
-    except:
+    except Exception:
         return False
 
 
@@ -2051,7 +2051,7 @@ def update_json_file(filename, items):
 def snap_install_requested():
     """ Determine if installing from snaps
 
-    If openstack-origin is of the form snap:track/channel
+    If openstack-origin is of the form snap:track/channel[/branch]
     and channel is in SNAPS_CHANNELS return True.
     """
     origin = config('openstack-origin') or ""
@@ -2060,9 +2060,9 @@ def snap_install_requested():
 
     _src = origin[5:]
     if '/' in _src:
-        _track, channel = _src.split('/')
+        channel = _src.split('/')[1]
     else:
-        # Hanlde snap:track with no channel
+        # Handle snap:track with no channel
         channel = 'stable'
     return valid_snap_channel(channel)
 

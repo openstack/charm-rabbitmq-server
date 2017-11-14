@@ -272,6 +272,8 @@ class OSConfigRenderer(object):
             raise OSConfigException
 
         _out = self.render(config_file)
+        if six.PY3:
+            _out = _out.encode('UTF-8')
 
         with open(config_file, 'wb') as out:
             out.write(_out)

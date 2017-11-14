@@ -490,7 +490,7 @@ def get_host_ip(hostname, fallback=None):
     if not ip_addr:
         try:
             ip_addr = socket.gethostbyname(hostname)
-        except:
+        except Exception:
             log("Failed to resolve hostname '%s'" % (hostname),
                 level=WARNING)
             return fallback
@@ -518,7 +518,7 @@ def get_hostname(address, fqdn=True):
         if not result:
             try:
                 result = socket.gethostbyaddr(address)[0]
-            except:
+            except Exception:
                 return None
     else:
         result = address

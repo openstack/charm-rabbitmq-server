@@ -22,6 +22,7 @@ from __future__ import print_function
 import copy
 from distutils.version import LooseVersion
 from functools import wraps
+from collections import namedtuple
 import glob
 import os
 import json
@@ -644,18 +645,31 @@ def is_relation_made(relation, keys='private-address'):
     return False
 
 
+def _port_op(op_name, port, protocol="TCP"):
+    """Open or close a service network port"""
+    _args = [op_name]
+    icmp = protocol.upper() == "ICMP"
+    if icmp:
+        _args.append(protocol)
+    else:
+        _args.append('{}/{}'.format(port, protocol))
+    try:
+        subprocess.check_call(_args)
+    except subprocess.CalledProcessError:
+        # Older Juju pre 2.3 doesn't support ICMP
+        # so treat it as a no-op if it fails.
+        if not icmp:
+            raise
+
+
 def open_port(port, protocol="TCP"):
     """Open a service network port"""
-    _args = ['open-port']
-    _args.append('{}/{}'.format(port, protocol))
-    subprocess.check_call(_args)
+    _port_op('open-port', port, protocol)
 
 
 def close_port(port, protocol="TCP"):
     """Close a service network port"""
-    _args = ['close-port']
-    _args.append('{}/{}'.format(port, protocol))
-    subprocess.check_call(_args)
+    _port_op('close-port', port, protocol)
 
 
 def open_ports(start, end, protocol="TCP"):
@@ -1093,6 +1107,35 @@ def network_get_primary_address(binding):
     return subprocess.check_output(cmd).decode('UTF-8').strip()
 
 
+@translate_exc(from_exc=OSError, to_exc=NotImplementedError)
+def network_get(endpoint, relation_id=None):
+    """
+    Retrieve the network details for a relation endpoint
+
+    :param endpoint: string. The name of a relation endpoint
+    :param relation_id: int. The ID of the relation for the current context.
+    :return: dict. The loaded YAML output of the network-get query.
+    :raise: NotImplementedError if run on Juju < 2.1
+    """
+    cmd = ['network-get', endpoint, '--format', 'yaml']
+    if relation_id:
+        cmd.append('-r')
+        cmd.append(relation_id)
+    try:
+        response = subprocess.check_output(
+            cmd,
+            stderr=subprocess.STDOUT).decode('UTF-8').strip()
+    except CalledProcessError as e:
+        # Early versions of Juju 2.0.x required the --primary-address argument.
+        # We catch that condition here and raise NotImplementedError since
+        # the requested semantics are not available - the caller can then
+        # use the network_get_primary_address() method instead.
+        if '--primary-address is currently required' in e.output.decode('UTF-8'):
+            raise NotImplementedError
+        raise
+    return yaml.safe_load(response)
+
+
 def add_metric(*args, **kwargs):
     """Add metric values. Values may be expressed with keyword arguments. For
     metric names containing dashes, these may be expressed as one or more
@@ -1122,3 +1165,42 @@ def meter_info():
     """Get the meter status information, if running in the meter-status-changed
     hook."""
     return os.environ.get('JUJU_METER_INFO')
+
+
+def iter_units_for_relation_name(relation_name):
+    """Iterate through all units in a relation
+
+    Generator that iterates through all the units in a relation and yields
+    a named tuple with rid and unit field names.
+
+    Usage:
+    data = [(u.rid, u.unit)
+            for u in iter_units_for_relation_name(relation_name)]
+
+    :param relation_name: string relation name
+    :yield: Named Tuple with rid and unit field names
+    """
+    RelatedUnit = namedtuple('RelatedUnit', 'rid, unit')
+    for rid in relation_ids(relation_name):
+        for unit in related_units(rid):
+            yield RelatedUnit(rid, unit)
+
+
+def ingress_address(rid=None, unit=None):
+    """
+    Retrieve the ingress-address from a relation when available. Otherwise,
+    return the private-address. This function is to be used on the consuming
+    side of the relation.
+
+    Usage:
+    addresses = [ingress_address(rid=u.rid, unit=u.unit)
+                 for u in iter_units_for_relation_name(relation_name)]
+
+    :param rid: string relation id
+    :param unit: string unit name
+    :side effect: calls relation_get
+    :return: string IP address
+    """
+    settings = relation_get(rid=rid, unit=unit)
+    return (settings.get('ingress-address') or
+            settings.get('private-address'))
