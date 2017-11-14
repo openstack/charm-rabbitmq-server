@@ -20,6 +20,7 @@ import glob
 import tempfile
 import time
 import socket
+
 from collections import OrderedDict
 
 from rabbitmq_context import (
@@ -220,27 +221,25 @@ def user_exists(user):
     for line in out.split('\n')[1:]:
         _user = line.split('\t')[0]
         if _user == user:
-            admin = line.split('\t')[1]
-            return True, (admin == '[administrator]')
-    return False, False
+            return True
+    return False
 
 
-def create_user(user, password, admin=False):
-    exists, is_admin = user_exists(user)
+def create_user(user, password, tags=[]):
+    exists = user_exists(user)
 
     if not exists:
         log('Creating new user (%s).' % user)
         rabbitmqctl('add_user', user, password)
 
-    if admin == is_admin:
-        return
+    if 'administrator' in tags:
+        log('Granting admin access to {}'.format(user))
 
-    if admin:
-        log('Granting user (%s) admin access.' % user)
-        rabbitmqctl('set_user_tags', user, 'administrator')
-    else:
-        log('Revoking user (%s) admin access.' % user)
-        rabbitmqctl('set_user_tags', user)
+    log('Adding tags [{}] to user {}'.format(
+        ', '.join(tags),
+        user
+    ))
+    rabbitmqctl('set_user_tags', user, ' '.join(tags))
 
 
 def grant_permissions(user, vhost):

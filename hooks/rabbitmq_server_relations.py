@@ -29,6 +29,17 @@ except ImportError:
         subprocess.check_call(['apt-get', 'install', '-y', 'python3-yaml'])
     import yaml  # flake8: noqa
 
+try:
+    import requests  # flake8: noqa
+except ImportError:
+    if sys.version_info.major == 2:
+        subprocess.check_call(['apt-get', 'install', '-y',
+                               'python-requests'])
+    else:
+        subprocess.check_call(['apt-get', 'install', '-y',
+                               'python3-requests'])
+    import requests  # flake8: noqa
+
 import rabbit_utils as rabbit
 import ssl_utils
 
@@ -189,7 +200,10 @@ def configure_amqp(username, vhost, relation_id, admin=False):
 
     # update vhost
     rabbit.create_vhost(vhost)
-    rabbit.create_user(username, password, admin)
+    if admin:
+        rabbit.create_user(username, password, ['administrator'])
+    else:
+        rabbit.create_user(username, password)
     rabbit.grant_permissions(username, vhost)
 
     # NOTE(freyes): after rabbitmq-server 3.0 the method to define HA in the
@@ -584,10 +598,10 @@ def ceph_changed():
 @hooks.hook('nrpe-external-master-relation-changed')
 def update_nrpe_checks():
     if os.path.isdir(NAGIOS_PLUGINS):
-        rsync(os.path.join(os.getenv('CHARM_DIR'), 'scripts',
+        rsync(os.path.join(charm_dir(), 'scripts',
                            'check_rabbitmq.py'),
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq.py'))
-        rsync(os.path.join(os.getenv('CHARM_DIR'), 'scripts',
+        rsync(os.path.join(charm_dir(), 'scripts',
                            'check_rabbitmq_queues.py'),
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
     if config('stats_cron_schedule'):
@@ -598,6 +612,10 @@ def update_nrpe_checks():
         rsync(os.path.join(charm_dir(), 'scripts',
                            'collect_rabbitmq_stats.sh'), script)
         write_file(STATS_CRONFILE, cronjob)
+    if config('management_plugin'):
+        rsync(os.path.join(charm_dir(), 'scripts',
+                           'check_rabbitmq_cluster.py'),
+              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
     elif os.path.isfile(STATS_CRONFILE):
         os.remove(STATS_CRONFILE)
 
@@ -612,7 +630,7 @@ def update_nrpe_checks():
     password = rabbit.get_rabbit_password(user, local=True)
 
     rabbit.create_vhost(vhost)
-    rabbit.create_user(user, password)
+    rabbit.create_user(user, password, ['monitoring'])
     rabbit.grant_permissions(user, vhost)
 
     nrpe_compat = nrpe.NRPE(hostname=hostname)
@@ -633,6 +651,19 @@ def update_nrpe_checks():
             check_cmd='{}/check_rabbitmq_queues.py{} {}'.format(
                         NAGIOS_PLUGINS, cmd, STATS_DATAFILE)
         )
+    if config('management_plugin'):
+        # add NRPE check
+        nrpe_compat.add_check(
+            shortname=rabbit.RABBIT_USER + '_cluster',
+            description='Check RabbitMQ Cluster',
+            check_cmd='{}/check_rabbitmq_cluster.py --port {} --user {} --password {}'.format(
+                        NAGIOS_PLUGINS,
+                        rabbit.get_managment_port(),
+                        user,
+                        password
+            )
+        )
+
     nrpe_compat.write()
 
 

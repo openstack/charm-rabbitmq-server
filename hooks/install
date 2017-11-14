@@ -2,7 +2,7 @@
 # Wrapper to deal with newer Ubuntu versions that don't have py2 installed
 # by default.
 
-declare -a DEPS=('apt' 'netaddr' 'netifaces' 'pip' 'yaml' 'dnspython')
+declare -a DEPS=('apt' 'netaddr' 'netifaces' 'pip' 'yaml' 'dnspython' 'requests')
 
 check_and_install() {
     pkg="${1}-${2}"
