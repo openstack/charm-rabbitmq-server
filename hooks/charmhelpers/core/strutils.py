@@ -61,13 +61,19 @@ def bytes_from_string(value):
     if isinstance(value, six.string_types):
         value = six.text_type(value)
     else:
-        msg = "Unable to interpret non-string value '%s' as boolean" % (value)
+        msg = "Unable to interpret non-string value '%s' as bytes" % (value)
         raise ValueError(msg)
     matches = re.match("([0-9]+)([a-zA-Z]+)", value)
-    if not matches:
-        msg = "Unable to interpret string value '%s' as bytes" % (value)
-        raise ValueError(msg)
-    return int(matches.group(1)) * (1024 ** BYTE_POWER[matches.group(2)])
+    if matches:
+        size = int(matches.group(1)) * (1024 ** BYTE_POWER[matches.group(2)])
+    else:
+        # Assume that value passed in is bytes
+        try:
+            size = int(value)
+        except ValueError:
+            msg = "Unable to interpret string value '%s' as bytes" % (value)
+            raise ValueError(msg)
+    return size
 
 
 class BasicStringComparator(object):

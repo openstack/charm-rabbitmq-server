@@ -140,6 +140,7 @@ UBUNTU_OPENSTACK_RELEASE = OrderedDict([
     ('yakkety', 'newton'),
     ('zesty', 'ocata'),
     ('artful', 'pike'),
+    ('bionic', 'queens'),
 ])
 
 
@@ -157,6 +158,7 @@ OPENSTACK_CODENAMES = OrderedDict([
     ('2016.2', 'newton'),
     ('2017.1', 'ocata'),
     ('2017.2', 'pike'),
+    ('2018.1', 'queens'),
 ])
 
 # The ugly duckling - must list releases oldest to newest
@@ -187,6 +189,8 @@ SWIFT_CODENAMES = OrderedDict([
         ['2.11.0', '2.12.0', '2.13.0']),
     ('pike',
         ['2.13.0', '2.15.0']),
+    ('queens',
+        ['2.16.0']),
 ])
 
 # >= Liberty version->codename mapping
@@ -412,6 +416,8 @@ def get_os_codename_package(package, fatal=True):
         cmd = ['snap', 'list', package]
         try:
             out = subprocess.check_output(cmd)
+            if six.PY3:
+                out = out.decode('UTF-8')
         except subprocess.CalledProcessError as e:
             return None
         lines = out.split('\n')

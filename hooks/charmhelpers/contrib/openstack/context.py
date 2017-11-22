@@ -293,7 +293,7 @@ class PostgresqlDBContext(OSContextGenerator):
 def db_ssl(rdata, ctxt, ssl_dir):
     if 'ssl_ca' in rdata and ssl_dir:
         ca_path = os.path.join(ssl_dir, 'db-client.ca')
-        with open(ca_path, 'w') as fh:
+        with open(ca_path, 'wb') as fh:
             fh.write(b64decode(rdata['ssl_ca']))
 
         ctxt['database_ssl_ca'] = ca_path
@@ -308,12 +308,12 @@ def db_ssl(rdata, ctxt, ssl_dir):
             log("Waiting 1m for ssl client cert validity", level=INFO)
             time.sleep(60)
 
-        with open(cert_path, 'w') as fh:
+        with open(cert_path, 'wb') as fh:
             fh.write(b64decode(rdata['ssl_cert']))
 
         ctxt['database_ssl_cert'] = cert_path
         key_path = os.path.join(ssl_dir, 'db-client.key')
-        with open(key_path, 'w') as fh:
+        with open(key_path, 'wb') as fh:
             fh.write(b64decode(rdata['ssl_key']))
 
         ctxt['database_ssl_key'] = key_path
@@ -459,7 +459,7 @@ class AMQPContext(OSContextGenerator):
 
                         ca_path = os.path.join(
                             self.ssl_dir, 'rabbit-client-ca.pem')
-                        with open(ca_path, 'w') as fh:
+                        with open(ca_path, 'wb') as fh:
                             fh.write(b64decode(ctxt['rabbit_ssl_ca']))
                             ctxt['rabbit_ssl_ca'] = ca_path
 
