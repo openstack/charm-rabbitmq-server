@@ -11,8 +11,8 @@ tags:
   - misc
 series:
   - xenial
+  - bionic
   - artful
-  - zesty
   - trusty
 provides:
   amqp:

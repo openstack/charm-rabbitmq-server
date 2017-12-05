@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Amulet tests on a basic rabbitmq-server deployment on zesty-ocata."""
+"""Amulet tests on a basic rabbitmq-server deployment on bionic-queens."""
 
 from basic_deployment import RmqBasicDeployment
 
 if __name__ == '__main__':
-    deployment = RmqBasicDeployment(series='zesty')
+    deployment = RmqBasicDeployment(series='bionic')
     deployment.run_tests()
