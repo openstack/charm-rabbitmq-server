@@ -51,5 +51,6 @@ while read VHOST; do
     awk "{print \"$VHOST \" \$0 \" $(date +'%s') \"}" >> ${TMP_DATA_FILE} 2>${LOG_DIR}/list_queues.log
 done
 mv ${TMP_DATA_FILE} ${DATA_FILE}
+chmod 644 ${DATA_FILE}
 echo "mnesia_size: ${MNESIA_DB_SIZE}@$NOW" > $RABBIT_STATS_DATA_FILE
 echo "rss_size: ${RABBIT_RSS}@$NOW" >> $RABBIT_STATS_DATA_FILE
