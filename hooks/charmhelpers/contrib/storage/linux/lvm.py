@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 from subprocess import (
     CalledProcessError,
     check_call,
@@ -101,3 +102,52 @@ def create_lvm_volume_group(volume_group, block_device):
     :block_device: str: Full path of PV-initialized block device.
     '''
     check_call(['vgcreate', volume_group, block_device])
+
+
+def list_logical_volumes(select_criteria=None, path_mode=False):
+    '''
+    List logical volumes
+
+    :param select_criteria: str: Limit list to those volumes matching this
+                                 criteria (see 'lvs -S help' for more details)
+    :param path_mode: bool: return logical volume name in 'vg/lv' format, this
+                            format is required for some commands like lvextend
+    :returns: [str]: List of logical volumes
+    '''
+    lv_diplay_attr = 'lv_name'
+    if path_mode:
+        # Parsing output logic relies on the column order
+        lv_diplay_attr = 'vg_name,' + lv_diplay_attr
+    cmd = ['lvs', '--options', lv_diplay_attr, '--noheadings']
+    if select_criteria:
+        cmd.extend(['--select', select_criteria])
+    lvs = []
+    for lv in check_output(cmd).decode('UTF-8').splitlines():
+        if not lv:
+            continue
+        if path_mode:
+            lvs.append('/'.join(lv.strip().split()))
+        else:
+            lvs.append(lv.strip())
+    return lvs
+
+
+list_thin_logical_volume_pools = functools.partial(
+    list_logical_volumes,
+    select_criteria='lv_attr =~ ^t')
+
+list_thin_logical_volumes = functools.partial(
+    list_logical_volumes,
+    select_criteria='lv_attr =~ ^V')
+
+
+def extend_logical_volume_by_device(lv_name, block_device):
+    '''
+    Extends the size of logical volume lv_name by the amount of free space on
+    physical volume block_device.
+
+    :param lv_name: str: name of logical volume to be extended (vg/lv format)
+    :param block_device: str: name of block_device to be allocated to lv_name
+    '''
+    cmd = ['lvextend', lv_name, block_device]
+    check_call(cmd)

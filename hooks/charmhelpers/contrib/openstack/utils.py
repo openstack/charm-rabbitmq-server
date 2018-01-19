@@ -23,7 +23,6 @@ import sys
 import re
 import itertools
 import functools
-import shutil
 
 import six
 import traceback
@@ -47,7 +46,6 @@ from charmhelpers.core.hookenv import (
     related_units,
     relation_ids,
     relation_set,
-    service_name,
     status_set,
     hook_name,
     application_version_set,
@@ -68,11 +66,6 @@ from charmhelpers.contrib.network.ip import (
     port_has_listener,
 )
 
-from charmhelpers.contrib.python.packages import (
-    pip_create_virtualenv,
-    pip_install,
-)
-
 from charmhelpers.core.host import (
     lsb_release,
     mounts,
@@ -84,7 +77,6 @@ from charmhelpers.core.host import (
 )
 from charmhelpers.fetch import (
     apt_cache,
-    install_remote,
     import_key as fetch_import_key,
     add_source as fetch_add_source,
     SourceConfigError,
@@ -278,27 +270,6 @@ PACKAGE_CODENAMES = {
     ]),
 }
 
-GIT_DEFAULT_REPOS = {
-    'requirements': 'git://github.com/openstack/requirements',
-    'cinder': 'git://github.com/openstack/cinder',
-    'glance': 'git://github.com/openstack/glance',
-    'horizon': 'git://github.com/openstack/horizon',
-    'keystone': 'git://github.com/openstack/keystone',
-    'networking-hyperv': 'git://github.com/openstack/networking-hyperv',
-    'neutron': 'git://github.com/openstack/neutron',
-    'neutron-fwaas': 'git://github.com/openstack/neutron-fwaas',
-    'neutron-lbaas': 'git://github.com/openstack/neutron-lbaas',
-    'neutron-vpnaas': 'git://github.com/openstack/neutron-vpnaas',
-    'nova': 'git://github.com/openstack/nova',
-}
-
-GIT_DEFAULT_BRANCHES = {
-    'liberty': 'stable/liberty',
-    'mitaka': 'stable/mitaka',
-    'newton': 'stable/newton',
-    'master': 'master',
-}
-
 DEFAULT_LOOPBACK_SIZE = '5G'
 
 
@@ -392,6 +363,8 @@ def get_swift_codename(version):
             releases = UBUNTU_OPENSTACK_RELEASE
             release = [k for k, v in six.iteritems(releases) if codename in v]
             ret = subprocess.check_output(['apt-cache', 'policy', 'swift'])
+            if six.PY3:
+                ret = ret.decode('UTF-8')
             if codename in ret or release[0] in ret:
                 return codename
     elif len(codenames) == 1:
@@ -528,7 +501,6 @@ def os_release(package, base='essex', reset_cache=False):
     if _os_rel:
         return _os_rel
     _os_rel = (
-        git_os_codename_install_source(config('openstack-origin-git')) or
         get_os_codename_package(package, fatal=False) or
         get_os_codename_install_source(config('openstack-origin')) or
         base)
@@ -654,11 +626,6 @@ def openstack_upgrade_available(package):
     else:
         avail_vers = get_os_version_install_source(src)
     apt.init()
-    if "swift" in package:
-        major_cur_vers = cur_vers.split('.', 1)[0]
-        major_avail_vers = avail_vers.split('.', 1)[0]
-        major_diff = apt.version_compare(major_avail_vers, major_cur_vers)
-        return avail_vers > cur_vers and (major_diff == 1 or major_diff == 0)
     return apt.version_compare(avail_vers, cur_vers) == 1
 
 
@@ -767,417 +734,6 @@ def os_requires_version(ostack_release, pkg):
             f(*args)
         return wrapped_f
     return wrap
-
-
-def git_install_requested():
-    """
-    Returns true if openstack-origin-git is specified.
-    """
-    return config('openstack-origin-git') is not None
-
-
-def git_os_codename_install_source(projects_yaml):
-    """
-    Returns OpenStack codename of release being installed from source.
-    """
-    if git_install_requested():
-        projects = _git_yaml_load(projects_yaml)
-
-        if projects in GIT_DEFAULT_BRANCHES.keys():
-            if projects == 'master':
-                return 'ocata'
-            return projects
-
-        if 'release' in projects:
-            if projects['release'] == 'master':
-                return 'ocata'
-            return projects['release']
-
-    return None
-
-
-def git_default_repos(projects_yaml):
-    """
-    Returns default repos if a default openstack-origin-git value is specified.
-    """
-    service = service_name()
-    core_project = service
-
-    for default, branch in six.iteritems(GIT_DEFAULT_BRANCHES):
-        if projects_yaml == default:
-
-            # add the requirements repo first
-            repo = {
-                'name': 'requirements',
-                'repository': GIT_DEFAULT_REPOS['requirements'],
-                'branch': branch,
-            }
-            repos = [repo]
-
-            # neutron-* and nova-* charms require some additional repos
-            if service in ['neutron-api', 'neutron-gateway',
-                           'neutron-openvswitch']:
-                core_project = 'neutron'
-                if service == 'neutron-api':
-                    repo = {
-                        'name': 'networking-hyperv',
-                        'repository': GIT_DEFAULT_REPOS['networking-hyperv'],
-                        'branch': branch,
-                    }
-                    repos.append(repo)
-                for project in ['neutron-fwaas', 'neutron-lbaas',
-                                'neutron-vpnaas', 'nova']:
-                    repo = {
-                        'name': project,
-                        'repository': GIT_DEFAULT_REPOS[project],
-                        'branch': branch,
-                    }
-                    repos.append(repo)
-
-            elif service in ['nova-cloud-controller', 'nova-compute']:
-                core_project = 'nova'
-                repo = {
-                    'name': 'neutron',
-                    'repository': GIT_DEFAULT_REPOS['neutron'],
-                    'branch': branch,
-                }
-                repos.append(repo)
-            elif service == 'openstack-dashboard':
-                core_project = 'horizon'
-
-            # finally add the current service's core project repo
-            repo = {
-                'name': core_project,
-                'repository': GIT_DEFAULT_REPOS[core_project],
-                'branch': branch,
-            }
-            repos.append(repo)
-
-            return yaml.dump(dict(repositories=repos, release=default))
-
-    return projects_yaml
-
-
-def _git_yaml_load(projects_yaml):
-    """
-    Load the specified yaml into a dictionary.
-    """
-    if not projects_yaml:
-        return None
-
-    return yaml.load(projects_yaml)
-
-
-requirements_dir = None
-
-
-def git_clone_and_install(projects_yaml, core_project):
-    """
-    Clone/install all specified OpenStack repositories.
-
-    The expected format of projects_yaml is:
-
-        repositories:
-          - {name: keystone,
-             repository: 'git://git.openstack.org/openstack/keystone.git',
-             branch: 'stable/icehouse'}
-          - {name: requirements,
-             repository: 'git://git.openstack.org/openstack/requirements.git',
-             branch: 'stable/icehouse'}
-
-        directory: /mnt/openstack-git
-        http_proxy: squid-proxy-url
-        https_proxy: squid-proxy-url
-
-    The directory, http_proxy, and https_proxy keys are optional.
-
-    """
-    global requirements_dir
-    parent_dir = '/mnt/openstack-git'
-    http_proxy = None
-
-    projects = _git_yaml_load(projects_yaml)
-    _git_validate_projects_yaml(projects, core_project)
-
-    old_environ = dict(os.environ)
-
-    if 'http_proxy' in projects.keys():
-        http_proxy = projects['http_proxy']
-        os.environ['http_proxy'] = projects['http_proxy']
-    if 'https_proxy' in projects.keys():
-        os.environ['https_proxy'] = projects['https_proxy']
-
-    if 'directory' in projects.keys():
-        parent_dir = projects['directory']
-
-    pip_create_virtualenv(os.path.join(parent_dir, 'venv'))
-
-    # Upgrade setuptools and pip from default virtualenv versions. The default
-    # versions in trusty break master OpenStack branch deployments.
-    for p in ['pip', 'setuptools']:
-        pip_install(p, upgrade=True, proxy=http_proxy,
-                    venv=os.path.join(parent_dir, 'venv'))
-
-    constraints = None
-    for p in projects['repositories']:
-        repo = p['repository']
-        branch = p['branch']
-        depth = '1'
-        if 'depth' in p.keys():
-            depth = p['depth']
-        if p['name'] == 'requirements':
-            repo_dir = _git_clone_and_install_single(repo, branch, depth,
-                                                     parent_dir, http_proxy,
-                                                     update_requirements=False)
-            requirements_dir = repo_dir
-            constraints = os.path.join(repo_dir, "upper-constraints.txt")
-            # upper-constraints didn't exist until after icehouse
-            if not os.path.isfile(constraints):
-                constraints = None
-            # use constraints unless project yaml sets use_constraints to false
-            if 'use_constraints' in projects.keys():
-                if not projects['use_constraints']:
-                    constraints = None
-        else:
-            repo_dir = _git_clone_and_install_single(repo, branch, depth,
-                                                     parent_dir, http_proxy,
-                                                     update_requirements=True,
-                                                     constraints=constraints)
-
-    os.environ = old_environ
-
-
-def _git_validate_projects_yaml(projects, core_project):
-    """
-    Validate the projects yaml.
-    """
-    _git_ensure_key_exists('repositories', projects)
-
-    for project in projects['repositories']:
-        _git_ensure_key_exists('name', project.keys())
-        _git_ensure_key_exists('repository', project.keys())
-        _git_ensure_key_exists('branch', project.keys())
-
-    if projects['repositories'][0]['name'] != 'requirements':
-        error_out('{} git repo must be specified first'.format('requirements'))
-
-    if projects['repositories'][-1]['name'] != core_project:
-        error_out('{} git repo must be specified last'.format(core_project))
-
-    _git_ensure_key_exists('release', projects)
-
-
-def _git_ensure_key_exists(key, keys):
-    """
-    Ensure that key exists in keys.
-    """
-    if key not in keys:
-        error_out('openstack-origin-git key \'{}\' is missing'.format(key))
-
-
-def _git_clone_and_install_single(repo, branch, depth, parent_dir, http_proxy,
-                                  update_requirements, constraints=None):
-    """
-    Clone and install a single git repository.
-    """
-    if not os.path.exists(parent_dir):
-        juju_log('Directory already exists at {}. '
-                 'No need to create directory.'.format(parent_dir))
-        os.mkdir(parent_dir)
-
-    juju_log('Cloning git repo: {}, branch: {}'.format(repo, branch))
-    repo_dir = install_remote(
-        repo, dest=parent_dir, branch=branch, depth=depth)
-
-    venv = os.path.join(parent_dir, 'venv')
-
-    if update_requirements:
-        if not requirements_dir:
-            error_out('requirements repo must be cloned before '
-                      'updating from global requirements.')
-        _git_update_requirements(venv, repo_dir, requirements_dir)
-
-    juju_log('Installing git repo from dir: {}'.format(repo_dir))
-    if http_proxy:
-        pip_install(repo_dir, proxy=http_proxy, venv=venv,
-                    constraints=constraints)
-    else:
-        pip_install(repo_dir, venv=venv, constraints=constraints)
-
-    return repo_dir
-
-
-def _git_update_requirements(venv, package_dir, reqs_dir):
-    """
-    Update from global requirements.
-
-    Update an OpenStack git directory's requirements.txt and
-    test-requirements.txt from global-requirements.txt.
-    """
-    orig_dir = os.getcwd()
-    os.chdir(reqs_dir)
-    python = os.path.join(venv, 'bin/python')
-    cmd = [python, 'update.py', package_dir]
-    try:
-        subprocess.check_call(cmd)
-    except subprocess.CalledProcessError:
-        package = os.path.basename(package_dir)
-        error_out("Error updating {} from "
-                  "global-requirements.txt".format(package))
-    os.chdir(orig_dir)
-
-
-def git_pip_venv_dir(projects_yaml):
-    """
-    Return the pip virtualenv path.
-    """
-    parent_dir = '/mnt/openstack-git'
-
-    projects = _git_yaml_load(projects_yaml)
-
-    if 'directory' in projects.keys():
-        parent_dir = projects['directory']
-
-    return os.path.join(parent_dir, 'venv')
-
-
-def git_src_dir(projects_yaml, project):
-    """
-    Return the directory where the specified project's source is located.
-    """
-    parent_dir = '/mnt/openstack-git'
-
-    projects = _git_yaml_load(projects_yaml)
-
-    if 'directory' in projects.keys():
-        parent_dir = projects['directory']
-
-    for p in projects['repositories']:
-        if p['name'] == project:
-            return os.path.join(parent_dir, os.path.basename(p['repository']))
-
-    return None
-
-
-def git_yaml_value(projects_yaml, key):
-    """
-    Return the value in projects_yaml for the specified key.
-    """
-    projects = _git_yaml_load(projects_yaml)
-
-    if key in projects.keys():
-        return projects[key]
-
-    return None
-
-
-def git_generate_systemd_init_files(templates_dir):
-    """
-    Generate systemd init files.
-
-    Generates and installs systemd init units and script files based on the
-    *.init.in files contained in the templates_dir directory.
-
-    This code is based on the openstack-pkg-tools package and its init
-    script generation, which is used by the OpenStack packages.
-    """
-    for f in os.listdir(templates_dir):
-        # Create the init script and systemd unit file from the template
-        if f.endswith(".init.in"):
-            init_in_file = f
-            init_file = f[:-8]
-            service_file = "{}.service".format(init_file)
-
-            init_in_source = os.path.join(templates_dir, init_in_file)
-            init_source = os.path.join(templates_dir, init_file)
-            service_source = os.path.join(templates_dir, service_file)
-
-            init_dest = os.path.join('/etc/init.d', init_file)
-            service_dest = os.path.join('/lib/systemd/system', service_file)
-
-            shutil.copyfile(init_in_source, init_source)
-            with open(init_source, 'a') as outfile:
-                template = ('/usr/share/openstack-pkg-tools/'
-                            'init-script-template')
-                with open(template) as infile:
-                    outfile.write('\n\n{}'.format(infile.read()))
-
-            cmd = ['pkgos-gen-systemd-unit', init_in_source]
-            subprocess.check_call(cmd)
-
-            if os.path.exists(init_dest):
-                os.remove(init_dest)
-            if os.path.exists(service_dest):
-                os.remove(service_dest)
-            shutil.copyfile(init_source, init_dest)
-            shutil.copyfile(service_source, service_dest)
-            os.chmod(init_dest, 0o755)
-
-    for f in os.listdir(templates_dir):
-        # If there's a service.in file, use it instead of the generated one
-        if f.endswith(".service.in"):
-            service_in_file = f
-            service_file = f[:-3]
-
-            service_in_source = os.path.join(templates_dir, service_in_file)
-            service_source = os.path.join(templates_dir, service_file)
-            service_dest = os.path.join('/lib/systemd/system', service_file)
-
-            shutil.copyfile(service_in_source, service_source)
-
-            if os.path.exists(service_dest):
-                os.remove(service_dest)
-            shutil.copyfile(service_source, service_dest)
-
-    for f in os.listdir(templates_dir):
-        # Generate the systemd unit if there's no existing .service.in
-        if f.endswith(".init.in"):
-            init_in_file = f
-            init_file = f[:-8]
-            service_in_file = "{}.service.in".format(init_file)
-            service_file = "{}.service".format(init_file)
-
-            init_in_source = os.path.join(templates_dir, init_in_file)
-            service_in_source = os.path.join(templates_dir, service_in_file)
-            service_source = os.path.join(templates_dir, service_file)
-            service_dest = os.path.join('/lib/systemd/system', service_file)
-
-            if not os.path.exists(service_in_source):
-                cmd = ['pkgos-gen-systemd-unit', init_in_source]
-                subprocess.check_call(cmd)
-
-                if os.path.exists(service_dest):
-                    os.remove(service_dest)
-                shutil.copyfile(service_source, service_dest)
-
-
-def git_determine_usr_bin():
-    """Return the /usr/bin path for Apache2 config.
-
-    The /usr/bin path will be located in the virtualenv if the charm
-    is configured to deploy from source.
-    """
-    if git_install_requested():
-        projects_yaml = config('openstack-origin-git')
-        projects_yaml = git_default_repos(projects_yaml)
-        return os.path.join(git_pip_venv_dir(projects_yaml), 'bin')
-    else:
-        return '/usr/bin'
-
-
-def git_determine_python_path():
-    """Return the python-path for Apache2 config.
-
-    Returns 'None' unless the charm is configured to deploy from source,
-    in which case the path of the virtualenv's site-packages is returned.
-    """
-    if git_install_requested():
-        projects_yaml = config('openstack-origin-git')
-        projects_yaml = git_default_repos(projects_yaml)
-        return os.path.join(git_pip_venv_dir(projects_yaml),
-                            'lib/python2.7/site-packages')
-    else:
-        return None
 
 
 def os_workload_status(configs, required_interfaces, charm_func=None):
@@ -1613,27 +1169,24 @@ def do_action_openstack_upgrade(package, upgrade_callback, configs):
     """
     ret = False
 
-    if git_install_requested():
-        action_set({'outcome': 'installed from source, skipped upgrade.'})
-    else:
-        if openstack_upgrade_available(package):
-            if config('action-managed-upgrade'):
-                juju_log('Upgrading OpenStack release')
+    if openstack_upgrade_available(package):
+        if config('action-managed-upgrade'):
+            juju_log('Upgrading OpenStack release')
 
-                try:
-                    upgrade_callback(configs=configs)
-                    action_set({'outcome': 'success, upgrade completed.'})
-                    ret = True
-                except Exception:
-                    action_set({'outcome': 'upgrade failed, see traceback.'})
-                    action_set({'traceback': traceback.format_exc()})
-                    action_fail('do_openstack_upgrade resulted in an '
-                                'unexpected error')
-            else:
-                action_set({'outcome': 'action-managed-upgrade config is '
-                                       'False, skipped upgrade.'})
+            try:
+                upgrade_callback(configs=configs)
+                action_set({'outcome': 'success, upgrade completed.'})
+                ret = True
+            except Exception:
+                action_set({'outcome': 'upgrade failed, see traceback.'})
+                action_set({'traceback': traceback.format_exc()})
+                action_fail('do_openstack_upgrade resulted in an '
+                            'unexpected error')
         else:
-            action_set({'outcome': 'no upgrade available.'})
+            action_set({'outcome': 'action-managed-upgrade config is '
+                                   'False, skipped upgrade.'})
+    else:
+        action_set({'outcome': 'no upgrade available.'})
 
     return ret
 
@@ -2043,14 +1596,25 @@ def token_cache_pkgs(source=None, release=None):
 
 def update_json_file(filename, items):
     """Updates the json `filename` with a given dict.
-    :param filename: json filename (i.e.: /etc/glance/policy.json)
+    :param filename: path to json file (e.g. /etc/glance/policy.json)
     :param items: dict of items to update
     """
+    if not items:
+        return
+
     with open(filename) as fd:
         policy = json.load(fd)
+
+    # Compare before and after and if nothing has changed don't write the file
+    # since that could cause unnecessary service restarts.
+    before = json.dumps(policy, indent=4, sort_keys=True)
     policy.update(items)
+    after = json.dumps(policy, indent=4, sort_keys=True)
+    if before == after:
+        return
+
     with open(filename, "w") as fd:
-        fd.write(json.dumps(policy, indent=4))
+        fd.write(after)
 
 
 @cached

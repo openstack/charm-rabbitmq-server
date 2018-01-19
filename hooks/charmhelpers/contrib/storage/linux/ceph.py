@@ -113,7 +113,7 @@ def validator(value, valid_type, valid_range=None):
         assert isinstance(valid_range, list), \
             "valid_range must be a list, was given {}".format(valid_range)
         # If we're dealing with strings
-        if valid_type is six.string_types:
+        if isinstance(value, six.string_types):
             assert value in valid_range, \
                 "{} is not in the list {}".format(value, valid_range)
         # Integer, float should have a min and max
@@ -377,12 +377,12 @@ def get_mon_map(service):
         try:
             return json.loads(mon_status)
         except ValueError as v:
-            log("Unable to parse mon_status json: {}. Error: {}".format(
-                mon_status, v.message))
+            log("Unable to parse mon_status json: {}. Error: {}"
+                .format(mon_status, str(v)))
             raise
     except CalledProcessError as e:
-        log("mon_status command failed with message: {}".format(
-            e.message))
+        log("mon_status command failed with message: {}"
+            .format(str(e)))
         raise
 
 
@@ -517,7 +517,8 @@ def pool_set(service, pool_name, key, value):
     :param value:
     :return: None.  Can raise CalledProcessError
     """
-    cmd = ['ceph', '--id', service, 'osd', 'pool', 'set', pool_name, key, value]
+    cmd = ['ceph', '--id', service, 'osd', 'pool', 'set', pool_name, key,
+           str(value).lower()]
     try:
         check_call(cmd)
     except CalledProcessError:
@@ -621,15 +622,23 @@ def create_erasure_profile(service, profile_name, erasure_plugin_name='jerasure'
     :param durability_estimator: int
     :return: None.  Can raise CalledProcessError
     """
+    version = ceph_version()
+
     # Ensure this failure_domain is allowed by Ceph
     validator(failure_domain, six.string_types,
               ['chassis', 'datacenter', 'host', 'osd', 'pdu', 'pod', 'rack', 'region', 'room', 'root', 'row'])
 
     cmd = ['ceph', '--id', service, 'osd', 'erasure-code-profile', 'set', profile_name,
-           'plugin=' + erasure_plugin_name, 'k=' + str(data_chunks), 'm=' + str(coding_chunks),
-           'ruleset_failure_domain=' + failure_domain]
+           'plugin=' + erasure_plugin_name, 'k=' + str(data_chunks), 'm=' + str(coding_chunks)
+           ]
     if locality is not None and durability_estimator is not None:
         raise ValueError("create_erasure_profile should be called with k, m and one of l or c but not both.")
+
+    # failure_domain changed in luminous
+    if version and version >= '12.0.0':
+        cmd.append('crush-failure-domain=' + failure_domain)
+    else:
+        cmd.append('ruleset-failure-domain=' + failure_domain)
 
     # Add plugin specific information
     if locality is not None:
@@ -1064,14 +1073,24 @@ class CephBrokerRq(object):
         self.ops = []
 
     def add_op_request_access_to_group(self, name, namespace=None,
-                                       permission=None, key_name=None):
+                                       permission=None, key_name=None,
+                                       object_prefix_permissions=None):
         """
         Adds the requested permissions to the current service's Ceph key,
-        allowing the key to access only the specified pools
+        allowing the key to access only the specified pools or
+        object prefixes. object_prefix_permissions should be a dictionary
+        keyed on the permission with the corresponding value being a list
+        of prefixes to apply that permission to.
+            {
+                'rwx': ['prefix1', 'prefix2'],
+                'class-read': ['prefix3']}
         """
-        self.ops.append({'op': 'add-permissions-to-key', 'group': name,
-                         'namespace': namespace, 'name': key_name or service_name(),
-                         'group-permission': permission})
+        self.ops.append({
+            'op': 'add-permissions-to-key', 'group': name,
+            'namespace': namespace,
+            'name': key_name or service_name(),
+            'group-permission': permission,
+            'object-prefix-permissions': object_prefix_permissions})
 
     def add_op_create_pool(self, name, replica_count=3, pg_num=None,
                            weight=None, group=None, namespace=None):
@@ -1107,7 +1126,10 @@ class CephBrokerRq(object):
     def _ops_equal(self, other):
         if len(self.ops) == len(other.ops):
             for req_no in range(0, len(self.ops)):
-                for key in ['replicas', 'name', 'op', 'pg_num', 'weight']:
+                for key in [
+                        'replicas', 'name', 'op', 'pg_num', 'weight',
+                        'group', 'group-namespace', 'group-permission',
+                        'object-prefix-permissions']:
                     if self.ops[req_no].get(key) != other.ops[req_no].get(key):
                         return False
         else:

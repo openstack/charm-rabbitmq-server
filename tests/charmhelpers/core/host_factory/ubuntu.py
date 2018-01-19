@@ -20,6 +20,7 @@ UBUNTU_RELEASES = (
     'yakkety',
     'zesty',
     'artful',
+    'bionic',
 )
 
 

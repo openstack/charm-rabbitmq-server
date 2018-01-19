@@ -175,6 +175,8 @@ class Storage(object):
             else:
                 self.db_path = os.path.join(
                     os.environ.get('CHARM_DIR', ''), '.unit-state.db')
+        with open(self.db_path, 'a') as f:
+            os.fchmod(f.fileno(), 0o600)
         self.conn = sqlite3.connect('%s' % self.db_path)
         self.cursor = self.conn.cursor()
         self.revision = None

@@ -9,7 +9,7 @@
 CRITICAL=0
 NOTACTIVE=''
 LOGFILE=/var/log/nagios/check_haproxy.log
-AUTH=$(grep -r "stats auth" /etc/haproxy/haproxy.cfg | awk 'NR=1{print $4}')
+AUTH=$(grep -r "stats auth" /etc/haproxy/haproxy.cfg | awk 'NR=1{print $3}')
 
 typeset -i N_INSTANCES=0
 for appserver in $(awk '/^\s+server/{print $2}' /etc/haproxy/haproxy.cfg)

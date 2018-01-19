@@ -39,6 +39,7 @@ if not six.PY3:
 else:
     from collections import UserDict
 
+
 CRITICAL = "CRITICAL"
 ERROR = "ERROR"
 WARNING = "WARNING"
@@ -344,6 +345,7 @@ class Config(dict):
 
         """
         with open(self.path, 'w') as f:
+            os.fchmod(f.fileno(), 0o600)
             json.dump(self, f)
 
     def _implicit_save(self):

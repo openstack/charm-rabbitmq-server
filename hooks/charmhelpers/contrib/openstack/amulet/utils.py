@@ -858,9 +858,12 @@ class OpenStackAmuletUtils(AmuletUtils):
         :returns: List of pool name, object count, kb disk space used
         """
         df = self.get_ceph_df(sentry_unit)
-        pool_name = df['pools'][pool_id]['name']
-        obj_count = df['pools'][pool_id]['stats']['objects']
-        kb_used = df['pools'][pool_id]['stats']['kb_used']
+        for pool in df['pools']:
+            if pool['id'] == pool_id:
+                pool_name = pool['name']
+                obj_count = pool['stats']['objects']
+                kb_used = pool['stats']['kb_used']
+
         self.log.debug('Ceph {} pool (ID {}): {} objects, '
                        '{} kb used'.format(pool_name, pool_id,
                                            obj_count, kb_used))
