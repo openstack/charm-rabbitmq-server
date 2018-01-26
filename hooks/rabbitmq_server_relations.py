@@ -109,6 +109,10 @@ STATS_CRONFILE = '/etc/cron.d/rabbitmq-stats'
 STATS_DATAFILE = os.path.join(RABBIT_DIR, 'data',
                               '{}_queue_stats.dat'
                               ''.format(rabbit.get_unit_hostname()))
+CLUSTATE_CRONFILE = '/etc/cron.d/rabbitmq-cluster-state'
+CLUSTATE_DATAFILE = os.path.join(RABBIT_DIR, 'data',
+                              '{}_cluster_state.dat'
+                              ''.format(rabbit.get_unit_hostname()))
 CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
                "{command} 2>&1 | logger -p local0.notice\n")
 INITIAL_CLIENT_UPDATE_KEY = 'initial_client_update_done'
@@ -590,6 +594,9 @@ def update_nrpe_checks():
         rsync(os.path.join(os.getenv('CHARM_DIR'), 'scripts',
                            'check_rabbitmq_queues.py'),
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
+        rsync(os.path.join(os.getenv('CHARM_DIR'), 'scripts',
+                           'check_rabbitmq_cluster.py'),
+              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
     if config('stats_cron_schedule'):
         script = os.path.join(SCRIPTS_DIR, 'collect_rabbitmq_stats.sh')
         cronjob = CRONJOB_CMD.format(schedule=config('stats_cron_schedule'),
@@ -598,8 +605,19 @@ def update_nrpe_checks():
         rsync(os.path.join(charm_dir(), 'scripts',
                            'collect_rabbitmq_stats.sh'), script)
         write_file(STATS_CRONFILE, cronjob)
-    elif os.path.isfile(STATS_CRONFILE):
-        os.remove(STATS_CRONFILE)
+
+        script = os.path.join(SCRIPTS_DIR, 'rabbitmq_cluster_state.sh')
+        cronjob = CRONJOB_CMD.format(schedule=config('stats_cron_schedule'),
+                                     timeout=config('cron-timeout'),
+                                     command=script)
+        rsync(os.path.join(charm_dir(), 'scripts',
+                           'rabbitmq_cluster_state.sh'), script)
+        write_file(CLUSTATE_CRONFILE, cronjob)
+    else:
+        if os.path.isfile(STATS_CRONFILE):
+            os.remove(STATS_CRONFILE)
+        if os.path.isfile(CLUSTATE_CRONFILE):
+            os.remove(CLUSTATE_CRONFILE)
 
     # Find out if nrpe set nagios_hostname
     hostname = nrpe.get_nagios_hostname()
@@ -632,6 +650,13 @@ def update_nrpe_checks():
             description='Check RabbitMQ Queues',
             check_cmd='{}/check_rabbitmq_queues.py{} {}'.format(
                         NAGIOS_PLUGINS, cmd, STATS_DATAFILE)
+        )
+    if config('stats_cron_schedule'):
+        nrpe_compat.add_check(
+            shortname=rabbit.RABBIT_USER + '_cluster',
+            description='Check RabbitMQ cluster state',
+            check_cmd='{}/check_rabbitmq_cluster.py {}'.format(
+                        NAGIOS_PLUGINS, CLUSTATE_DATAFILE)
         )
     nrpe_compat.write()
 
