@@ -93,7 +93,8 @@ class OSConfigTemplate(object):
     Associates a config file template with a list of context generators.
     Responsible for constructing a template context based on those generators.
     """
-    def __init__(self, config_file, contexts):
+
+    def __init__(self, config_file, contexts, config_template=None):
         self.config_file = config_file
 
         if hasattr(contexts, '__call__'):
@@ -102,6 +103,8 @@ class OSConfigTemplate(object):
             self.contexts = contexts
 
         self._complete_contexts = []
+
+        self.config_template = config_template
 
     def context(self):
         ctxt = {}
@@ -123,6 +126,11 @@ class OSConfigTemplate(object):
             return self._complete_contexts
         self.context()
         return self._complete_contexts
+
+    @property
+    def is_string_template(self):
+        """:returns: Boolean if this instance is a template initialised with a string"""
+        return self.config_template is not None
 
 
 class OSConfigRenderer(object):
@@ -148,6 +156,10 @@ class OSConfigRenderer(object):
                          contexts=[context.IdentityServiceContext()])
         configs.register(config_file='/etc/haproxy/haproxy.conf',
                          contexts=[context.HAProxyContext()])
+        configs.register(config_file='/etc/keystone/policy.d/extra.cfg',
+                         contexts=[context.ExtraPolicyContext()
+                                   context.KeystoneContext()],
+                         config_template=hookenv.config('extra-policy'))
         # write out a single config
         configs.write('/etc/nova/nova.conf')
         # write out all registered configs
@@ -218,14 +230,23 @@ class OSConfigRenderer(object):
             else:
                 apt_install('python3-jinja2')
 
-    def register(self, config_file, contexts):
+    def register(self, config_file, contexts, config_template=None):
         """
         Register a config file with a list of context generators to be called
         during rendering.
+        config_template can be used to load a template from a string instead of
+        using template loaders and template files.
+        :param config_file (str): a path where a config file will be rendered
+        :param contexts (list): a list of context dictionaries with kv pairs
+        :param config_template (str): an optional template string to use
         """
-        self.templates[config_file] = OSConfigTemplate(config_file=config_file,
-                                                       contexts=contexts)
-        log('Registered config file: %s' % config_file, level=INFO)
+        self.templates[config_file] = OSConfigTemplate(
+            config_file=config_file,
+            contexts=contexts,
+            config_template=config_template
+        )
+        log('Registered config file: {}'.format(config_file),
+            level=INFO)
 
     def _get_tmpl_env(self):
         if not self._tmpl_env:
@@ -235,32 +256,58 @@ class OSConfigRenderer(object):
     def _get_template(self, template):
         self._get_tmpl_env()
         template = self._tmpl_env.get_template(template)
-        log('Loaded template from %s' % template.filename, level=INFO)
+        log('Loaded template from {}'.format(template.filename),
+            level=INFO)
+        return template
+
+    def _get_template_from_string(self, ostmpl):
+        '''
+        Get a jinja2 template object from a string.
+        :param ostmpl: OSConfigTemplate to use as a data source.
+        '''
+        self._get_tmpl_env()
+        template = self._tmpl_env.from_string(ostmpl.config_template)
+        log('Loaded a template from a string for {}'.format(
+            ostmpl.config_file),
+            level=INFO)
         return template
 
     def render(self, config_file):
         if config_file not in self.templates:
-            log('Config not registered: %s' % config_file, level=ERROR)
+            log('Config not registered: {}'.format(config_file), level=ERROR)
             raise OSConfigException
-        ctxt = self.templates[config_file].context()
 
-        _tmpl = os.path.basename(config_file)
-        try:
-            template = self._get_template(_tmpl)
-        except exceptions.TemplateNotFound:
-            # if no template is found with basename, try looking for it
-            # using a munged full path, eg:
-            #   /etc/apache2/apache2.conf -> etc_apache2_apache2.conf
-            _tmpl = '_'.join(config_file.split('/')[1:])
+        ostmpl = self.templates[config_file]
+        ctxt = ostmpl.context()
+
+        if ostmpl.is_string_template:
+            template = self._get_template_from_string(ostmpl)
+            log('Rendering from a string template: '
+                '{}'.format(config_file),
+                level=INFO)
+        else:
+            _tmpl = os.path.basename(config_file)
             try:
                 template = self._get_template(_tmpl)
-            except exceptions.TemplateNotFound as e:
-                log('Could not load template from %s by %s or %s.' %
-                    (self.templates_dir, os.path.basename(config_file), _tmpl),
-                    level=ERROR)
-                raise e
+            except exceptions.TemplateNotFound:
+                # if no template is found with basename, try looking
+                # for it using a munged full path, eg:
+                # /etc/apache2/apache2.conf -> etc_apache2_apache2.conf
+                _tmpl = '_'.join(config_file.split('/')[1:])
+                try:
+                    template = self._get_template(_tmpl)
+                except exceptions.TemplateNotFound as e:
+                    log('Could not load template from {} by {} or {}.'
+                        ''.format(
+                            self.templates_dir,
+                            os.path.basename(config_file),
+                            _tmpl
+                        ),
+                        level=ERROR)
+                    raise e
 
-        log('Rendering from template: %s' % _tmpl, level=INFO)
+            log('Rendering from template: {}'.format(config_file),
+                level=INFO)
         return template.render(ctxt)
 
     def write(self, config_file):

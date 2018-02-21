@@ -27,6 +27,7 @@ from charmhelpers.core.hookenv import (
     network_get_primary_address,
     unit_get,
     WARNING,
+    NoNetworkBinding,
 )
 
 from charmhelpers.core.host import (
@@ -109,7 +110,12 @@ def get_address_in_network(network, fallback=None, fatal=False):
         _validate_cidr(network)
         network = netaddr.IPNetwork(network)
         for iface in netifaces.interfaces():
-            addresses = netifaces.ifaddresses(iface)
+            try:
+                addresses = netifaces.ifaddresses(iface)
+            except ValueError:
+                # If an instance was deleted between
+                # netifaces.interfaces() run and now, its interfaces are gone
+                continue
             if network.version == 4 and netifaces.AF_INET in addresses:
                 for addr in addresses[netifaces.AF_INET]:
                     cidr = netaddr.IPNetwork("%s/%s" % (addr['addr'],
@@ -577,6 +583,9 @@ def get_relation_ip(interface, cidr_network=None):
         address = network_get_primary_address(interface)
     except NotImplementedError:
         # If network-get is not available
+        address = get_host_ip(unit_get('private-address'))
+    except NoNetworkBinding:
+        log("No network binding for {}".format(interface), WARNING)
         address = get_host_ip(unit_get('private-address'))
 
     if config('prefer-ipv6'):

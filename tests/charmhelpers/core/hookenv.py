@@ -820,6 +820,10 @@ class Hooks(object):
         return wrapper
 
 
+class NoNetworkBinding(Exception):
+    pass
+
+
 def charm_dir():
     """Return the root directory of the current charm"""
     d = os.environ.get('JUJU_CHARM_DIR')
@@ -1106,7 +1110,17 @@ def network_get_primary_address(binding):
     :raise: NotImplementedError if run on Juju < 2.0
     '''
     cmd = ['network-get', '--primary-address', binding]
-    return subprocess.check_output(cmd).decode('UTF-8').strip()
+    try:
+        response = subprocess.check_output(
+            cmd,
+            stderr=subprocess.STDOUT).decode('UTF-8').strip()
+    except CalledProcessError as e:
+        if 'no network config found for binding' in e.output.decode('UTF-8'):
+            raise NoNetworkBinding("No network binding for {}"
+                                   .format(binding))
+        else:
+            raise
+    return response
 
 
 @translate_exc(from_exc=OSError, to_exc=NotImplementedError)

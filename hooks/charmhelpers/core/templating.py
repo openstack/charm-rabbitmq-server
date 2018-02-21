@@ -20,7 +20,8 @@ from charmhelpers.core import hookenv
 
 
 def render(source, target, context, owner='root', group='root',
-           perms=0o444, templates_dir=None, encoding='UTF-8', template_loader=None):
+           perms=0o444, templates_dir=None, encoding='UTF-8',
+           template_loader=None, config_template=None):
     """
     Render a template.
 
@@ -31,6 +32,9 @@ def render(source, target, context, owner='root', group='root',
 
     The context should be a dict containing the values to be replaced in the
     template.
+
+    config_template may be provided to render from a provided template instead
+    of loading from a file.
 
     The `owner`, `group`, and `perms` options will be passed to `write_file`.
 
@@ -65,14 +69,19 @@ def render(source, target, context, owner='root', group='root',
         if templates_dir is None:
             templates_dir = os.path.join(hookenv.charm_dir(), 'templates')
         template_env = Environment(loader=FileSystemLoader(templates_dir))
-    try:
-        source = source
-        template = template_env.get_template(source)
-    except exceptions.TemplateNotFound as e:
-        hookenv.log('Could not load template %s from %s.' %
-                    (source, templates_dir),
-                    level=hookenv.ERROR)
-        raise e
+
+    # load from a string if provided explicitly
+    if config_template is not None:
+        template = template_env.from_string(config_template)
+    else:
+        try:
+            source = source
+            template = template_env.get_template(source)
+        except exceptions.TemplateNotFound as e:
+            hookenv.log('Could not load template %s from %s.' %
+                        (source, templates_dir),
+                        level=hookenv.ERROR)
+            raise e
     content = template.render(context)
     if target is not None:
         target_dir = os.path.dirname(target)

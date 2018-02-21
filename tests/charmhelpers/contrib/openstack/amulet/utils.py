@@ -92,7 +92,7 @@ class OpenStackAmuletUtils(AmuletUtils):
             return 'endpoint not found'
 
     def validate_v3_endpoint_data(self, endpoints, admin_port, internal_port,
-                                  public_port, expected):
+                                  public_port, expected, expected_num_eps=3):
         """Validate keystone v3 endpoint data.
 
         Validate the v3 endpoint data which has changed from v2.  The
@@ -138,7 +138,7 @@ class OpenStackAmuletUtils(AmuletUtils):
                 if ret:
                     return 'unexpected endpoint data - {}'.format(ret)
 
-        if len(found) != 3:
+        if len(found) != expected_num_eps:
             return 'Unexpected number of endpoints found'
 
     def validate_svc_catalog_endpoint_data(self, expected, actual):
