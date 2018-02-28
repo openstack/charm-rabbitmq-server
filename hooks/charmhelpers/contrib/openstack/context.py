@@ -384,6 +384,7 @@ class IdentityServiceContext(OSContextGenerator):
                     # so a missing value just indicates keystone needs
                     # upgrading
                     ctxt['admin_tenant_id'] = rdata.get('service_tenant_id')
+                    ctxt['admin_domain_id'] = rdata.get('service_domain_id')
                     return ctxt
 
         return {}
