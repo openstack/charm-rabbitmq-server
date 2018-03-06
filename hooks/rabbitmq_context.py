@@ -48,9 +48,9 @@ except ImportError:
     import psutil
 
 
-ssl_key_file = "/etc/rabbitmq/rabbit-server-privkey.pem"
-ssl_cert_file = "/etc/rabbitmq/rabbit-server-cert.pem"
-ssl_ca_file = "/etc/rabbitmq/rabbit-server-ca.pem"
+SSL_KEY_FILE = "/etc/rabbitmq/rabbit-server-privkey.pem"
+SSL_CERT_FILE = "/etc/rabbitmq/rabbit-server-cert.pem"
+SSL_CA_FILE = "/etc/rabbitmq/rabbit-server-ca.pem"
 RABBITMQ_CTL = '/usr/sbin/rabbitmqctl'
 ENV_CONF = '/etc/rabbitmq/rabbitmq-env.conf'
 
@@ -90,9 +90,9 @@ class RabbitMQSSLContext(object):
         gid = grp.getgrnam("rabbitmq").gr_gid
 
         for contents, path in (
-                (ssl_key, ssl_key_file),
-                (ssl_cert, ssl_cert_file),
-                (ssl_ca, ssl_ca_file)):
+                (ssl_key, SSL_KEY_FILE),
+                (ssl_cert, SSL_CERT_FILE),
+                (ssl_ca, SSL_CA_FILE)):
 
             if not contents:
                 continue
@@ -100,20 +100,26 @@ class RabbitMQSSLContext(object):
             with open(path, 'w') as fh:
                 fh.write(contents)
 
-            os.chmod(path, 0o640)
+            if path == SSL_CA_FILE:
+                # the CA can be world readable and it will allow clients to
+                # verify the certificate offered by rabbit.
+                os.chmod(path, 0o644)
+            else:
+                os.chmod(path, 0o640)
+
             os.chown(path, uid, gid)
 
         data = {
             "ssl_port": ssl_port,
-            "ssl_cert_file": ssl_cert_file,
-            "ssl_key_file": ssl_key_file,
+            "ssl_cert_file": SSL_CERT_FILE,
+            "ssl_key_file": SSL_KEY_FILE,
             "ssl_client": ssl_client,
             "ssl_ca_file": "",
             "ssl_only": ssl_only
         }
 
         if ssl_ca:
-            data["ssl_ca_file"] = ssl_ca_file
+            data["ssl_ca_file"] = SSL_CA_FILE
 
         return data
 

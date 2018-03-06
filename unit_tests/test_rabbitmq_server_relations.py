@@ -14,6 +14,7 @@
 
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -34,6 +35,7 @@ with patch('charmhelpers.contrib.hardening.harden.harden') as mock_dec:
     mock_dec.side_effect = (lambda *dargs, **dkwargs: lambda f:
                             lambda *args, **kwargs: f(*args, **kwargs))
     import rabbitmq_server_relations
+    import rabbit_utils
 
 TO_PATCH = [
     # charmhelpers.core.hookenv
@@ -48,6 +50,11 @@ class RelationUtil(CharmTestCase):
         self.fake_repo = {}
         super(RelationUtil, self).setUp(rabbitmq_server_relations,
                                         TO_PATCH)
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+        super(RelationUtil, self).tearDown()
 
     @patch('rabbitmq_server_relations.rabbit.leader_node_is_ready')
     @patch('rabbitmq_server_relations.peer_store_and_set')
@@ -278,3 +285,71 @@ class RelationUtil(CharmTestCase):
         finally:
             if os.path.exists(tmpdir):
                 shutil.rmtree(tmpdir)
+
+    @patch('rabbitmq_server_relations.local_unit')
+    @patch('charmhelpers.contrib.charmsupport.nrpe.NRPE.add_check')
+    @patch('subprocess.check_call')
+    @patch('rabbit_utils.get_rabbit_password_on_disk')
+    @patch('charmhelpers.contrib.charmsupport.nrpe.relation_ids')
+    @patch('charmhelpers.contrib.charmsupport.nrpe.config')
+    @patch('charmhelpers.contrib.charmsupport.nrpe.get_nagios_unit_name')
+    @patch('charmhelpers.contrib.charmsupport.nrpe.get_nagios_hostname')
+    @patch('os.fchown')
+    @patch('rabbitmq_server_relations.charm_dir')
+    @patch('subprocess.check_output')
+    @patch('rabbitmq_server_relations.config')
+    def test_update_nrpe_checks(self, mock_config, mock_check_output,
+                                mock_charm_dir, mock_fchown,
+                                mock_get_nagios_hostname,
+                                mock_get_nagios_unit_name, mock_config2,
+                                mock_nrpe_relation_ids,
+                                mock_get_rabbit_password_on_disk,
+                                mock_check_call, mock_add_check,
+                                mock_local_unit):
+
+        self.test_config.set('ssl', 'on')
+
+        mock_charm_dir.side_effect = lambda: self.tmp_dir
+        mock_config.side_effect = self.test_config
+        mock_config2.side_effect = self.test_config
+        rabbitmq_server_relations.STATS_CRONFILE = os.path.join(
+            self.tmp_dir, "rabbitmq-stats")
+        mock_get_nagios_hostname.return_value = "foo-0"
+        mock_get_nagios_unit_name.return_value = "bar-0"
+        mock_get_rabbit_password_on_disk.return_value = "qwerty"
+        mock_nrpe_relation_ids.side_effect = lambda x: [
+            'nrpe-external-master:1']
+        mock_local_unit.return_value = 'unit/0'
+
+        rabbitmq_server_relations.update_nrpe_checks()
+
+        mock_check_output.assert_any_call(
+            ['/usr/bin/rsync', '-r', '--delete', '--executability',
+             '%s/scripts/collect_rabbitmq_stats.sh' % self.tmp_dir,
+             '/usr/local/bin/collect_rabbitmq_stats.sh'],
+            stderr=subprocess.STDOUT)
+
+        # regular check on 5672
+        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
+               '--password {password} --vhost {vhost}').format(
+                   plugins_dir=rabbitmq_server_relations.NAGIOS_PLUGINS,
+                   user='nagios-unit-0', vhost='nagios-unit-0',
+                   password='qwerty')
+
+        mock_add_check.assert_any_call(
+            shortname=rabbit_utils.RABBIT_USER,
+            description='Check RabbitMQ {%s}' % 'bar-0', check_cmd=cmd)
+
+        # check on ssl port 5671
+        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
+               '--password {password} --vhost {vhost} '
+               '--ssl --ssl-ca {ssl_ca} --port {port}').format(
+                   plugins_dir=rabbitmq_server_relations.NAGIOS_PLUGINS,
+                   user='nagios-unit-0',
+                   password='qwerty',
+                   port=int(self.test_config['ssl_port']),
+                   vhost='nagios-unit-0',
+                   ssl_ca=rabbitmq_server_relations.SSL_CA_FILE)
+        mock_add_check.assert_any_call(
+            shortname=rabbit_utils.RABBIT_USER + "_ssl",
+            description='Check RabbitMQ (SSL) {%s}' % 'bar-0', check_cmd=cmd)

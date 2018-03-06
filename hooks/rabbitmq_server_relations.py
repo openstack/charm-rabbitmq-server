@@ -42,6 +42,7 @@ except ImportError:
 
 import rabbit_utils as rabbit
 import ssl_utils
+from rabbitmq_context import SSL_CA_FILE
 
 from lib.utils import (
     chown, chmod,
@@ -634,12 +635,33 @@ def update_nrpe_checks():
     rabbit.grant_permissions(user, vhost)
 
     nrpe_compat = nrpe.NRPE(hostname=hostname)
-    nrpe_compat.add_check(
-        shortname=rabbit.RABBIT_USER,
-        description='Check RabbitMQ {%s}' % myunit,
-        check_cmd='{}/check_rabbitmq.py --user {} --password {} --vhost {}'
-                  ''.format(NAGIOS_PLUGINS, user, password, vhost)
-    )
+    if config('ssl') in ['off', 'on']:
+        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
+               '--password {password} --vhost {vhost}')
+        cmd = cmd.format(plugins_dir=NAGIOS_PLUGINS, user=user,
+                         password=password, vhost=vhost)
+        nrpe_compat.add_check(
+            shortname=rabbit.RABBIT_USER,
+            description='Check RabbitMQ {%s}' % myunit,
+            check_cmd=cmd
+        )
+    if config('ssl') in ['only', 'on']:
+        log('Adding rabbitmq SSL check', level=DEBUG)
+        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
+               '--password {password} --vhost {vhost} '
+               '--ssl --ssl-ca {ssl_ca} --port {port}')
+        cmd = cmd.format(plugins_dir=NAGIOS_PLUGINS,
+                         user=user,
+                         password=password,
+                         port=int(config('ssl_port')),
+                         vhost=vhost,
+                         ssl_ca=SSL_CA_FILE)
+        nrpe_compat.add_check(
+            shortname=rabbit.RABBIT_USER + "_ssl",
+            description='Check RabbitMQ (SSL) {%s}' % myunit,
+            check_cmd=cmd
+        )
+
     if config('queue_thresholds'):
         cmd = ""
         # If value of queue_thresholds is incorrect we want the hook to fail
@@ -726,7 +748,17 @@ def config_changed():
     if rabbit.archive_upgrade_available():
         rabbit.install_or_upgrade_packages()
 
-    open_port(5672)
+    if config('ssl') == 'off':
+        open_port(5672)
+        close_port(int(config('ssl_port')))
+    elif config('ssl') == 'on':
+        open_port(5672)
+        open_port(int(config('ssl_port')))
+    elif config('ssl') == 'only':
+        close_port(5672)
+        open_port(int(config('ssl_port')))
+    else:
+        log("Unknown ssl config value: '%s'" % config('ssl'), level=ERROR)
 
     chown(RABBIT_DIR, rabbit.RABBIT_USER, rabbit.RABBIT_USER)
     chmod(RABBIT_DIR, 0o775)

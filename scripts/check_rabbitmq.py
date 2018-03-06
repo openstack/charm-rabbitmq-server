@@ -38,14 +38,18 @@ def alarm_handler(signum, frame):
     os._exit(1)
 
 
-def get_connection(host_port, user, password, vhost):
+def get_connection(host_port, user, password, vhost, ssl, ssl_ca):
     """ connect to the amqp service """
     if options.verbose:
         print "Connection to %s requested" % host_port
     try:
-        ret = amqp.Connection(host=host_port, userid=user,
-                              password=password, virtual_host=vhost,
-                              insist=False)
+        params = {'host': host_port, 'userid': user, 'password': password,
+                  'virtual_host': vhost, 'insist': False}
+        if ssl:
+            params['ssl'] = {'ca_certs': ssl_ca}
+
+        ret = amqp.Connection(**params)
+
     except (socket.error, TypeError), e:
         print "ERROR: Could not connect to RabbitMQ server %s:%d" % (
             options.host, options.port)
@@ -53,9 +57,9 @@ def get_connection(host_port, user, password, vhost):
             print e
             raise
         sys.exit(2)
-    except:
-        print "ERROR: Unknown error connecting to RabbitMQ server %s:%d" % (
-            options.host, options.port)
+    except Exception as ex:
+        print("ERROR: Unknown error connecting to RabbitMQ server %s:%d: %s"
+              % (options.host, options.port, ex))
         if options.verbose:
             raise
         sys.exit(3)
@@ -174,12 +178,12 @@ def main_loop(conn, exname):
     return consumer.loop(timeout=options.timeout)
 
 
-def main(host, port, exname, extype, user, password, vhost):
+def main(host, port, exname, extype, user, password, vhost, ssl, ssl_ca):
     """ setup the connection and the communication channel """
     sys.stdout = os.fdopen(os.dup(1), "w", 0)
     host_port = "%s:%s" % (host, port)
-    conn = get_connection(host_port, user, password, vhost)
-    chan = conn.channel()
+    conn = get_connection(host_port, user, password, vhost, ssl, ssl_ca)
+
     if setup_exchange(conn, exname, extype):
         if options.verbose:
             print "Created %s exchange of type %s" % (exname, extype)
@@ -187,8 +191,13 @@ def main(host, port, exname, extype, user, password, vhost):
         if options.verbose:
             print "Reusing existing exchange %s of type %s" % (exname, extype)
     ret = main_loop(conn, exname)
-    chan.close()
-    conn.close()
+
+    try:
+        conn.close()
+    except socket.error:
+        # when using SSL socket.shutdown() fails inside amqplib.
+        pass
+
     return ret
 
 if __name__ == '__main__':
@@ -222,6 +231,10 @@ if __name__ == '__main__':
     parser.add_option("--vhost", dest="vhost", default="/",
                       help="RabbitMQ vhost [default=%default]",
                       metavar="VHOST")
+    parser.add_option("--ssl", dest="ssl", default=False, action="store_true",
+                      help="Connect using SSL")
+    parser.add_option("--ssl-ca", metavar="FILE", dest="ssl_ca",
+                      help="SSL CA certificate path")
 
     (options, args) = parser.parse_args()
     if options.verbose:
@@ -229,7 +242,8 @@ if __name__ == '__main__':
 Using AMQP setup: host:port=%s:%d exchange_name=%s exchange_type=%s
 """ % (options.host, options.port, options.exchange, options.type)
     ret = main(options.host, options.port, options.exchange, options.type,
-               options.user, options.password, options.vhost)
+               options.user, options.password, options.vhost, options.ssl,
+               options.ssl_ca)
     if ret:
         print "Ok: sent and received %d test messages" % options.messages
         sys.exit(0)
