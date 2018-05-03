@@ -328,6 +328,7 @@ class RelationUtil(CharmTestCase):
             if os.path.exists(tmpdir):
                 shutil.rmtree(tmpdir)
 
+    @patch('rabbit_utils.lsb_release')
     @patch.object(rabbitmq_server_relations.rabbit, 'grant_permissions')
     @patch('rabbit_utils.create_user')
     @patch('rabbit_utils.local_unit')
@@ -359,7 +360,8 @@ class RelationUtil(CharmTestCase):
                                 mock_remove_check, mock_add_check,
                                 mock_local_unit,
                                 mock_create_user,
-                                mock_grant_permissions):
+                                mock_grant_permissions,
+                                mock_lsb_release):
 
         self.test_config.set('ssl', 'on')
 
@@ -379,6 +381,7 @@ class RelationUtil(CharmTestCase):
         mock_nrpe_relation_ids.side_effect = lambda x: [
             'nrpe-external-master:1']
         mock_local_unit.return_value = 'unit/0'
+        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'focal'}
 
         rabbitmq_server_relations.update_nrpe_checks()
         mock_check_output.assert_any_call(
