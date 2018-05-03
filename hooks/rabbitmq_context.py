@@ -55,8 +55,11 @@ ENV_CONF = '/etc/rabbitmq/rabbitmq-env.conf'
 #              https://tinyurl.com/rabbitmq-3-5-7 for exact value. Note that
 #              this default has increased with newer versions so we should
 #              track this and keep the charm up-to-date.
+#              Also note that 1024 is the maximum supported number of
+#              threads.
 DEFAULT_MULTIPLIER = 24
 MAX_DEFAULT_THREADS = DEFAULT_MULTIPLIER * 2
+MAX_NUM_THREADS = 1024
 
 
 def convert_from_base64(v):
@@ -203,9 +206,9 @@ class RabbitMQEnvContext(object):
         Determine the number of erl vm threads in pool based in cpu resources
         available.
 
-        Number of threads will be limited to MAX_DEFAULT_WORKERS in
+        Number of threads will be limited to MAX_DEFAULT_THREADS in
         container environments where no worker-multipler configuration
-        option been set.
+        option been set and to MAX_NUM_THREADS in all other situations.
 
         @returns int: number of io threads to allocate
         """
@@ -230,6 +233,10 @@ class RabbitMQEnvContext(object):
             #              to MAX_DEFAULT_THREADS to avoid insane pool
             #              configuration in LXD containers on large servers.
             count = min(count, MAX_DEFAULT_THREADS)
+
+        # Never configure a number of threads above the MAX_NUM_THREADS since
+        # otherwise the daemon won't start.
+        count = min(count, MAX_NUM_THREADS)
 
         log("erl vm io thread pool size = {} (capped={})"
             .format(count, is_container()), DEBUG)

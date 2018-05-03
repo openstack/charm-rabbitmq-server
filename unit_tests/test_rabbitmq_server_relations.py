@@ -326,6 +326,7 @@ class RelationUtil(CharmTestCase):
             if os.path.exists(tmpdir):
                 shutil.rmtree(tmpdir)
 
+    @patch.object(rabbitmq_server_relations.rabbit, 'grant_permissions')
     @patch('rabbit_utils.create_user')
     @patch('rabbit_utils.local_unit')
     @patch('rabbit_utils.nrpe.NRPE.add_check')
@@ -355,8 +356,8 @@ class RelationUtil(CharmTestCase):
                                 mock_check_call,
                                 mock_remove_check, mock_add_check,
                                 mock_local_unit,
-                                mock_create_user):
-
+                                mock_create_user,
+                                mock_grant_permissions):
         self.test_config.set('ssl', 'on')
 
         mock_charm_dir.side_effect = lambda: self.tmp_dir
