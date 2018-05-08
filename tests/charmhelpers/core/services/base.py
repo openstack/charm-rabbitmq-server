@@ -307,23 +307,34 @@ class PortManagerCallback(ManagerCallback):
     """
     def __call__(self, manager, service_name, event_name):
         service = manager.get_service(service_name)
-        new_ports = service.get('ports', [])
+        # turn this generator into a list,
+        # as we'll be going over it multiple times
+        new_ports = list(service.get('ports', []))
         port_file = os.path.join(hookenv.charm_dir(), '.{}.ports'.format(service_name))
         if os.path.exists(port_file):
             with open(port_file) as fp:
                 old_ports = fp.read().split(',')
             for old_port in old_ports:
-                if bool(old_port):
-                    old_port = int(old_port)
-                    if old_port not in new_ports:
-                        hookenv.close_port(old_port)
+                if bool(old_port) and not self.ports_contains(old_port, new_ports):
+                    hookenv.close_port(old_port)
         with open(port_file, 'w') as fp:
             fp.write(','.join(str(port) for port in new_ports))
         for port in new_ports:
+            # A port is either a number or 'ICMP'
+            protocol = 'TCP'
+            if str(port).upper() == 'ICMP':
+                protocol = 'ICMP'
             if event_name == 'start':
-                hookenv.open_port(port)
+                hookenv.open_port(port, protocol)
             elif event_name == 'stop':
-                hookenv.close_port(port)
+                hookenv.close_port(port, protocol)
+
+    def ports_contains(self, port, ports):
+        if not bool(port):
+            return False
+        if str(port).upper() != 'ICMP':
+            port = int(port)
+        return port in ports
 
 
 def service_stop(service_name):

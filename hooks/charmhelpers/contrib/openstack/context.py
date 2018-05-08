@@ -797,9 +797,9 @@ class ApacheSSLContext(OSContextGenerator):
             key_filename = 'key'
 
         write_file(path=os.path.join(ssl_dir, cert_filename),
-                   content=b64decode(cert))
+                   content=b64decode(cert), perms=0o640)
         write_file(path=os.path.join(ssl_dir, key_filename),
-                   content=b64decode(key))
+                   content=b64decode(key), perms=0o640)
 
     def configure_ca(self):
         ca_cert = get_ca_cert()
@@ -1873,10 +1873,11 @@ class EnsureDirContext(OSContextGenerator):
     context is needed to do that before rendering a template.
    '''
 
-    def __init__(self, dirname):
+    def __init__(self, dirname, **kwargs):
         '''Used merely to ensure that a given directory exists.'''
         self.dirname = dirname
+        self.kwargs = kwargs
 
     def __call__(self):
-        mkdir(self.dirname)
+        mkdir(self.dirname, **self.kwargs)
         return {}

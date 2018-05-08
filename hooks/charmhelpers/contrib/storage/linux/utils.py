@@ -67,3 +67,19 @@ def is_device_mounted(device):
     except Exception:
         return False
     return bool(re.search(r'MOUNTPOINT=".+"', out))
+
+
+def mkfs_xfs(device, force=False):
+    """Format device with XFS filesystem.
+
+    By default this should fail if the device already has a filesystem on it.
+    :param device: Full path to device to format
+    :ptype device: tr
+    :param force: Force operation
+    :ptype: force: boolean"""
+    cmd = ['mkfs.xfs']
+    if force:
+        cmd.append("-f")
+
+    cmd += ['-i', 'size=1024', device]
+    check_call(cmd)

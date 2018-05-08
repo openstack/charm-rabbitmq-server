@@ -993,7 +993,7 @@ def updatedb(updatedb_text, new_path):
     return output
 
 
-def modulo_distribution(modulo=3, wait=30):
+def modulo_distribution(modulo=3, wait=30, non_zero_wait=False):
     """ Modulo distribution
 
     This helper uses the unit number, a modulo value and a constant wait time
@@ -1015,7 +1015,14 @@ def modulo_distribution(modulo=3, wait=30):
 
     @param modulo: int The modulo number creates the group distribution
     @param wait: int The constant time wait value
+    @param non_zero_wait: boolean Override unit % modulo == 0,
+                          return modulo * wait. Used to avoid collisions with
+                          leader nodes which are often given priority.
     @return: int Calculated time to wait for unit operation
     """
     unit_number = int(local_unit().split('/')[1])
-    return (unit_number % modulo) * wait
+    calculated_wait_time = (unit_number % modulo) * wait
+    if non_zero_wait and calculated_wait_time == 0:
+        return modulo * wait
+    else:
+        return calculated_wait_time

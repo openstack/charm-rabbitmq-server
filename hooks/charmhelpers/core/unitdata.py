@@ -166,6 +166,10 @@ class Storage(object):
 
     To support dicts, lists, integer, floats, and booleans values
     are automatically json encoded/decoded.
+
+    Note: to facilitate unit testing, ':memory:' can be passed as the
+    path parameter which causes sqlite3 to only build the db in memory.
+    This should only be used for testing purposes.
     """
     def __init__(self, path=None):
         self.db_path = path
@@ -175,8 +179,9 @@ class Storage(object):
             else:
                 self.db_path = os.path.join(
                     os.environ.get('CHARM_DIR', ''), '.unit-state.db')
-        with open(self.db_path, 'a') as f:
-            os.fchmod(f.fileno(), 0o600)
+        if self.db_path != ':memory:':
+            with open(self.db_path, 'a') as f:
+                os.fchmod(f.fileno(), 0o600)
         self.conn = sqlite3.connect('%s' % self.db_path)
         self.cursor = self.conn.cursor()
         self.revision = None

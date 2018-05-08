@@ -306,7 +306,7 @@ def get_os_codename_install_source(src):
 
     if src.startswith('cloud:'):
         ca_rel = src.split(':')[1]
-        ca_rel = ca_rel.split('%s-' % ubuntu_rel)[1].split('/')[0]
+        ca_rel = ca_rel.split('-')[1].split('/')[0]
         return ca_rel
 
     # Best guess match based on deb string provided

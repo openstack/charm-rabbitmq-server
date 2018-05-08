@@ -27,6 +27,7 @@ import glob
 import os
 import json
 import yaml
+import re
 import subprocess
 import sys
 import errno
@@ -67,7 +68,7 @@ def cached(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         global cache
-        key = str((func, args, kwargs))
+        key = json.dumps((func, args, kwargs), sort_keys=True, default=str)
         try:
             return cache[key]
         except KeyError:
@@ -289,7 +290,7 @@ class Config(dict):
         self.implicit_save = True
         self._prev_dict = None
         self.path = os.path.join(charm_dir(), Config.CONFIG_FILE_NAME)
-        if os.path.exists(self.path):
+        if os.path.exists(self.path) and os.stat(self.path).st_size:
             self.load_previous()
         atexit(self._implicit_save)
 
@@ -309,7 +310,11 @@ class Config(dict):
         """
         self.path = path or self.path
         with open(self.path) as f:
-            self._prev_dict = json.load(f)
+            try:
+                self._prev_dict = json.load(f)
+            except ValueError as e:
+                log('Unable to parse previous config data - {}'.format(str(e)),
+                    level=ERROR)
         for k, v in copy.deepcopy(self._prev_dict).items():
             if k not in self:
                 self[k] = v
@@ -353,22 +358,40 @@ class Config(dict):
             self.save()
 
 
-@cached
+_cache_config = None
+
+
 def config(scope=None):
-    """Juju charm configuration"""
-    config_cmd_line = ['config-get']
-    if scope is not None:
-        config_cmd_line.append(scope)
-    else:
-        config_cmd_line.append('--all')
-    config_cmd_line.append('--format=json')
+    """
+    Get the juju charm configuration (scope==None) or individual key,
+    (scope=str).  The returned value is a Python data structure loaded as
+    JSON from the Juju config command.
+
+    :param scope: If set, return the value for the specified key.
+    :type scope: Optional[str]
+    :returns: Either the whole config as a Config, or a key from it.
+    :rtype: Any
+    """
+    global _cache_config
+    config_cmd_line = ['config-get', '--all', '--format=json']
     try:
-        config_data = json.loads(
-            subprocess.check_output(config_cmd_line).decode('UTF-8'))
+        # JSON Decode Exception for Python3.5+
+        exc_json = json.decoder.JSONDecodeError
+    except AttributeError:
+        # JSON Decode Exception for Python2.7 through Python3.4
+        exc_json = ValueError
+    try:
+        if _cache_config is None:
+            config_data = json.loads(
+                subprocess.check_output(config_cmd_line).decode('UTF-8'))
+            _cache_config = Config(config_data)
         if scope is not None:
-            return config_data
-        return Config(config_data)
-    except ValueError:
+            return _cache_config.get(scope)
+        return _cache_config
+    except (exc_json, UnicodeDecodeError) as e:
+        log('Unable to parse output from config-get: config_cmd_line="{}" '
+            'message="{}"'
+            .format(config_cmd_line, str(e)), level=ERROR)
         return None
 
 
@@ -1043,7 +1066,6 @@ def juju_version():
                                    universal_newlines=True).strip()
 
 
-@cached
 def has_juju_version(minimum_version):
     """Return True if the Juju version is at least the provided version"""
     return LooseVersion(juju_version()) >= LooseVersion(minimum_version)
@@ -1103,6 +1125,8 @@ def _run_atexit():
 @translate_exc(from_exc=OSError, to_exc=NotImplementedError)
 def network_get_primary_address(binding):
     '''
+    Deprecated since Juju 2.3; use network_get()
+
     Retrieve the primary network address for a named binding
 
     :param binding: string. The name of a relation of extra-binding
@@ -1123,7 +1147,6 @@ def network_get_primary_address(binding):
     return response
 
 
-@translate_exc(from_exc=OSError, to_exc=NotImplementedError)
 def network_get(endpoint, relation_id=None):
     """
     Retrieve the network details for a relation endpoint
@@ -1131,24 +1154,20 @@ def network_get(endpoint, relation_id=None):
     :param endpoint: string. The name of a relation endpoint
     :param relation_id: int. The ID of the relation for the current context.
     :return: dict. The loaded YAML output of the network-get query.
-    :raise: NotImplementedError if run on Juju < 2.1
+    :raise: NotImplementedError if request not supported by the Juju version.
     """
+    if not has_juju_version('2.2'):
+        raise NotImplementedError(juju_version())  # earlier versions require --primary-address
+    if relation_id and not has_juju_version('2.3'):
+        raise NotImplementedError  # 2.3 added the -r option
+
     cmd = ['network-get', endpoint, '--format', 'yaml']
     if relation_id:
         cmd.append('-r')
         cmd.append(relation_id)
-    try:
-        response = subprocess.check_output(
-            cmd,
-            stderr=subprocess.STDOUT).decode('UTF-8').strip()
-    except CalledProcessError as e:
-        # Early versions of Juju 2.0.x required the --primary-address argument.
-        # We catch that condition here and raise NotImplementedError since
-        # the requested semantics are not available - the caller can then
-        # use the network_get_primary_address() method instead.
-        if '--primary-address is currently required' in e.output.decode('UTF-8'):
-            raise NotImplementedError
-        raise
+    response = subprocess.check_output(
+        cmd,
+        stderr=subprocess.STDOUT).decode('UTF-8').strip()
     return yaml.safe_load(response)
 
 
@@ -1204,9 +1223,23 @@ def iter_units_for_relation_name(relation_name):
 
 def ingress_address(rid=None, unit=None):
     """
-    Retrieve the ingress-address from a relation when available. Otherwise,
-    return the private-address. This function is to be used on the consuming
-    side of the relation.
+    Retrieve the ingress-address from a relation when available.
+    Otherwise, return the private-address.
+
+    When used on the consuming side of the relation (unit is a remote
+    unit), the ingress-address is the IP address that this unit needs
+    to use to reach the provided service on the remote unit.
+
+    When used on the providing side of the relation (unit == local_unit()),
+    the ingress-address is the IP address that is advertised to remote
+    units on this relation. Remote units need to use this address to
+    reach the local provided service on this unit.
+
+    Note that charms may document some other method to use in
+    preference to the ingress_address(), such as an address provided
+    on a different relation attribute or a service discovery mechanism.
+    This allows charms to redirect inbound connections to their peers
+    or different applications such as load balancers.
 
     Usage:
     addresses = [ingress_address(rid=u.rid, unit=u.unit)
@@ -1220,3 +1253,40 @@ def ingress_address(rid=None, unit=None):
     settings = relation_get(rid=rid, unit=unit)
     return (settings.get('ingress-address') or
             settings.get('private-address'))
+
+
+def egress_subnets(rid=None, unit=None):
+    """
+    Retrieve the egress-subnets from a relation.
+
+    This function is to be used on the providing side of the
+    relation, and provides the ranges of addresses that client
+    connections may come from. The result is uninteresting on
+    the consuming side of a relation (unit == local_unit()).
+
+    Returns a stable list of subnets in CIDR format.
+    eg. ['192.168.1.0/24', '2001::F00F/128']
+
+    If egress-subnets is not available, falls back to using the published
+    ingress-address, or finally private-address.
+
+    :param rid: string relation id
+    :param unit: string unit name
+    :side effect: calls relation_get
+    :return: list of subnets in CIDR format. eg. ['192.168.1.0/24', '2001::F00F/128']
+    """
+    def _to_range(addr):
+        if re.search(r'^(?:\d{1,3}\.){3}\d{1,3}$', addr) is not None:
+            addr += '/32'
+        elif ':' in addr and '/' not in addr:  # IPv6
+            addr += '/128'
+        return addr
+
+    settings = relation_get(rid=rid, unit=unit)
+    if 'egress-subnets' in settings:
+        return [n.strip() for n in settings['egress-subnets'].split(',') if n.strip()]
+    if 'ingress-address' in settings:
+        return [_to_range(settings['ingress-address'])]
+    if 'private-address' in settings:
+        return [_to_range(settings['private-address'])]
+    return []  # Should never happen

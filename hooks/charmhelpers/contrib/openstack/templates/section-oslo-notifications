@@ -5,4 +5,7 @@ transport_url = {{ transport_url }}
 {% if notification_topics -%}
 topics = {{ notification_topics }}
 {% endif -%}
+{% if notification_format -%}
+notification_format = {{ notification_format }}
+{% endif -%}
 {% endif -%}

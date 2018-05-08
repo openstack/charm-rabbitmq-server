@@ -291,7 +291,7 @@ class Pool(object):
 
 class ReplicatedPool(Pool):
     def __init__(self, service, name, pg_num=None, replicas=2,
-                 percent_data=10.0):
+                 percent_data=10.0, app_name=None):
         super(ReplicatedPool, self).__init__(service=service, name=name)
         self.replicas = replicas
         if pg_num:
@@ -301,6 +301,10 @@ class ReplicatedPool(Pool):
             self.pg_num = min(pg_num, max_pgs)
         else:
             self.pg_num = self.get_pgs(self.replicas, percent_data)
+        if app_name:
+            self.app_name = app_name
+        else:
+            self.app_name = 'unknown'
 
     def create(self):
         if not pool_exists(self.service, self.name):
@@ -313,6 +317,12 @@ class ReplicatedPool(Pool):
                 update_pool(client=self.service,
                             pool=self.name,
                             settings={'size': str(self.replicas)})
+                try:
+                    set_app_name_for_pool(client=self.service,
+                                          pool=self.name,
+                                          name=self.app_name)
+                except CalledProcessError:
+                    log('Could not set app name for pool {}'.format(self.name, level=WARNING))
             except CalledProcessError:
                 raise
 
@@ -320,10 +330,14 @@ class ReplicatedPool(Pool):
 # Default jerasure erasure coded pool
 class ErasurePool(Pool):
     def __init__(self, service, name, erasure_code_profile="default",
-                 percent_data=10.0):
+                 percent_data=10.0, app_name=None):
         super(ErasurePool, self).__init__(service=service, name=name)
         self.erasure_code_profile = erasure_code_profile
         self.percent_data = percent_data
+        if app_name:
+            self.app_name = app_name
+        else:
+            self.app_name = 'unknown'
 
     def create(self):
         if not pool_exists(self.service, self.name):
@@ -355,6 +369,12 @@ class ErasurePool(Pool):
                    'erasure', self.erasure_code_profile]
             try:
                 check_call(cmd)
+                try:
+                    set_app_name_for_pool(client=self.service,
+                                          pool=self.name,
+                                          name=self.app_name)
+                except CalledProcessError:
+                    log('Could not set app name for pool {}'.format(self.name, level=WARNING))
             except CalledProcessError:
                 raise
 
@@ -776,6 +796,25 @@ def update_pool(client, pool, settings):
         cmd.append(v)
 
     check_call(cmd)
+
+
+def set_app_name_for_pool(client, pool, name):
+    """
+    Calls `osd pool application enable` for the specified pool name
+
+    :param client: Name of the ceph client to use
+    :type client: str
+    :param pool: Pool to set app name for
+    :type pool: str
+    :param name: app name for the specified pool
+    :type name: str
+
+    :raises: CalledProcessError if ceph call fails
+    """
+    if ceph_version() >= '12.0.0':
+        cmd = ['ceph', '--id', client, 'osd', 'pool',
+               'application', 'enable', pool, name]
+        check_call(cmd)
 
 
 def create_pool(service, name, replicas=3, pg_num=None):
