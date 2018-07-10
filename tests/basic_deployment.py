@@ -577,8 +577,8 @@ class RmqBasicDeployment(OpenStackAmuletDeployment):
         if ret:
             amulet.raise_status(amulet.FAIL, msg=ret)
 
-        u.log.debug('Sleeping 70s for 1m cron job to run...')
-        time.sleep(70)
+        u.log.debug('Sleeping 2ms for 1m cron job to run...')
+        time.sleep(120)
 
         # check_rabbitmq_queue monitor
         u.log.debug('Checking nrpe check_rabbitmq_queue on units...')

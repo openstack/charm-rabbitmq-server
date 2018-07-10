@@ -752,6 +752,10 @@ def config_changed():
     # result in an upgrade if applicable only if we change the 'source'
     # config option
     if rabbit.archive_upgrade_available():
+        # Avoid packge upgrade collissions
+        # Stopping and attempting to start rabbitmqs at the same time leads to
+        # failed restarts
+        rabbit.cluster_wait()
         rabbit.install_or_upgrade_packages()
 
     if config('ssl') == 'off':

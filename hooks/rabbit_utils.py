@@ -468,7 +468,9 @@ def cluster_with():
             log('Host already clustered with %s.' % node)
 
             cluster_rid = relation_id('cluster', local_unit())
-            is_clustered = relation_get(attribute='clustered', rid=cluster_rid)
+            is_clustered = relation_get(attribute='clustered',
+                                        rid=cluster_rid,
+                                        unit=local_unit())
 
             log('am I clustered?: %s' % bool(is_clustered), level=DEBUG)
             if not is_clustered:
