@@ -40,6 +40,7 @@ import novaclient
 import pika
 import swiftclient
 
+from charmhelpers.core.decorators import retry_on_exception
 from charmhelpers.contrib.amulet.utils import (
     AmuletUtils
 )
@@ -55,7 +56,7 @@ OPENSTACK_RELEASES_PAIRS = [
     'trusty_mitaka', 'xenial_mitaka', 'xenial_newton',
     'yakkety_newton', 'xenial_ocata', 'zesty_ocata',
     'xenial_pike', 'artful_pike', 'xenial_queens',
-    'bionic_queens']
+    'bionic_queens', 'bionic_rocky', 'cosmic_rocky']
 
 
 class OpenStackAmuletUtils(AmuletUtils):
@@ -423,6 +424,7 @@ class OpenStackAmuletUtils(AmuletUtils):
         self.log.debug('Checking if tenant exists ({})...'.format(tenant))
         return tenant in [t.name for t in keystone.tenants.list()]
 
+    @retry_on_exception(num_retries=5, base_delay=1)
     def keystone_wait_for_propagation(self, sentry_relation_pairs,
                                       api_version):
         """Iterate over list of sentry and relation tuples and verify that
@@ -542,7 +544,7 @@ class OpenStackAmuletUtils(AmuletUtils):
         return ep
 
     def get_default_keystone_session(self, keystone_sentry,
-                                     openstack_release=None):
+                                     openstack_release=None, api_version=2):
         """Return a keystone session object and client object assuming standard
            default settings
 
@@ -557,12 +559,12 @@ class OpenStackAmuletUtils(AmuletUtils):
                eyc
         """
         self.log.debug('Authenticating keystone admin...')
-        api_version = 2
-        client_class = keystone_client.Client
         # 11 => xenial_queens
-        if openstack_release and openstack_release >= 11:
-            api_version = 3
+        if api_version == 3 or (openstack_release and openstack_release >= 11):
             client_class = keystone_client_v3.Client
+            api_version = 3
+        else:
+            client_class = keystone_client.Client
         keystone_ip = keystone_sentry.info['public-address']
         session, auth = self.get_keystone_session(
             keystone_ip,

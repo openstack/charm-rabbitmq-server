@@ -291,6 +291,8 @@ class OpenStackAmuletDeployment(AmuletDeployment):
             ('zesty', None): self.zesty_ocata,
             ('artful', None): self.artful_pike,
             ('bionic', None): self.bionic_queens,
+            ('bionic', 'cloud:bionic-rocky'): self.bionic_rocky,
+            ('cosmic', None): self.cosmic_rocky,
         }
         return releases[(self.series, self.openstack)]
 
@@ -306,6 +308,7 @@ class OpenStackAmuletDeployment(AmuletDeployment):
             ('zesty', 'ocata'),
             ('artful', 'pike'),
             ('bionic', 'queens'),
+            ('cosmic', 'rocky'),
         ])
         if self.openstack:
             os_origin = self.openstack.split(':')[1]

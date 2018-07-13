@@ -410,16 +410,21 @@ def add_init_service_checks(nrpe, services, unit_name, immediate_check=True):
                 os.chmod(checkpath, 0o644)
 
 
-def copy_nrpe_checks():
+def copy_nrpe_checks(nrpe_files_dir=None):
     """
     Copy the nrpe checks into place
 
     """
     NAGIOS_PLUGINS = '/usr/local/lib/nagios/plugins'
-    nrpe_files_dir = os.path.join(os.getenv('CHARM_DIR'), 'hooks',
-                                  'charmhelpers', 'contrib', 'openstack',
-                                  'files')
-
+    default_nrpe_files_dir = os.path.join(
+        os.getenv('CHARM_DIR'),
+        'hooks',
+        'charmhelpers',
+        'contrib',
+        'openstack',
+        'files')
+    if not nrpe_files_dir:
+        nrpe_files_dir = default_nrpe_files_dir
     if not os.path.exists(NAGIOS_PLUGINS):
         os.makedirs(NAGIOS_PLUGINS)
     for fname in glob.glob(os.path.join(nrpe_files_dir, "check_*")):

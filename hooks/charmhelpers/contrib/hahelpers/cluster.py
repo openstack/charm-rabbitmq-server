@@ -223,6 +223,11 @@ def https():
         return True
     if config_get('ssl_cert') and config_get('ssl_key'):
         return True
+    for r_id in relation_ids('certificates'):
+        for unit in relation_list(r_id):
+            ca = relation_get('ca', rid=r_id, unit=unit)
+            if ca:
+                return True
     for r_id in relation_ids('identity-service'):
         for unit in relation_list(r_id):
             # TODO - needs fixing for new helper as ssl_cert/key suffixes with CN

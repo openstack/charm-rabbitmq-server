@@ -972,6 +972,20 @@ def is_container():
 
 
 def add_to_updatedb_prunepath(path, updatedb_path=UPDATEDB_PATH):
+    """Adds the specified path to the mlocate's udpatedb.conf PRUNEPATH list.
+
+    This method has no effect if the path specified by updatedb_path does not
+    exist or is not a file.
+
+    @param path: string the path to add to the updatedb.conf PRUNEPATHS value
+    @param updatedb_path: the path the updatedb.conf file
+    """
+    if not os.path.exists(updatedb_path) or os.path.isdir(updatedb_path):
+        # If the updatedb.conf file doesn't exist then don't attempt to update
+        # the file as the package providing mlocate may not be installed on
+        # the local system
+        return
+
     with open(updatedb_path, 'r+') as f_id:
         updatedb_text = f_id.read()
         output = updatedb(updatedb_text, path)

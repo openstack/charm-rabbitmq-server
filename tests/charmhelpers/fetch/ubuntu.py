@@ -158,6 +158,14 @@ CLOUD_ARCHIVE_POCKETS = {
     'queens/proposed': 'xenial-proposed/queens',
     'xenial-queens/proposed': 'xenial-proposed/queens',
     'xenial-proposed/queens': 'xenial-proposed/queens',
+    # Rocky
+    'rocky': 'bionic-updates/rocky',
+    'bionic-rocky': 'bionic-updates/rocky',
+    'bionic-rocky/updates': 'bionic-updates/rocky',
+    'bionic-updates/rocky': 'bionic-updates/rocky',
+    'rocky/proposed': 'bionic-proposed/rocky',
+    'bionic-rocky/proposed': 'bionic-proposed/rocky',
+    'bionic-proposed/rocky': 'bionic-proposed/rocky',
 }
 
 
@@ -307,7 +315,7 @@ def import_key(key):
         cmd = ['apt-key', 'adv', '--keyserver',
                'hkp://keyserver.ubuntu.com:80', '--recv-keys', key]
         try:
-            subprocess.check_call(cmd)
+            _run_with_retries(cmd)
         except subprocess.CalledProcessError:
             error = "Error importing PGP key '{}'".format(key)
             log(error)

@@ -973,6 +973,13 @@ def application_version_set(version):
 
 
 @translate_exc(from_exc=OSError, to_exc=NotImplementedError)
+def goal_state():
+    """Juju goal state values"""
+    cmd = ['goal-state', '--format=json']
+    return json.loads(subprocess.check_output(cmd).decode('UTF-8'))
+
+
+@translate_exc(from_exc=OSError, to_exc=NotImplementedError)
 def is_leader():
     """Does the current unit hold the juju leadership
 

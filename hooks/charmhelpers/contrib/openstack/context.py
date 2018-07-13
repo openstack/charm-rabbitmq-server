@@ -190,8 +190,8 @@ class OSContextGenerator(object):
 class SharedDBContext(OSContextGenerator):
     interfaces = ['shared-db']
 
-    def __init__(self,
-                 database=None, user=None, relation_prefix=None, ssl_dir=None):
+    def __init__(self, database=None, user=None, relation_prefix=None,
+                 ssl_dir=None, relation_id=None):
         """Allows inspecting relation for settings prefixed with
         relation_prefix. This is useful for parsing access for multiple
         databases returned via the shared-db interface (eg, nova_password,
@@ -202,6 +202,7 @@ class SharedDBContext(OSContextGenerator):
         self.user = user
         self.ssl_dir = ssl_dir
         self.rel_name = self.interfaces[0]
+        self.relation_id = relation_id
 
     def __call__(self):
         self.database = self.database or config('database')
@@ -235,7 +236,12 @@ class SharedDBContext(OSContextGenerator):
         if self.relation_prefix:
             password_setting = self.relation_prefix + '_password'
 
-        for rid in relation_ids(self.interfaces[0]):
+        if self.relation_id:
+            rids = [self.relation_id]
+        else:
+            rids = relation_ids(self.interfaces[0])
+
+        for rid in rids:
             self.related = True
             for unit in related_units(rid):
                 rdata = relation_get(rid=rid, unit=unit)
@@ -448,11 +454,13 @@ class IdentityCredentialsContext(IdentityServiceContext):
 
 class AMQPContext(OSContextGenerator):
 
-    def __init__(self, ssl_dir=None, rel_name='amqp', relation_prefix=None):
+    def __init__(self, ssl_dir=None, rel_name='amqp', relation_prefix=None,
+                 relation_id=None):
         self.ssl_dir = ssl_dir
         self.rel_name = rel_name
         self.relation_prefix = relation_prefix
         self.interfaces = [rel_name]
+        self.relation_id = relation_id
 
     def __call__(self):
         log('Generating template context for amqp', level=DEBUG)
@@ -473,7 +481,11 @@ class AMQPContext(OSContextGenerator):
             raise OSContextError
 
         ctxt = {}
-        for rid in relation_ids(self.rel_name):
+        if self.relation_id:
+            rids = [self.relation_id]
+        else:
+            rids = relation_ids(self.rel_name)
+        for rid in rids:
             ha_vip_only = False
             self.related = True
             transport_hosts = None
@@ -789,17 +801,18 @@ class ApacheSSLContext(OSContextGenerator):
         ssl_dir = os.path.join('/etc/apache2/ssl/', self.service_namespace)
         mkdir(path=ssl_dir)
         cert, key = get_cert(cn)
-        if cn:
-            cert_filename = 'cert_{}'.format(cn)
-            key_filename = 'key_{}'.format(cn)
-        else:
-            cert_filename = 'cert'
-            key_filename = 'key'
+        if cert and key:
+            if cn:
+                cert_filename = 'cert_{}'.format(cn)
+                key_filename = 'key_{}'.format(cn)
+            else:
+                cert_filename = 'cert'
+                key_filename = 'key'
 
-        write_file(path=os.path.join(ssl_dir, cert_filename),
-                   content=b64decode(cert), perms=0o640)
-        write_file(path=os.path.join(ssl_dir, key_filename),
-                   content=b64decode(key), perms=0o640)
+            write_file(path=os.path.join(ssl_dir, cert_filename),
+                       content=b64decode(cert), perms=0o640)
+            write_file(path=os.path.join(ssl_dir, key_filename),
+                       content=b64decode(key), perms=0o640)
 
     def configure_ca(self):
         ca_cert = get_ca_cert()
@@ -871,23 +884,31 @@ class ApacheSSLContext(OSContextGenerator):
         if not self.external_ports or not https():
             return {}
 
-        self.configure_ca()
+        use_keystone_ca = True
+        for rid in relation_ids('certificates'):
+            if related_units(rid):
+                use_keystone_ca = False
+
+        if use_keystone_ca:
+            self.configure_ca()
+
         self.enable_modules()
 
         ctxt = {'namespace': self.service_namespace,
                 'endpoints': [],
                 'ext_ports': []}
 
-        cns = self.canonical_names()
-        if cns:
-            for cn in cns:
-                self.configure_cert(cn)
-        else:
-            # Expect cert/key provided in config (currently assumed that ca
-            # uses ip for cn)
-            for net_type in (INTERNAL, ADMIN, PUBLIC):
-                cn = resolve_address(endpoint_type=net_type)
-                self.configure_cert(cn)
+        if use_keystone_ca:
+            cns = self.canonical_names()
+            if cns:
+                for cn in cns:
+                    self.configure_cert(cn)
+            else:
+                # Expect cert/key provided in config (currently assumed that ca
+                # uses ip for cn)
+                for net_type in (INTERNAL, ADMIN, PUBLIC):
+                    cn = resolve_address(endpoint_type=net_type)
+                    self.configure_cert(cn)
 
         addresses = self.get_network_addresses()
         for address, endpoint in addresses:
