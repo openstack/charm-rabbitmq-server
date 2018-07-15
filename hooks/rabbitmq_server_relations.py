@@ -613,12 +613,13 @@ def update_nrpe_checks():
         rsync(os.path.join(charm_dir(), 'scripts',
                            'collect_rabbitmq_stats.sh'), script)
         write_file(STATS_CRONFILE, cronjob)
+    elif os.path.isfile(STATS_CRONFILE):
+        os.remove(STATS_CRONFILE)
+
     if config('management_plugin'):
         rsync(os.path.join(charm_dir(), 'scripts',
                            'check_rabbitmq_cluster.py'),
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
-    elif os.path.isfile(STATS_CRONFILE):
-        os.remove(STATS_CRONFILE)
 
     # Find out if nrpe set nagios_hostname
     hostname = nrpe.get_nagios_hostname()
