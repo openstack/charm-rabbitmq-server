@@ -605,6 +605,11 @@ def update_nrpe_checks():
         rsync(os.path.join(charm_dir(), 'scripts',
                            'check_rabbitmq_queues.py'),
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
+        if config('management_plugin'):
+            rsync(os.path.join(charm_dir(), 'scripts',
+                               'check_rabbitmq_cluster.py'),
+                  os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
+
     if config('stats_cron_schedule'):
         script = os.path.join(SCRIPTS_DIR, 'collect_rabbitmq_stats.sh')
         cronjob = CRONJOB_CMD.format(schedule=config('stats_cron_schedule'),
