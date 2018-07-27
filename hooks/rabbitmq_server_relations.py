@@ -401,7 +401,7 @@ def cluster_changed(relation_id=None, remote_unit=None):
     # NOTE(freyes): all the nodes need to marked as 'clustered' (LP: #1691510)
     rabbit.cluster_with()
 
-    if not is_leader():
+    if not is_leader() and is_relation_made('nrpe-external-master'):
         update_nrpe_checks()
 
 
@@ -804,7 +804,7 @@ def config_changed():
             else:
                 log("hacluster relation is present but this node is not active"
                     " skipping update nrpe checks")
-    else:
+    elif is_relation_made('nrpe-external-master'):
         update_nrpe_checks()
 
     # Update cluster in case min-cluster-size has changed
