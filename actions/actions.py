@@ -29,6 +29,8 @@ from charmhelpers.core.hookenv import (
     action_fail,
     action_set,
     action_get,
+    is_leader,
+    leader_set,
 )
 
 from rabbit_utils import (
@@ -36,6 +38,7 @@ from rabbit_utils import (
     CONFIG_FILES,
     pause_unit_helper,
     resume_unit_helper,
+    assess_status,
 )
 
 
@@ -89,10 +92,24 @@ def check_queues(args):
         action_fail('Failed to run rabbitmqctl list_queues')
 
 
+def complete_cluster_series_upgrade(args):
+    """ Complete the series upgrade process
+
+    After all nodes have been upgraded, this action is run to inform the whole
+    cluster the upgrade is done. Config files will be re-rendered with each
+    peer in the wsrep_cluster_address config.
+    """
+    if is_leader():
+        # Unset cluster_series_upgrading
+        leader_set(cluster_series_upgrading="")
+    assess_status(ConfigRenderer(CONFIG_FILES))
+
+
 # A dictionary of all the defined actions to callables (which take
 # parsed arguments).
 ACTIONS = {"pause": pause, "resume": resume, "cluster-status": cluster_status,
-           "check-queues": check_queues}
+           "check-queues": check_queues,
+           "complete-cluster-series-upgrade": complete_cluster_series_upgrade}
 
 
 def main(args):

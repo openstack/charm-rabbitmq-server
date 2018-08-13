@@ -54,6 +54,10 @@ from charmhelpers.contrib.hahelpers.cluster import (
 )
 from charmhelpers.contrib.openstack.utils import (
     is_unit_paused_set,
+    set_unit_upgrading,
+    is_unit_upgrading_set,
+    clear_unit_paused,
+    clear_unit_upgrading,
 )
 
 import charmhelpers.contrib.storage.linux.ceph as ceph
@@ -71,6 +75,8 @@ from charmhelpers.core.hookenv import (
     DEBUG,
     ERROR,
     INFO,
+    leader_set,
+    leader_get,
     relation_get,
     relation_clear,
     relation_set,
@@ -735,6 +741,11 @@ MAN_PLUGIN = 'rabbitmq_management'
 @rabbit.restart_on_change(rabbit.restart_map())
 @harden()
 def config_changed():
+
+    if is_unit_paused_set():
+        log("Do not run config_changed while unit is paused", "WARNING")
+        return
+
     # Update hosts with this unit's information
     rabbit.update_hosts_file(
         {rabbit.get_unit_ip(config_override=rabbit.CLUSTER_OVERRIDE_CONFIG,
@@ -820,6 +831,11 @@ def leader_elected():
 
 @hooks.hook('leader-settings-changed')
 def leader_settings_changed():
+
+    if is_unit_paused_set():
+        log("Do not run config_changed while unit is paused", "WARNING")
+        return
+
     if not os.path.exists(rabbit.RABBITMQ_CTL):
         log('Deferring cookie configuration, RabbitMQ not yet installed')
         return
@@ -842,6 +858,29 @@ def pre_install_hooks():
             subprocess.check_call(['sh', '-c', f])
 
 
+@hooks.hook('pre-series-upgrade')
+def series_upgrade_prepare():
+    set_unit_upgrading()
+    if not is_unit_paused_set():
+        log("Pausing unit for series upgrade.")
+        rabbit.pause_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES))
+    if is_leader():
+        if not leader_get('cluster_series_upgrading'):
+            # Inform the entire cluster a series upgrade is occurring.
+            # Run the complete-cluster-series-upgrade action on the leader to
+            # clear this setting when the full cluster has completed its
+            # upgrade.
+            leader_set(cluster_series_upgrading=True)
+
+
+@hooks.hook('post-series-upgrade')
+def series_upgrade_complete():
+    log("Running complete series upgrade hook", "INFO")
+    clear_unit_paused()
+    clear_unit_upgrading()
+    rabbit.resume_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES))
+
+
 @hooks.hook('update-status')
 @harden()
 def update_status():
@@ -860,7 +899,7 @@ def update_status():
     #
     # Have a look at the docstring of the stop() function for detailed
     # explanation.
-    if is_leader():
+    if is_leader() and not is_unit_paused_set():
         rabbit.check_cluster_memberships()
 
 if __name__ == '__main__':

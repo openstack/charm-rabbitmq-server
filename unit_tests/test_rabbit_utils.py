@@ -360,6 +360,7 @@ class UtilsTests(CharmTestCase):
                                 assess_cluster_status,
                                 status_set,
                                 clustered):
+        self.leader_get.return_value = None
         services.return_value = 's1'
         _determine_os_workload_status.return_value = ('active', '')
         clustered.return_value = True
@@ -370,6 +371,50 @@ class UtilsTests(CharmTestCase):
             ports=None)
         status_set.assert_called_once_with('active',
                                            'Unit is ready and clustered')
+
+    @mock.patch.object(rabbit_utils, 'clustered')
+    @mock.patch.object(rabbit_utils, 'status_set')
+    @mock.patch.object(rabbit_utils, 'assess_cluster_status')
+    @mock.patch.object(rabbit_utils, 'services')
+    @mock.patch.object(rabbit_utils, '_determine_os_workload_status')
+    def test_assess_status_func_cluster_upgrading(
+            self, _determine_os_workload_status, services,
+            assess_cluster_status, status_set, clustered):
+        self.leader_get.return_value = True
+        services.return_value = 's1'
+        _determine_os_workload_status.return_value = ('active', '')
+        clustered.return_value = True
+        rabbit_utils.assess_status_func('test-config')()
+        # ports=None whilst port checks are disabled.
+        _determine_os_workload_status.assert_called_once_with(
+            'test-config', {}, charm_func=assess_cluster_status, services='s1',
+            ports=None)
+        status_set.assert_called_once_with(
+            'active', 'Unit is ready and clustered, Run '
+            'complete-cluster-series-upgrade when the cluster has completed '
+            'its upgrade.')
+
+    @mock.patch.object(rabbit_utils, 'clustered')
+    @mock.patch.object(rabbit_utils, 'status_set')
+    @mock.patch.object(rabbit_utils, 'assess_cluster_status')
+    @mock.patch.object(rabbit_utils, 'services')
+    @mock.patch.object(rabbit_utils, '_determine_os_workload_status')
+    def test_assess_status_func_cluster_upgrading_first_unit(
+            self, _determine_os_workload_status, services,
+            assess_cluster_status, status_set, clustered):
+        self.leader_get.return_value = True
+        services.return_value = 's1'
+        _determine_os_workload_status.return_value = ('waiting', 'No peers')
+        clustered.return_value = False
+        rabbit_utils.assess_status_func('test-config')()
+        # ports=None whilst port checks are disabled.
+        _determine_os_workload_status.assert_called_once_with(
+            'test-config', {}, charm_func=assess_cluster_status, services='s1',
+            ports=None)
+        status_set.assert_called_once_with(
+            'active', 'No peers, Run '
+            'complete-cluster-series-upgrade when the cluster has completed '
+            'its upgrade.')
 
     def test_pause_unit_helper(self):
         with mock.patch.object(rabbit_utils, '_pause_resume_helper') as prh:

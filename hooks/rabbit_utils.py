@@ -807,6 +807,9 @@ def clustered():
 
 def assess_cluster_status(*args):
     ''' Assess the status for the current running unit '''
+    if is_unit_paused_set():
+        return "maintenance", "Paused"
+
     # NOTE: ensure rabbitmq is actually installed before doing
     #       any checks
     if rabbitmq_is_installed():
@@ -909,6 +912,18 @@ def assess_status_func(configs):
             services=services(), ports=None)
         if state == 'active' and clustered():
             message = 'Unit is ready and clustered'
+        # Remind the administrator cluster_series_upgrading is set.
+        # If the cluster has completed the series upgrade, run the
+        # complete-cluster-series-upgrade action to clear this setting.
+        if leader_get('cluster_series_upgrading'):
+            message += (", Run complete-cluster-series-upgrade when the "
+                        "cluster has completed its upgrade.")
+            # Edge case when the first rabbitmq unit is upgraded it will show
+            # waiting for peers. Force "active" workload state for various
+            # testing suites like zaza to recognize a successful series upgrade
+            # of the first unit.
+            if state == "waiting":
+                state = "active"
         status_set(state, message)
 
     return _assess_status_func

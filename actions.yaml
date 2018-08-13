@@ -21,3 +21,9 @@ check-queues:
       type: string
       default: "/"
       description:  Show queues from the specified vhost.  Eg; "openstack".
+complete-cluster-series-upgrade:
+  description: |
+    Perform final operations post series upgrade. Inform all nodes in the
+    cluster the upgrade is complete cluster wide.
+    This action should be performed on the current leader. Note the leader may
+    have changed during the series upgrade process.
