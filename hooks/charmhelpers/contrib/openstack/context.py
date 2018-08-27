@@ -1389,11 +1389,12 @@ class WorkerConfigContext(OSContextGenerator):
 class WSGIWorkerConfigContext(WorkerConfigContext):
 
     def __init__(self, name=None, script=None, admin_script=None,
-                 public_script=None, process_weight=1.00,
+                 public_script=None, user=None, group=None,
+                 process_weight=1.00,
                  admin_process_weight=0.25, public_process_weight=0.75):
         self.service_name = name
-        self.user = name
-        self.group = name
+        self.user = user or name
+        self.group = group or name
         self.script = script
         self.admin_script = admin_script
         self.public_script = public_script
