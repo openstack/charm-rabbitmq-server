@@ -627,11 +627,6 @@ def update_nrpe_checks():
     elif os.path.isfile(STATS_CRONFILE):
         os.remove(STATS_CRONFILE)
 
-    if config('management_plugin'):
-        rsync(os.path.join(charm_dir(), 'scripts',
-                           'check_rabbitmq_cluster.py'),
-              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
-
     # Find out if nrpe set nagios_hostname
     hostname = nrpe.get_nagios_hostname()
     myunit = nrpe.get_nagios_unit_name()
