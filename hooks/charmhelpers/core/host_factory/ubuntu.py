@@ -21,6 +21,7 @@ UBUNTU_RELEASES = (
     'zesty',
     'artful',
     'bionic',
+    'cosmic',
 )
 
 
