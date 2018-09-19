@@ -752,8 +752,9 @@ def config_changed():
                             interface=rabbit.CLUSTER_INTERFACE):
                                 rabbit.get_unit_hostname()})
 
-    # Add archive source if provided
-    add_source(config('source'), config('key'))
+    # Add archive source if provided and not in the upgrade process
+    if not leader_get("cluster_series_upgrading"):
+        add_source(config('source'), config('key'))
     # Copy in defaults file for updated ulimits
     shutil.copyfile(
         'templates/rabbitmq-server',

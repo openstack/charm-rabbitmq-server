@@ -459,6 +459,10 @@ def join_cluster(node):
 
 
 def cluster_with():
+    if is_unit_paused_set():
+        log("Do not run cluster_with while unit is paused", "WARNING")
+        return
+
     log('Clustering with new node')
 
     # check the leader and try to cluster with it

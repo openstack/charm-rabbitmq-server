@@ -228,6 +228,7 @@ class UtilsTests(CharmTestCase):
         self.assertEqual(rabbit_utils.leader_node(),
                          'rabbit@juju-devel3-machine-15')
 
+    @mock.patch('rabbit_utils.is_unit_paused_set')
     @mock.patch('rabbit_utils.cluster_wait')
     @mock.patch('rabbit_utils.relation_set')
     @mock.patch('rabbit_utils.wait_app')
@@ -243,7 +244,9 @@ class UtilsTests(CharmTestCase):
                                         mock_running_nodes, mock_time,
                                         mock_check_output, mock_check_call,
                                         mock_wait_app,
-                                        mock_relation_set, mock_cluster_wait):
+                                        mock_relation_set, mock_cluster_wait,
+                                        mock_is_unit_paused_set):
+        mock_is_unit_paused_set.return_value = False
         mock_cmp_pkgrevno.return_value = True
         mock_clustered.return_value = False
         mock_leader_node.return_value = 'rabbit@juju-devel7-machine-11'
@@ -255,6 +258,7 @@ class UtilsTests(CharmTestCase):
                                               'rabbit@juju-devel7-machine-11'],
                                              stderr=-2)
 
+    @mock.patch('rabbit_utils.is_unit_paused_set')
     @mock.patch('rabbit_utils.relation_get')
     @mock.patch('rabbit_utils.relation_id')
     @mock.patch('rabbit_utils.peer_retrieve')
@@ -269,7 +273,9 @@ class UtilsTests(CharmTestCase):
                                     mock_leader_node, mock_running_nodes,
                                     mock_time, mock_check_output,
                                     mock_check_call, mock_peer_retrieve,
-                                    mock_relation_id, mock_relation_get):
+                                    mock_relation_id, mock_relation_get,
+                                    mock_is_unit_paused_set):
+        mock_is_unit_paused_set.return_value = False
         mock_clustered.return_value = True
         mock_peer_retrieve.return_value = 'juju-devel7-machine-11'
         mock_leader_node.return_value = 'rabbit@juju-devel7-machine-11'
@@ -297,6 +303,7 @@ class UtilsTests(CharmTestCase):
         rabbit_utils.cluster_with()
         self.assertEqual(0, mock_check_output.call_count)
 
+    @mock.patch('rabbit_utils.is_unit_paused_set')
     @mock.patch('time.time')
     @mock.patch('rabbit_utils.relation_set')
     @mock.patch('rabbit_utils.get_unit_hostname')
@@ -308,8 +315,9 @@ class UtilsTests(CharmTestCase):
                                       mock_running_nodes, mock_relation_id,
                                       mock_relation_get,
                                       mock_get_unit_hostname,
-                                      mock_relation_set, mock_time):
-
+                                      mock_relation_set, mock_time,
+                                      mock_is_unit_paused_set):
+        mock_is_unit_paused_set.return_value = False
         mock_peer_retrieve.return_value = 'localhost'
         mock_running_nodes.return_value = ['rabbit@localhost']
         mock_relation_id.return_value = 'cluster:1'
