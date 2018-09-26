@@ -15,7 +15,7 @@
 import mock
 from functools import wraps
 
-from test_utils import CharmTestCase
+from unit_tests.test_utils import CharmTestCase
 
 with mock.patch('charmhelpers.core.hookenv.cached') as cached:
     def passthrough(func):
@@ -59,7 +59,7 @@ class ClusterStatusTestCase(CharmTestCase):
             actions, ["check_output", "action_set", "action_fail"])
 
     def test_cluster_status(self):
-        self.check_output.return_value = 'Cluster status OK'
+        self.check_output.return_value = b'Cluster status OK'
         actions.cluster_status([])
         self.check_output.assert_called_once_with(['rabbitmqctl',
                                                    'cluster_status'],
@@ -78,7 +78,7 @@ class ClusterStatusTestCase(CharmTestCase):
 
 
 class CheckQueuesTestCase(CharmTestCase):
-    TEST_QUEUE_RESULT = 'Listing queues ...\ntest\t0\ntest\t0\n""'
+    TEST_QUEUE_RESULT = b'Listing queues ...\ntest\t0\ntest\t0\n""'
 
     def dummy_action_get(self, key):
         action_values = {"queue-depth": -1, "vhost": "/"}

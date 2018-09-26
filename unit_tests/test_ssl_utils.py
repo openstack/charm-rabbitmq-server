@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from test_utils import CharmTestCase
+from unit_tests.test_utils import CharmTestCase
 from mock import patch
 
 import ssl_utils

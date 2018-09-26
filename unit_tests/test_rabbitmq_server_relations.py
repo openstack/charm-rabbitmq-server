@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 
-from test_utils import CharmTestCase
+from unit_tests.test_utils import CharmTestCase
 from mock import patch, MagicMock, call
 
 from charmhelpers.core.unitdata import Storage

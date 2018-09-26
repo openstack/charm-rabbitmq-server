@@ -54,13 +54,16 @@ def configure_client_ssl(relation_data):
     if external_ca:
         if config('ssl_ca'):
             if "BEGIN CERTIFICATE" in config('ssl_ca'):
-                ssl_ca_encoded = base64.b64encode(config('ssl_ca'))
+                ssl_ca_encoded = (base64
+                                  .b64encode(config('ssl_ca').encode('ascii'))
+                                  .decode('ascii'))
             else:
                 ssl_ca_encoded = config('ssl_ca')
             relation_data['ssl_ca'] = ssl_ca_encoded
         return
     ca = ServiceCA.get_ca()
-    relation_data['ssl_ca'] = base64.b64encode(ca.get_ca_bundle())
+    relation_data['ssl_ca'] = (
+        base64.b64encode(ca.get_ca_bundle().encode('ascii')).decode('ascii'))
 
 
 def reconfigure_client_ssl(ssl_enabled=False):

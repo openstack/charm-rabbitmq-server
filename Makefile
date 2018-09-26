@@ -1,5 +1,5 @@
 #!/usr/bin/make
-PYTHON := /usr/bin/env python
+PYTHON := /usr/bin/env python3
 CHARM_DIR := $(PWD)
 HOOKS_DIR := $(PWD)/hooks
 TEST_PREFIX := PYTHONPATH=$(HOOKS_DIR)
@@ -21,7 +21,7 @@ sync: bin/charm_helpers_sync.py
 
 test:
 	@echo Starting unit tests...
-	@tox -e py27
+	@tox -e py36
 
 functional_test:
 	@echo Starting amulet tests...

@@ -11,7 +11,7 @@ check_and_install() {
     fi
 }
 
-PYTHON="python"
+PYTHON="python3"
 
 for dep in ${DEPS[@]}; do
     check_and_install ${PYTHON} ${dep}

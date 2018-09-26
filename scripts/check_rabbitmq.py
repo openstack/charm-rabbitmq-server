@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 #       #
 #       #  #    #       #  #    #
@@ -25,7 +25,7 @@ import socket
 try:
     from amqplib import client_0_8 as amqp
 except ImportError:
-    print "CRITICAL: amqplib not found"
+    print("CRITICAL: amqplib not found")
     sys.exit(2)
 
 from optparse import OptionParser
@@ -34,14 +34,14 @@ ROUTE_KEY = "test_mq"
 
 
 def alarm_handler(signum, frame):
-    print "TIMEOUT waiting for all queued messages to be delivered"
+    print("TIMEOUT waiting for all queued messages to be delivered")
     os._exit(1)
 
 
 def get_connection(host_port, user, password, vhost, ssl, ssl_ca):
     """ connect to the amqp service """
     if options.verbose:
-        print "Connection to %s requested" % host_port
+        print("Connection to {} requested".format(host_port))
     try:
         params = {'host': host_port, 'userid': user, 'password': password,
                   'virtual_host': vhost, 'insist': False}
@@ -51,15 +51,15 @@ def get_connection(host_port, user, password, vhost, ssl, ssl_ca):
         ret = amqp.Connection(**params)
 
     except (socket.error, TypeError), e:
-        print "ERROR: Could not connect to RabbitMQ server %s:%d" % (
-            options.host, options.port)
+        print("ERROR: Could not connect to RabbitMQ server {}:{}"
+              .format(options.host, options.port))
         if options.verbose:
-            print e
+            print(e)
             raise
         sys.exit(2)
     except Exception as ex:
-        print("ERROR: Unknown error connecting to RabbitMQ server %s:%d: %s"
-              % (options.host, options.port, ex))
+        print("ERROR: Unknown error connecting to RabbitMQ server {}:{}: {}"
+              .format(options.host, options.port, ex))
         if options.verbose:
             raise
         sys.exit(3)
@@ -87,12 +87,12 @@ def setup_exchange(conn, exchange_name, exchange_type):
         chan.exchange_declare(exchange=exchange_name, type=exchange_type,
                               durable=False, auto_delete=False,)
         if options.verbose:
-            print "Created new exchange %s (%s)" % (
-                exchange_name, exchange_type)
+            print("Created new exchange {} ({})"
+                  .format(exchange_name, exchange_type))
     else:
         if options.verbose:
-            print "Exchange %s (%s) is already declared" % (
-                exchange_name, exchange_type)
+            print("Exchange {} ({}) is already declared"
+                  .format(exchange_name, exchange_type))
     chan.close()
     return must_create
 
@@ -104,12 +104,12 @@ class Consumer(object):
     def __init__(self, conn, exname):
         self.exname = exname
         self.connection = conn
-        self.name = "%s_queue" % exname
+        self.name = "{}_queue".format(exname)
 
     def setup(self):
         """ sets up the queue and links it to the exchange """
         if options.verbose:
-            print self.name, "setup"
+            print("{} setup".format(self.name))
         chan = self.connection.channel()
         # setup the queue
         chan.queue_declare(queue=self.name, durable=False,
@@ -125,13 +125,14 @@ class Consumer(object):
 
     def loop(self, timeout=5):
         """ main loop for the consumer client """
-        consumer_tag = "callback_%s" % self.name
+        consumer_tag = "callback_{}".format(self.name)
         chan = self.connection.channel()
 
         def callback(msg):
             """ callback for message received """
             if options.verbose:
-                print "Client %s saw this message: '%s'" % (self.name, msg.body)
+                print("Client {} saw this message: '{}'"
+                      .format(self.name, msg.body))
             if self.check_end(msg):  # we have been asked to quit
                 self._quit = True
         chan.basic_consume(queue=self.name, no_ack=True, callback=callback,
@@ -152,11 +153,11 @@ class Consumer(object):
 def send_message(chan, exname, counter=None, message=None):
     """ publish a message on the exchange """
     if not message:
-        message = "This is test message %d" % counter
+        message = "This is test message {}".format(counter)
     msg = amqp.Message(message)
     chan.basic_publish(msg, exchange=exname, routing_key=ROUTE_KEY)
     if options.verbose:
-        print "Sent message: %s" % message
+        print("Sent message: {}".format(message))
 
 
 def main_loop(conn, exname):
@@ -181,15 +182,16 @@ def main_loop(conn, exname):
 def main(host, port, exname, extype, user, password, vhost, ssl, ssl_ca):
     """ setup the connection and the communication channel """
     sys.stdout = os.fdopen(os.dup(1), "w", 0)
-    host_port = "%s:%s" % (host, port)
+    host_port = "{}:{}".format(host, port)
     conn = get_connection(host_port, user, password, vhost, ssl, ssl_ca)
 
     if setup_exchange(conn, exname, extype):
         if options.verbose:
-            print "Created %s exchange of type %s" % (exname, extype)
+            print("Created {} exchange of type {}".format(exname, extype))
     else:
         if options.verbose:
-            print "Reusing existing exchange %s of type %s" % (exname, extype)
+            print("Reusing existing exchange {} of type {}"
+                  .format(exname, extype))
     ret = main_loop(conn, exname)
 
     try:
@@ -238,14 +240,15 @@ if __name__ == '__main__':
 
     (options, args) = parser.parse_args()
     if options.verbose:
-        print """
-Using AMQP setup: host:port=%s:%d exchange_name=%s exchange_type=%s
-""" % (options.host, options.port, options.exchange, options.type)
+        print("""
+Using AMQP setup: host:port={}:{} exchange_name={} exchange_type={}
+""".format(options.host, options.port, options.exchange, options.type))
     ret = main(options.host, options.port, options.exchange, options.type,
                options.user, options.password, options.vhost, options.ssl,
                options.ssl_ca)
     if ret:
-        print "Ok: sent and received %d test messages" % options.messages
+        print("Ok: sent and received {} test messages"
+              .format(options.messages))
         sys.exit(0)
-    print "ERROR: Could not send/receive test messages"
+    print("ERROR: Could not send/receive test messages")
     sys.exit(3)

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # Copyright 2016 Canonical Ltd
 #
@@ -14,11 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import glob
 import os
 import shutil
 import sys
 import subprocess
-import glob
+
+_path = os.path.dirname(os.path.realpath(__file__))
+_root = os.path.abspath(os.path.join(_path, '..'))
+
+def _add_path(path):
+    if path not in sys.path:
+        sys.path.insert(1, path)
+
+_add_path(_root)
+
 
 try:
     import yaml  # flake8: noqa
@@ -276,7 +286,7 @@ def amqp_changed(relation_id=None, remote_unit=None):
             #              peerstorage (replaced by leader get/set) and amqp
             #              relations.
             queues = {}
-            for k, v in current.iteritems():
+            for k, v in current.items():
                 amqp_rid = k.split('_')[0]
                 x = '_'.join(k.split('_')[1:])
                 if amqp_rid not in queues:
@@ -453,7 +463,7 @@ def update_cookie(leaders_cookie=None):
 
     service_stop('rabbitmq-server')
     with open(rabbit.COOKIE_PATH, 'wb') as out:
-        out.write(cookie)
+        out.write(cookie.encode('ascii'))
     if not is_unit_paused_set():
         service_restart('rabbitmq-server')
         rabbit.wait_app()

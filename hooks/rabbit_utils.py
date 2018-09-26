@@ -96,7 +96,7 @@ from charmhelpers.fetch import (
 from charmhelpers.fetch import get_upstream_version
 
 
-PACKAGES = ['rabbitmq-server', 'python-amqplib', 'lockfile-progs']
+PACKAGES = ['rabbitmq-server', 'python3-amqplib', 'lockfile-progs']
 
 VERSION_PACKAGE = 'rabbitmq-server'
 
@@ -191,6 +191,7 @@ def list_vhosts():
     """
     try:
         output = subprocess.check_output([RABBITMQ_CTL, 'list_vhosts'])
+        output = output.decode('utf-8')
 
         # NOTE(jamespage): Earlier rabbitmqctl versions append "...done"
         #                  to the output of list_vhosts
@@ -217,7 +218,7 @@ def create_vhost(vhost):
 
 def user_exists(user):
     cmd = [RABBITMQ_CTL, 'list_users']
-    out = subprocess.check_output(cmd)
+    out = subprocess.check_output(cmd).decode('utf-8')
     for line in out.split('\n')[1:]:
         _user = line.split('\t')[0]
         if _user == user:
@@ -367,7 +368,9 @@ def rabbitmqctl_normalized_output(*args):
     '''
     cmd = [RABBITMQ_CTL]
     cmd.extend(args)
-    out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+    out = (subprocess
+           .check_output(cmd, stderr=subprocess.STDOUT)
+           .decode('utf-8'))
 
     # Output is in Erlang External Term Format (ETF).  The amount of whitespace
     # (including newlines in the middle of data structures) in the output
@@ -377,7 +380,7 @@ def rabbitmqctl_normalized_output(*args):
     #
     # Removing whitespace will let our simple pattern matching work and is a
     # compromise.
-    return out.translate(None, ' \t\n')
+    return out.translate(str.maketrans(dict.fromkeys(' \t\n')))
 
 
 def wait_app():
@@ -397,7 +400,7 @@ def wait_app():
         status_set('blocked', 'RabbitMQ failed to start')
         try:
             status_cmd = ['rabbitmqctl', 'status']
-            log(subprocess.check_output(status_cmd), DEBUG)
+            log(subprocess.check_output(status_cmd).decode('utf-8'), DEBUG)
         except:
             pass
         raise ex
@@ -531,7 +534,7 @@ def forget_cluster_node(node):
         return
     try:
         rabbitmqctl('forget_cluster_node', node)
-    except subprocess.CalledProcessError, e:
+    except subprocess.CalledProcessError as e:
         if e.returncode == 2:
             log("Unable to remove node '{}' from cluster. It is either still "
                 "running or already removed. (Output: '{}')"
@@ -597,7 +600,7 @@ def execute(cmd, die=False, echo=False):
 
     def print_line(l):
         if echo:
-            print l.strip('\n')
+            print(l.strip('\n'))
             sys.stdout.flush()
 
     for l in iter(p.stdout.readline, ''):
@@ -726,7 +729,7 @@ def restart_map():
                     that should be restarted when file changes.
     '''
     _map = []
-    for f, ctxt in CONFIG_FILES.iteritems():
+    for f, ctxt in CONFIG_FILES.items():
         svcs = []
         for svc in ctxt['services']:
             svcs.append(svc)

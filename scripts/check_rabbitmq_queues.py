@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 # Copyright (C) 2011, 2012, 2014 Canonical
 # All Rights Reserved
@@ -22,9 +22,10 @@ def gen_stats(data_lines):
         try:
             vhost, queue, _, _, m_all, _ = line.split(None, 5)
         except ValueError:
-            print "ERROR: problem parsing the stats file"
+            print("ERROR: problem parsing the stats file")
             sys.exit(2)
-        assert m_all.isdigit(), "Message count is not a number: %r" % m_all
+        assert m_all.isdigit(), ("Message count is not a number: {0!r}"
+                                 .format(m_all))
         yield vhost, queue, int(m_all)
 
 
@@ -88,12 +89,12 @@ if __name__ == "__main__":
             warnings.append(
                 "%s in %s has %s messages" % (queue, vhost, message_no))
     if len(criticals) > 0:
-        print "CRITICAL: %s" % ", ".join(criticals)
+        print("CRITICAL: {}".format(", ".join(criticals)))
         sys.exit(2)
         # XXX: No warnings if there are criticals?
     elif len(warnings) > 0:
-        print "WARNING: %s" % ", ".join(warnings)
+        print("WARNING: {}".format(", ".join(warnings)))
         sys.exit(1)
     else:
-        print "OK"
+        print("OK")
         sys.exit(0)

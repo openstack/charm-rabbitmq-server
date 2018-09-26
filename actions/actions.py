@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 #
 # Copyright 2016 Canonical Ltd
 #
@@ -15,15 +15,22 @@
 # limitations under the License.
 
 import os
-import sys
 import re
+from subprocess import check_output, CalledProcessError
+import sys
 
-from subprocess import (
-    check_output,
-    CalledProcessError,
-)
 
-sys.path.append('hooks/')
+_path = os.path.dirname(os.path.realpath(__file__))
+_root = os.path.abspath(os.path.join(_path, '..'))
+_hooks = os.path.abspath(os.path.join(_path, '../hooks'))
+
+
+def _add_path(path):
+    if path not in sys.path:
+        sys.path.insert(1, path)
+
+_add_path(_root)
+_add_path(_hooks)
 
 from charmhelpers.core.hookenv import (
     action_fail,
@@ -33,7 +40,7 @@ from charmhelpers.core.hookenv import (
     leader_set,
 )
 
-from rabbit_utils import (
+from hooks.rabbit_utils import (
     ConfigRenderer,
     CONFIG_FILES,
     pause_unit_helper,
@@ -80,7 +87,7 @@ def check_queues(args):
     queue_pattern = re.compile('.*\t[0-9]*')
     try:
         queues = check_output(['rabbitmqctl', 'list_queues',
-                               '-p', vhost]).split('\n')
+                               '-p', vhost]).decode('utf-8').split('\n')
         result = list({queue: size for (queue, size) in
                        [i.split('\t') for i in queues
                         if re.search(queue_pattern, i)]

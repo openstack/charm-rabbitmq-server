@@ -12,7 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import sys
 
-sys.path.append('actions/')
-sys.path.append('hooks/')
+_path = os.path.dirname(os.path.realpath(__file__))
+_actions = os.path.abspath(os.path.join(_path, '../actions'))
+_hooks = os.path.abspath(os.path.join(_path, '../hooks'))
+
+
+def _add_path(path):
+    if path not in sys.path:
+        sys.path.insert(1, path)
+
+_add_path(_actions)
+_add_path(_hooks)
