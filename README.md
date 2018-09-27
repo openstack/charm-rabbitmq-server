@@ -25,8 +25,8 @@ To make use of AMQP services, simply relate other charms that support the rabbit
 
 When more than one unit of the charm is deployed the charm will bring up a
 native RabbitMQ cluster. The process of clustering the units together takes
-some time. Due to the nature of asynchronous hook execution it is possible
-client relationship hooks may be executed before the cluster is complete.
+some time. Due to the nature of asynchronous hook execution, it is possible
+client relationship hooks are executed before the cluster is complete.
 In some cases, this can lead to client charm errors.
 
 To guarantee client relation hooks will not be executed until clustering is
