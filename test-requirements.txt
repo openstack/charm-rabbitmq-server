@@ -1,16 +1,16 @@
 # The order of packages is significant, because pip processes them in the order
 # of appearance. Changing the order has an impact on the overall integration
 # process, which may cause wedges in the gate later.
+charm-tools>=2.4.4
 coverage>=3.6
 mock>=1.2
 flake8>=2.2.4,<=2.4.1
 os-testr>=0.4.1
-charm-tools>=2.0.0
-requests==2.6.0
+requests>=2.18.4
 # BEGIN: Amulet OpenStack Charm Helper Requirements
 # Liberty client lower constraints
-amulet>=1.14.3,<2.0
-bundletester>=0.6.1,<1.0
+amulet>=1.14.3,<2.0;python_version=='2.7'
+bundletester>=0.6.1,<1.0;python_version=='2.7'
 python-ceilometerclient>=1.5.0
 python-cinderclient>=1.4.0
 python-glanceclient>=1.1.0
@@ -22,6 +22,8 @@ python-openstackclient>=1.7.0
 python-swiftclient>=2.6.0
 pika>=0.10.0,<1.0
 distro-info
+git+https://github.com/juju/charm-helpers.git#egg=charmhelpers
 # END: Amulet OpenStack Charm Helper Requirements
 # NOTE: workaround for 14.04 pip/tox
 pytz
+pyudev  # for ceph-* charm unit tests (not mocked?)
