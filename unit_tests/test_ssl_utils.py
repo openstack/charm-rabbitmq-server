@@ -110,6 +110,19 @@ class TestSSLUtils(CharmTestCase):
             relation_data,
             {'ssl_port': '9090', 'ssl_ca': 'ZXh0X2Nh'})
 
+    @patch('ssl_utils.get_ssl_mode')
+    def test_get_ssl_mode_ssl_on_ext_ca_b64(self, get_ssl_mode):
+        get_ssl_mode.return_value = ('on', True)
+        test_config = {
+            'ssl_port': '9090',
+            'ssl_ca': 'ZXh0X2Nh'}
+        self.config.side_effect = lambda x: test_config[x]
+        relation_data = {}
+        ssl_utils.configure_client_ssl(relation_data)
+        self.assertEqual(
+            relation_data,
+            {'ssl_port': '9090', 'ssl_ca': 'ZXh0X2Nh'})
+
     @patch('ssl_utils.local_unit')
     @patch('ssl_utils.relation_ids')
     @patch('ssl_utils.relation_get')
