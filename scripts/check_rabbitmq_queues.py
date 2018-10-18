@@ -88,11 +88,11 @@ if __name__ == "__main__":
             warnings.append(
                 "%s in %s has %s messages" % (queue, vhost, message_no))
     if len(criticals) > 0:
-        print "CRITICALS: %s" % ", ".join(criticals)
+        print "CRITICAL: %s" % ", ".join(criticals)
         sys.exit(2)
         # XXX: No warnings if there are criticals?
     elif len(warnings) > 0:
-        print "WARNINGS: %s" % ", ".join(warnings)
+        print "WARNING: %s" % ", ".join(warnings)
         sys.exit(1)
     else:
         print "OK"
