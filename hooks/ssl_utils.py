@@ -23,7 +23,6 @@ from charmhelpers.core.hookenv import (
 )
 
 import base64
-import binascii
 
 
 def get_ssl_mode():
@@ -54,12 +53,10 @@ def configure_client_ssl(relation_data):
     relation_data['ssl_port'] = config('ssl_port')
     if external_ca:
         if config('ssl_ca'):
-            try:
-                base64.decodestring(config('ssl_ca'))
-                # No need to encode it, it is already encoded.
-                ssl_ca_encoded = config('ssl_ca')
-            except binascii.Error:
+            if "BEGIN CERTIFICATE" in config('ssl_ca'):
                 ssl_ca_encoded = base64.b64encode(config('ssl_ca'))
+            else:
+                ssl_ca_encoded = config('ssl_ca')
             relation_data['ssl_ca'] = ssl_ca_encoded
         return
     ca = ServiceCA.get_ca()
