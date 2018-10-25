@@ -804,12 +804,6 @@ def config_changed():
     rabbit.ConfigRenderer(
         rabbit.CONFIG_FILES).write_all()
 
-    # Only set values if this is the leader
-    if not is_leader():
-        return
-
-    rabbit.set_all_mirroring_queues(config('mirroring-queues'))
-
     if is_relation_made("ha"):
         ha_is_active_active = config("ha-vip-only")
 
@@ -823,6 +817,12 @@ def config_changed():
                     " skipping update nrpe checks")
     elif is_relation_made('nrpe-external-master'):
         update_nrpe_checks()
+
+    # Only set values if this is the leader
+    if not is_leader():
+        return
+
+    rabbit.set_all_mirroring_queues(config('mirroring-queues'))
 
     # Update cluster in case min-cluster-size has changed
     for rid in relation_ids('cluster'):
