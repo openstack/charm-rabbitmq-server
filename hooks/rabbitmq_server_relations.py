@@ -20,6 +20,7 @@ import shutil
 import sys
 import subprocess
 
+
 _path = os.path.dirname(os.path.realpath(__file__))
 _root = os.path.abspath(os.path.join(_path, '..'))
 
@@ -50,6 +51,7 @@ except ImportError:
                                'python3-requests'])
     import requests  # flake8: noqa
 
+import rabbit_net_utils
 import rabbit_utils as rabbit
 import ssl_utils
 from rabbitmq_context import SSL_CA_FILE
@@ -123,6 +125,10 @@ from charmhelpers.contrib.peerstorage import (
 )
 
 from charmhelpers.core.unitdata import kv
+
+import charmhelpers.contrib.openstack.cert_utils as ch_cert_utils
+
+import charmhelpers.contrib.network.ip as ch_ip
 
 hooks = Hooks()
 
@@ -256,7 +262,9 @@ def update_clients():
 @hooks.hook('amqp-relation-changed')
 def amqp_changed(relation_id=None, remote_unit=None):
     singleset = set(['username', 'vhost'])
-    host_addr = rabbit.get_unit_ip()
+    host_addr = ch_ip.get_relation_ip(
+        rabbit_net_utils.AMQP_INTERFACE,
+        cidr_network=config(rabbit_net_utils.AMQP_OVERRIDE_CONFIG))
 
     if rabbit.leader_node_is_ready():
         relation_settings = {'hostname': host_addr,
@@ -348,8 +356,9 @@ def cluster_joined(relation_id=None):
     relation_settings = {
         'hostname': rabbit.get_unit_hostname(),
         'private-address':
-            rabbit.get_unit_ip(config_override=rabbit.CLUSTER_OVERRIDE_CONFIG,
-                               interface=rabbit.CLUSTER_INTERFACE),
+            ch_ip.get_relation_ip(
+                rabbit_net_utils.CLUSTER_INTERFACE,
+                cidr_network=config(rabbit_net_utils.CLUSTER_OVERRIDE_CONFIG)),
     }
 
     relation_set(relation_id=relation_id,
@@ -752,10 +761,10 @@ def config_changed():
         return
 
     # Update hosts with this unit's information
-    rabbit.update_hosts_file(
-        {rabbit.get_unit_ip(config_override=rabbit.CLUSTER_OVERRIDE_CONFIG,
-                            interface=rabbit.CLUSTER_INTERFACE):
-                                rabbit.get_unit_hostname()})
+    cluster_ip = ch_ip.get_relation_ip(
+        rabbit_net_utils.CLUSTER_INTERFACE,
+        cidr_network=config(rabbit_net_utils.CLUSTER_OVERRIDE_CONFIG))
+    rabbit.update_hosts_file({cluster_ip: rabbit.get_unit_hostname()})
 
     # Add archive source if provided and not in the upgrade process
     if not leader_get("cluster_series_upgrading"):
@@ -885,6 +894,28 @@ def series_upgrade_complete():
     clear_unit_paused()
     clear_unit_upgrading()
     rabbit.resume_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES))
+
+
+@hooks.hook('certificates-relation-joined')
+def certs_joined(relation_id=None):
+    req = ch_cert_utils.CertRequest()
+    ip, target_cn = ssl_utils.get_unit_amqp_endpoint_data()
+    req.add_entry(None, target_cn, [ip])
+    relation_set(
+        relation_id=relation_id,
+        relation_settings=req.get_request())
+
+
+@hooks.hook('certificates-relation-changed')
+def certs_changed(relation_id=None, unit=None):
+    # Ensure Rabbit has restart before telling the clients as rabbit may
+    # take time to restart.
+    @rabbit.restart_on_change(rabbit.restart_map())
+    def render_and_restart():
+        rabbit.ConfigRenderer(
+            rabbit.CONFIG_FILES).write_all()
+    render_and_restart()
+    update_clients()
 
 
 @hooks.hook('update-status')

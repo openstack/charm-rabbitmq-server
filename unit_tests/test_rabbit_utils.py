@@ -44,11 +44,6 @@ TO_PATCH = [
     'leader_get',
     'config',
     'is_unit_paused_set',
-    'assert_charm_supports_ipv6',
-    'get_ipv6_addr',
-    'unit_get',
-    'network_get_primary_address',
-    'get_address_in_network',
 ]
 
 
@@ -625,61 +620,6 @@ class UtilsTests(CharmTestCase):
         self.is_leader.return_value = True
         mock_cluster_ready.return_value = True
         self.assertTrue(rabbit_utils.leader_node_is_ready())
-
-    def test_get_unit_ip(self):
-        AMQP_IP = '10.200.1.1'
-        OVERRIDE_AMQP_IP = '10.250.1.1'
-        CLUSTER_IP = '10.100.1.1'
-        OVERRIDE_CLUSTER_IP = '10.150.1.1'
-        IPV6_IP = '2001:DB8::1'
-        DEFAULT_IP = '172.16.1.1'
-        self.assert_charm_supports_ipv6.return_value = True
-        self.get_ipv6_addr.return_value = [IPV6_IP]
-        self.unit_get.return_value = DEFAULT_IP
-        self.get_address_in_network.return_value = DEFAULT_IP
-        self.network_get_primary_address.return_value = DEFAULT_IP
-
-        # IPv6
-        _config = {'prefer-ipv6': True,
-                   'cluster-network': '10.100.1.0/24',
-                   'access-network': '10.200.1.0/24'}
-        self.config.side_effect = lambda key: _config.get(key)
-        self.assertEqual(IPV6_IP, rabbit_utils.get_unit_ip())
-
-        # Overrides
-        _config = {'prefer-ipv6': False,
-                   'cluster-network': '10.100.1.0/24',
-                   'access-network': '10.200.1.0/24'}
-        self.config.side_effect = lambda key: _config.get(key)
-
-        self.get_address_in_network.return_value = OVERRIDE_AMQP_IP
-        self.assertEqual(OVERRIDE_AMQP_IP, rabbit_utils.get_unit_ip())
-
-        self.get_address_in_network.return_value = OVERRIDE_CLUSTER_IP
-        self.assertEqual(OVERRIDE_CLUSTER_IP,
-                         rabbit_utils.get_unit_ip(
-                             config_override='cluster-network',
-                             interface='cluster'))
-
-        # Network-get calls
-        _config = {'prefer-ipv6': False,
-                   'cluster-network': None,
-                   'access-network': None}
-        self.config.side_effect = lambda key: _config.get(key)
-
-        self.network_get_primary_address.return_value = AMQP_IP
-        self.assertEqual(AMQP_IP, rabbit_utils.get_unit_ip())
-
-        self.network_get_primary_address.return_value = CLUSTER_IP
-        self.assertEqual(CLUSTER_IP,
-                         rabbit_utils.get_unit_ip(
-                             config_override='cluster-network',
-                             interface='cluster'))
-
-        # Default
-        self.network_get_primary_address.return_value = AMQP_IP
-        self.network_get_primary_address.side_effect = NotImplementedError
-        self.assertEqual(DEFAULT_IP, rabbit_utils.get_unit_ip())
 
     @mock.patch.object(rabbit_utils, 'get_upstream_version')
     def test_get_managment_port_legacy(self, mock_get_upstream_version):

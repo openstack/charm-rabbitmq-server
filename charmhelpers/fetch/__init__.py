@@ -84,6 +84,7 @@ module = "charmhelpers.fetch.%s" % __platform__
 fetch = importlib.import_module(module)
 
 filter_installed_packages = fetch.filter_installed_packages
+filter_missing_packages = fetch.filter_missing_packages
 install = fetch.apt_install
 upgrade = fetch.apt_upgrade
 update = _fetch_update = fetch.apt_update
@@ -96,6 +97,7 @@ if __platform__ == "ubuntu":
     apt_update = fetch.apt_update
     apt_upgrade = fetch.apt_upgrade
     apt_purge = fetch.apt_purge
+    apt_autoremove = fetch.apt_autoremove
     apt_mark = fetch.apt_mark
     apt_hold = fetch.apt_hold
     apt_unhold = fetch.apt_unhold

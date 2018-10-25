@@ -28,6 +28,7 @@ import json
 import re
 
 from charmhelpers.core.hookenv import (
+    expected_related_units,
     log,
     relation_set,
     charm_name,
@@ -110,12 +111,17 @@ def assert_charm_supports_dns_ha():
 def expect_ha():
     """ Determine if the unit expects to be in HA
 
-    Check for VIP or dns-ha settings which indicate the unit should expect to
-    be related to hacluster.
+    Check juju goal-state if ha relation is expected, check for VIP or dns-ha
+    settings which indicate the unit should expect to be related to hacluster.
 
     @returns boolean
     """
-    return config('vip') or config('dns-ha')
+    ha_related_units = []
+    try:
+        ha_related_units = list(expected_related_units(reltype='ha'))
+    except (NotImplementedError, KeyError):
+        pass
+    return len(ha_related_units) > 0 or config('vip') or config('dns-ha')
 
 
 def generate_ha_relation_data(service):

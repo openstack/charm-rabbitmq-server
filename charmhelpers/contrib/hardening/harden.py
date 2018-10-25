@@ -27,6 +27,8 @@ from charmhelpers.contrib.hardening.ssh.checks import run_ssh_checks
 from charmhelpers.contrib.hardening.mysql.checks import run_mysql_checks
 from charmhelpers.contrib.hardening.apache.checks import run_apache_checks
 
+_DISABLE_HARDENING_FOR_UNIT_TEST = False
+
 
 def harden(overrides=None):
     """Hardening decorator.
@@ -47,16 +49,28 @@ def harden(overrides=None):
                       provided with 'harden' config.
     :returns: Returns value returned by decorated function once executed.
     """
+    if overrides is None:
+        overrides = []
+
     def _harden_inner1(f):
-        log("Hardening function '%s'" % (f.__name__), level=DEBUG)
+        # As this has to be py2.7 compat, we can't use nonlocal.  Use a trick
+        # to capture the dictionary that can then be updated.
+        _logged = {'done': False}
 
         def _harden_inner2(*args, **kwargs):
+            # knock out hardening via a config var; normally it won't get
+            # disabled.
+            if _DISABLE_HARDENING_FOR_UNIT_TEST:
+                return f(*args, **kwargs)
+            if not _logged['done']:
+                log("Hardening function '%s'" % (f.__name__), level=DEBUG)
+                _logged['done'] = True
             RUN_CATALOG = OrderedDict([('os', run_os_checks),
                                        ('ssh', run_ssh_checks),
                                        ('mysql', run_mysql_checks),
                                        ('apache', run_apache_checks)])
 
-            enabled = overrides or (config("harden") or "").split()
+            enabled = overrides[:] or (config("harden") or "").split()
             if enabled:
                 modules_to_run = []
                 # modules will always be performed in the following order

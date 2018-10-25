@@ -26,12 +26,12 @@ from charmhelpers.core.hookenv import (
 
 __platform__ = get_platform()
 if __platform__ == "ubuntu":
-    from charmhelpers.core.kernel_factory.ubuntu import (
+    from charmhelpers.core.kernel_factory.ubuntu import (  # NOQA:F401
         persistent_modprobe,
         update_initramfs,
     )  # flake8: noqa -- ignore F401 for this import
 elif __platform__ == "centos":
-    from charmhelpers.core.kernel_factory.centos import (
+    from charmhelpers.core.kernel_factory.centos import (  # NOQA:F401
         persistent_modprobe,
         update_initramfs,
     )  # flake8: noqa -- ignore F401 for this import

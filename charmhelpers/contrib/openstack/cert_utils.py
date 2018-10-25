@@ -25,7 +25,9 @@ from charmhelpers.core.hookenv import (
     local_unit,
     network_get_primary_address,
     config,
+    related_units,
     relation_get,
+    relation_ids,
     unit_get,
     NoNetworkBinding,
     log,
@@ -225,3 +227,49 @@ def process_certificates(service_name, relation_id, unit,
         create_ip_cert_links(
             ssl_dir,
             custom_hostname_link=custom_hostname_link)
+
+
+def get_requests_for_local_unit(relation_name=None):
+    """Extract any certificates data targeted at this unit down relation_name.
+
+    :param relation_name: str Name of relation to check for data.
+    :returns: List of bundles of certificates.
+    :rtype: List of dicts
+    """
+    local_name = local_unit().replace('/', '_')
+    raw_certs_key = '{}.processed_requests'.format(local_name)
+    relation_name = relation_name or 'certificates'
+    bundles = []
+    for rid in relation_ids(relation_name):
+        for unit in related_units(rid):
+            data = relation_get(rid=rid, unit=unit)
+            if data.get(raw_certs_key):
+                bundles.append({
+                    'ca': data['ca'],
+                    'chain': data.get('chain'),
+                    'certs': json.loads(data[raw_certs_key])})
+    return bundles
+
+
+def get_bundle_for_cn(cn, relation_name=None):
+    """Extract certificates for the given cn.
+
+    :param cn: str Canonical Name on certificate.
+    :param relation_name: str Relation to check for certificates down.
+    :returns: Dictionary of certificate data,
+    :rtype: dict.
+    """
+    entries = get_requests_for_local_unit(relation_name)
+    cert_bundle = {}
+    for entry in entries:
+        for _cn, bundle in entry['certs'].items():
+            if _cn == cn:
+                cert_bundle = {
+                    'cert': bundle['cert'],
+                    'key': bundle['key'],
+                    'chain': entry['chain'],
+                    'ca': entry['ca']}
+                break
+        if cert_bundle:
+            break
+    return cert_bundle

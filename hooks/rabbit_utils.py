@@ -34,7 +34,6 @@ from charmhelpers.core.templating import render
 from charmhelpers.contrib.openstack.utils import (
     _determine_os_workload_status,
     get_hostname,
-    get_host_ip,
     pause_unit,
     resume_unit,
     is_unit_paused_set,
@@ -42,11 +41,6 @@ from charmhelpers.contrib.openstack.utils import (
 
 from charmhelpers.contrib.hahelpers.cluster import (
     distributed_wait,
-)
-
-from charmhelpers.contrib.network.ip import (
-    get_ipv6_addr,
-    get_address_in_network,
 )
 
 from charmhelpers.core.hookenv import (
@@ -60,12 +54,10 @@ from charmhelpers.core.hookenv import (
     service_name,
     status_set,
     cached,
-    unit_get,
     relation_set,
     relation_get,
     application_version_set,
     config,
-    network_get_primary_address,
     is_leader,
     leader_get,
     local_unit,
@@ -75,11 +67,9 @@ from charmhelpers.core.host import (
     pwgen,
     mkdir,
     write_file,
-    lsb_release,
     cmp_pkgrevno,
     path_hash,
     service as system_service,
-    CompareHostReleases,
 )
 
 from charmhelpers.contrib.peerstorage import (
@@ -108,10 +98,6 @@ ENABLED_PLUGINS = '/etc/rabbitmq/enabled_plugins'
 RABBIT_USER = 'rabbitmq'
 LIB_PATH = '/var/lib/rabbitmq/'
 HOSTS_FILE = '/etc/hosts'
-AMQP_OVERRIDE_CONFIG = 'access-network'
-CLUSTER_OVERRIDE_CONFIG = 'cluster-network'
-AMQP_INTERFACE = 'amqp'
-CLUSTER_INTERFACE = 'cluster'
 
 _named_passwd = '/var/lib/charm/{}/{}.passwd'
 _local_named_passwd = '/var/lib/charm/{}/{}.local_passwd'
@@ -713,14 +699,6 @@ def update_hosts_file(map):
     os.chmod(HOSTS_FILE, 0o644)
 
 
-def assert_charm_supports_ipv6():
-    """Check whether we are able to support charms ipv6."""
-    _release = lsb_release()['DISTRIB_CODENAME'].lower()
-    if CompareHostReleases(_release) < "trusty":
-        raise Exception("IPv6 is not supported in the charms for Ubuntu "
-                        "versions less than Trusty 14.04")
-
-
 def restart_map():
     '''Determine the correct resource map to be passed to
     charmhelpers.core.restart_on_change() based on the services configured.
@@ -968,41 +946,6 @@ def _pause_resume_helper(f, configs):
     f(assess_status_func(configs),
       services=services(),
       ports=None)
-
-
-def get_unit_ip(config_override=AMQP_OVERRIDE_CONFIG,
-                interface=AMQP_INTERFACE):
-    """Return this unit's IP.
-    Future proof to allow for network spaces or other more complex addresss
-    selection.
-
-    @param config_override: string name of the config option for network
-           override. Default to amqp-network
-    @param interface: string name of the relation. Default to amqp.
-    @raises Exception if prefer-ipv6 is configured but IPv6 unsupported.
-    @returns IPv6 or IPv4 address
-    """
-
-    fallback = get_host_ip(unit_get('private-address'))
-    if config('prefer-ipv6'):
-        assert_charm_supports_ipv6()
-        return get_ipv6_addr()[0]
-    elif config(config_override):
-        # NOTE(jamespage)
-        # override private-address settings if access-network is
-        # configured and an appropriate network interface is
-        # configured.
-        return get_address_in_network(config(config_override),
-                                      fallback)
-    else:
-        # NOTE(jamespage)
-        # Try using network spaces if access-network is not
-        # configured, fallback to private address if not
-        # supported
-        try:
-            return network_get_primary_address(interface)
-        except NotImplementedError:
-            return fallback
 
 
 def get_unit_hostname():

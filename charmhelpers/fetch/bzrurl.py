@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-from subprocess import check_call
+from subprocess import STDOUT, check_output
 from charmhelpers.fetch import (
     BaseFetchHandler,
     UnhandledSource,
@@ -55,7 +55,7 @@ class BzrUrlFetchHandler(BaseFetchHandler):
             cmd = ['bzr', 'branch']
             cmd += cmd_opts
             cmd += [source, dest]
-        check_call(cmd)
+        check_output(cmd, stderr=STDOUT)
 
     def install(self, source, dest=None, revno=None):
         url_parts = self.parse_url(source)

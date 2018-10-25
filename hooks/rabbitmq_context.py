@@ -131,36 +131,42 @@ class RabbitMQSSLContext(object):
         ssl_enabled = False, ssl = on -> ssl enabled
         """
         ssl_mode, external_ca = ssl_utils.get_ssl_mode()
-
         ctxt = {
             'ssl_mode': ssl_mode,
         }
-
         if ssl_mode == 'off':
             close_port(config('ssl_port'))
             ssl_utils.reconfigure_client_ssl()
             return ctxt
 
-        ssl_key = convert_from_base64(config('ssl_key'))
-        ssl_cert = convert_from_base64(config('ssl_cert'))
-        ssl_ca = convert_from_base64(config('ssl_ca'))
-        ssl_port = config('ssl_port')
+        if ssl_mode == ssl_utils.CERTS_FROM_RELATION:
+            relation_certs = ssl_utils.get_relation_cert_data()
+            ctxt['ssl_mode'] = 'on'
+            ssl_key = convert_from_base64(relation_certs['key'])
+            ssl_cert = convert_from_base64(relation_certs['cert'])
+            ssl_ca = convert_from_base64(relation_certs['ca'])
+            ssl_port = config('ssl_port')
+        else:
 
-        # If external managed certs then we need all the fields.
-        if (ssl_mode in ('on', 'only') and any((ssl_key, ssl_cert)) and
-                not all((ssl_key, ssl_cert))):
-            log('If ssl_key or ssl_cert are specified both are required.',
-                level=ERROR)
-            sys.exit(1)
+            ssl_key = convert_from_base64(config('ssl_key'))
+            ssl_cert = convert_from_base64(config('ssl_cert'))
+            ssl_ca = convert_from_base64(config('ssl_ca'))
+            ssl_port = config('ssl_port')
 
-        if not external_ca:
-            ssl_cert, ssl_key, ssl_ca = ServiceCA.get_service_cert()
+            # If external managed certs then we need all the fields.
+            if (ssl_mode in ('on', 'only') and any((ssl_key, ssl_cert)) and
+                    not all((ssl_key, ssl_cert))):
+                log('If ssl_key or ssl_cert are specified both are required.',
+                    level=ERROR)
+                sys.exit(1)
+
+            if not external_ca:
+                ssl_cert, ssl_key, ssl_ca = ServiceCA.get_service_cert()
 
         ctxt.update(self.enable_ssl(
             ssl_key, ssl_cert, ssl_port, ssl_ca,
             ssl_only=(ssl_mode == "only"), ssl_client=False
         ))
-
         ssl_utils.reconfigure_client_ssl(True)
         open_port(ssl_port)
 

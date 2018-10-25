@@ -618,12 +618,12 @@ class OpenStackAmuletUtils(AmuletUtils):
         return self.authenticate_keystone(keystone_ip, user, password,
                                           project_name=tenant)
 
-    def authenticate_glance_admin(self, keystone):
+    def authenticate_glance_admin(self, keystone, force_v1_client=False):
         """Authenticates admin user with glance."""
         self.log.debug('Authenticating glance admin...')
         ep = keystone.service_catalog.url_for(service_type='image',
                                               interface='adminURL')
-        if keystone.session:
+        if not force_v1_client and keystone.session:
             return glance_clientv2.Client("2", session=keystone.session)
         else:
             return glance_client.Client(ep, token=keystone.auth_token)
@@ -680,18 +680,30 @@ class OpenStackAmuletUtils(AmuletUtils):
             nova.flavors.create(name, ram, vcpus, disk, flavorid,
                                 ephemeral, swap, rxtx_factor, is_public)
 
-    def create_cirros_image(self, glance, image_name):
-        """Download the latest cirros image and upload it to glance,
-        validate and return a resource pointer.
+    def glance_create_image(self, glance, image_name, image_url,
+                            download_dir='tests',
+                            hypervisor_type=None,
+                            disk_format='qcow2',
+                            architecture='x86_64',
+                            container_format='bare'):
+        """Download an image and upload it to glance, validate its status
+        and return an image object pointer. KVM defaults, can override for
+        LXD.
 
-        :param glance: pointer to authenticated glance connection
+        :param glance: pointer to authenticated glance api connection
         :param image_name: display name for new image
+        :param image_url: url to retrieve
+        :param download_dir: directory to store downloaded image file
+        :param hypervisor_type: glance image hypervisor property
+        :param disk_format: glance image disk format
+        :param architecture: glance image architecture property
+        :param container_format: glance image container format
         :returns: glance image pointer
         """
-        self.log.debug('Creating glance cirros image '
-                       '({})...'.format(image_name))
+        self.log.debug('Creating glance image ({}) from '
+                       '{}...'.format(image_name, image_url))
 
-        # Download cirros image
+        # Download image
         http_proxy = os.getenv('AMULET_HTTP_PROXY')
         self.log.debug('AMULET_HTTP_PROXY: {}'.format(http_proxy))
         if http_proxy:
@@ -700,31 +712,34 @@ class OpenStackAmuletUtils(AmuletUtils):
         else:
             opener = urllib.FancyURLopener()
 
-        f = opener.open('http://download.cirros-cloud.net/version/released')
-        version = f.read().strip()
-        cirros_img = 'cirros-{}-x86_64-disk.img'.format(version)
-        local_path = os.path.join('tests', cirros_img)
-
-        if not os.path.exists(local_path):
-            cirros_url = 'http://{}/{}/{}'.format('download.cirros-cloud.net',
-                                                  version, cirros_img)
-            opener.retrieve(cirros_url, local_path)
-        f.close()
+        abs_file_name = os.path.join(download_dir, image_name)
+        if not os.path.exists(abs_file_name):
+            opener.retrieve(image_url, abs_file_name)
 
         # Create glance image
+        glance_properties = {
+            'architecture': architecture,
+        }
+        if hypervisor_type:
+            glance_properties['hypervisor_type'] = hypervisor_type
+        # Create glance image
         if float(glance.version) < 2.0:
-            with open(local_path) as fimage:
-                image = glance.images.create(name=image_name, is_public=True,
-                                             disk_format='qcow2',
-                                             container_format='bare',
-                                             data=fimage)
+            with open(abs_file_name) as f:
+                image = glance.images.create(
+                    name=image_name,
+                    is_public=True,
+                    disk_format=disk_format,
+                    container_format=container_format,
+                    properties=glance_properties,
+                    data=f)
         else:
             image = glance.images.create(
                 name=image_name,
-                disk_format="qcow2",
                 visibility="public",
-                container_format="bare")
-            glance.images.upload(image.id, open(local_path, 'rb'))
+                disk_format=disk_format,
+                container_format=container_format)
+            glance.images.upload(image.id, open(abs_file_name, 'rb'))
+            glance.images.update(image.id, **glance_properties)
 
         # Wait for image to reach active status
         img_id = image.id
@@ -753,14 +768,53 @@ class OpenStackAmuletUtils(AmuletUtils):
                         val_img_stat, val_img_cfmt, val_img_dfmt))
 
         if val_img_name == image_name and val_img_stat == 'active' \
-                and val_img_pub is True and val_img_cfmt == 'bare' \
-                and val_img_dfmt == 'qcow2':
+                and val_img_pub is True and val_img_cfmt == container_format \
+                and val_img_dfmt == disk_format:
             self.log.debug(msg_attr)
         else:
-            msg = ('Volume validation failed, {}'.format(msg_attr))
+            msg = ('Image validation failed, {}'.format(msg_attr))
             amulet.raise_status(amulet.FAIL, msg=msg)
 
         return image
+
+    def create_cirros_image(self, glance, image_name, hypervisor_type=None):
+        """Download the latest cirros image and upload it to glance,
+        validate and return a resource pointer.
+
+        :param glance: pointer to authenticated glance connection
+        :param image_name: display name for new image
+        :param hypervisor_type: glance image hypervisor property
+        :returns: glance image pointer
+        """
+        # /!\ DEPRECATION WARNING
+        self.log.warn('/!\\ DEPRECATION WARNING:  use '
+                      'glance_create_image instead of '
+                      'create_cirros_image.')
+
+        self.log.debug('Creating glance cirros image '
+                       '({})...'.format(image_name))
+
+        # Get cirros image URL
+        http_proxy = os.getenv('AMULET_HTTP_PROXY')
+        self.log.debug('AMULET_HTTP_PROXY: {}'.format(http_proxy))
+        if http_proxy:
+            proxies = {'http': http_proxy}
+            opener = urllib.FancyURLopener(proxies)
+        else:
+            opener = urllib.FancyURLopener()
+
+        f = opener.open('http://download.cirros-cloud.net/version/released')
+        version = f.read().strip()
+        cirros_img = 'cirros-{}-x86_64-disk.img'.format(version)
+        cirros_url = 'http://{}/{}/{}'.format('download.cirros-cloud.net',
+                                              version, cirros_img)
+        f.close()
+
+        return self.glance_create_image(
+            glance,
+            image_name,
+            cirros_url,
+            hypervisor_type=hypervisor_type)
 
     def delete_image(self, glance, image):
         """Delete the specified image."""
@@ -1012,6 +1066,9 @@ class OpenStackAmuletUtils(AmuletUtils):
                    '{}'.format(sentry_unit.info['unit_name'],
                                cmd, code, output))
             amulet.raise_status(amulet.FAIL, msg=msg)
+
+        # For mimic ceph osd lspools output
+        output = output.replace("\n", ",")
 
         # Example output: 0 data,1 metadata,2 rbd,3 cinder,4 glance,
         for pool in str(output).split(','):

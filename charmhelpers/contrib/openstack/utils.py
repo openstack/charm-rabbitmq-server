@@ -186,7 +186,7 @@ SWIFT_CODENAMES = OrderedDict([
     ('queens',
         ['2.16.0', '2.17.0']),
     ('rocky',
-        ['2.18.0']),
+        ['2.18.0', '2.19.0']),
 ])
 
 # >= Liberty version->codename mapping
@@ -375,7 +375,7 @@ def get_swift_codename(version):
         return codenames[0]
 
     # NOTE: fallback - attempt to match with just major.minor version
-    match = re.match('^(\d+)\.(\d+)', version)
+    match = re.match(r'^(\d+)\.(\d+)', version)
     if match:
         major_minor_version = match.group(0)
         for codename, versions in six.iteritems(SWIFT_CODENAMES):
@@ -395,7 +395,7 @@ def get_os_codename_package(package, fatal=True):
             out = subprocess.check_output(cmd)
             if six.PY3:
                 out = out.decode('UTF-8')
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             return None
         lines = out.split('\n')
         for line in lines:
@@ -427,11 +427,11 @@ def get_os_codename_package(package, fatal=True):
     vers = apt.upstream_version(pkg.current_ver.ver_str)
     if 'swift' in pkg.name:
         # Fully x.y.z match for swift versions
-        match = re.match('^(\d+)\.(\d+)\.(\d+)', vers)
+        match = re.match(r'^(\d+)\.(\d+)\.(\d+)', vers)
     else:
         # x.y match only for 20XX.X
         # and ignore patch level for other packages
-        match = re.match('^(\d+)\.(\d+)', vers)
+        match = re.match(r'^(\d+)\.(\d+)', vers)
 
     if match:
         vers = match.group(0)
@@ -1450,20 +1450,33 @@ def pausable_restart_on_change(restart_map, stopstart=False,
 
     see core.utils.restart_on_change() for more details.
 
+    Note restart_map can be a callable, in which case, restart_map is only
+    evaluated at runtime.  This means that it is lazy and the underlying
+    function won't be called if the decorated function is never called.  Note,
+    retains backwards compatibility for passing a non-callable dictionary.
+
     @param f: the function to decorate
-    @param restart_map: the restart map {conf_file: [services]}
+    @param restart_map: (optionally callable, which then returns the
+        restart_map) the restart map {conf_file: [services]}
     @param stopstart: DEFAULT false; whether to stop, start or just restart
     @returns decorator to use a restart_on_change with pausability
     """
     def wrap(f):
+        # py27 compatible nonlocal variable.  When py3 only, replace with
+        # nonlocal keyword
+        __restart_map_cache = {'cache': None}
+
         @functools.wraps(f)
         def wrapped_f(*args, **kwargs):
             if is_unit_paused_set():
                 return f(*args, **kwargs)
+            if __restart_map_cache['cache'] is None:
+                __restart_map_cache['cache'] = restart_map() \
+                    if callable(restart_map) else restart_map
             # otherwise, normal restart_on_change functionality
             return restart_on_change_helper(
-                (lambda: f(*args, **kwargs)), restart_map, stopstart,
-                restart_functions)
+                (lambda: f(*args, **kwargs)), __restart_map_cache['cache'],
+                stopstart, restart_functions)
         return wrapped_f
     return wrap
 
@@ -1733,3 +1746,31 @@ def is_unit_upgrading_set():
             return not(not(kv.get('unit-upgrading')))
     except Exception:
         return False
+
+
+def series_upgrade_prepare(pause_unit_helper=None, configs=None):
+    """ Run common series upgrade prepare tasks.
+
+    :param pause_unit_helper: function: Function to pause unit
+    :param configs: OSConfigRenderer object: Configurations
+    :returns None:
+    """
+    set_unit_upgrading()
+    if pause_unit_helper and configs:
+        if not is_unit_paused_set():
+            pause_unit_helper(configs)
+
+
+def series_upgrade_complete(resume_unit_helper=None, configs=None):
+    """ Run common series upgrade complete tasks.
+
+    :param resume_unit_helper: function: Function to resume unit
+    :param configs: OSConfigRenderer object: Configurations
+    :returns None:
+    """
+    clear_unit_paused()
+    clear_unit_upgrading()
+    if configs:
+        configs.write_all()
+        if resume_unit_helper:
+            resume_unit_helper(configs)

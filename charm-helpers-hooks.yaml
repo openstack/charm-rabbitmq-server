@@ -11,6 +11,7 @@ include:
     - contrib.peerstorage
     - contrib.python.packages
     - contrib.ssl
+    - contrib.hahelpers.apache
     - contrib.hahelpers.cluster
     - contrib.network.ip
     - contrib.hardening|inc=*

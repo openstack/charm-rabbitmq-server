@@ -52,7 +52,38 @@ class TestSSLUtils(CharmTestCase):
     def setUp(self):
         super(TestSSLUtils, self).setUp(ssl_utils, TO_PATCH)
 
-    def test_get_ssl_mode_off(self):
+    @patch('ssl_utils.get_hostname')
+    @patch('ssl_utils.get_relation_ip')
+    def test_get_unit_amqp_endpoint_data(self, get_relation_ip, get_hostname):
+        self.config.return_value = '10.0.0.0/24'
+        get_relation_ip.return_value = '10.0.0.10'
+        get_hostname.return_value = 'myhost'
+        self.assertEqual(
+            ssl_utils.get_unit_amqp_endpoint_data(),
+            ('10.0.0.10', 'myhost'))
+        get_relation_ip.assert_called_once_with(
+            'amqp',
+            cidr_network='10.0.0.0/24')
+        get_hostname.assert_called_once_with('10.0.0.10')
+
+    @patch('ssl_utils.ch_cert_utils.get_bundle_for_cn')
+    @patch('ssl_utils.get_unit_amqp_endpoint_data')
+    def test_get_relation_cert_data(self, get_unit_amqp_endpoint_data,
+                                    get_bundle_for_cn):
+        get_unit_amqp_endpoint_data.return_value = ('10.0.0.10',
+                                                    'juju-345.lcd')
+        get_bundle_for_cn.return_value = {
+            'ca': 'vaultca',
+            'cert': 'vaultcert',
+            'key': 'vaultkey'}
+        self.assertEqual(
+            ssl_utils.get_relation_cert_data(),
+            {'ca': 'vaultca', 'cert': 'vaultcert', 'key': 'vaultkey'})
+        get_bundle_for_cn.assert_called_once_with('juju-345.lcd')
+
+    @patch('ssl_utils.get_relation_cert_data')
+    def test_get_ssl_mode_off(self, get_relation_cert_data):
+        get_relation_cert_data.return_value = {}
         test_config = {
             'ssl': 'off',
             'ssl_enabled': False,
@@ -64,7 +95,9 @@ class TestSSLUtils(CharmTestCase):
             ssl_utils.get_ssl_mode(),
             ('off', False))
 
-    def test_get_ssl_enabled_true(self):
+    @patch('ssl_utils.get_relation_cert_data')
+    def test_get_ssl_enabled_true(self, get_relation_cert_data):
+        get_relation_cert_data.return_value = {}
         test_config = {
             'ssl': 'off',
             'ssl_enabled': True,
@@ -76,7 +109,9 @@ class TestSSLUtils(CharmTestCase):
             ssl_utils.get_ssl_mode(),
             ('on', False))
 
-    def test_get_ssl_enabled_false(self):
+    @patch('ssl_utils.get_relation_cert_data')
+    def test_get_ssl_enabled_false(self, get_relation_cert_data):
+        get_relation_cert_data.return_value = {}
         test_config = {
             'ssl': 'on',
             'ssl_enabled': False,
@@ -88,7 +123,9 @@ class TestSSLUtils(CharmTestCase):
             ssl_utils.get_ssl_mode(),
             ('on', False))
 
-    def test_get_ssl_enabled_external_ca(self):
+    @patch('ssl_utils.get_relation_cert_data')
+    def test_get_ssl_enabled_external_ca(self, get_relation_cert_data):
+        get_relation_cert_data.return_value = {}
         test_config = {
             'ssl': 'on',
             'ssl_enabled': False,
@@ -100,9 +137,21 @@ class TestSSLUtils(CharmTestCase):
             ssl_utils.get_ssl_mode(),
             ('on', True))
 
+    @patch('ssl_utils.get_relation_cert_data')
+    def test_get_ssl_enabled_relation_certs(self, get_relation_cert_data):
+        get_relation_cert_data.return_value = {
+            'cert': 'vaultcert',
+            'key': 'vaultkey',
+            'ca': 'vaultca'}
+        self.assertEqual(
+            ssl_utils.get_ssl_mode(),
+            ('certs-relation', True))
+
+    @patch('ssl_utils.get_relation_cert_data')
     @patch('ssl_utils.get_ssl_mode')
-    def test_get_ssl_mode_ssl_off(self, get_ssl_mode):
+    def test_get_ssl_mode_ssl_off(self, get_ssl_mode, get_relation_cert_data):
         get_ssl_mode.return_value = ('off', False)
+        get_relation_cert_data.return_value = {}
         relation_data = {}
         ssl_utils.configure_client_ssl(relation_data)
         self.assertEqual(relation_data, {})

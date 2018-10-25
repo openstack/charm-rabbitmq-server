@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-from subprocess import check_call, CalledProcessError
+from subprocess import check_output, CalledProcessError, STDOUT
 from charmhelpers.fetch import (
     BaseFetchHandler,
     UnhandledSource,
@@ -50,7 +50,7 @@ class GitUrlFetchHandler(BaseFetchHandler):
             cmd = ['git', 'clone', source, dest, '--branch', branch]
             if depth:
                 cmd.extend(['--depth', depth])
-        check_call(cmd)
+        check_output(cmd, stderr=STDOUT)
 
     def install(self, source, branch="master", dest=None, depth=None):
         url_parts = self.parse_url(source)

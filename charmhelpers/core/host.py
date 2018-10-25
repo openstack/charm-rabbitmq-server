@@ -34,13 +34,13 @@ import six
 
 from contextlib import contextmanager
 from collections import OrderedDict
-from .hookenv import log, DEBUG, local_unit
+from .hookenv import log, INFO, DEBUG, local_unit, charm_name
 from .fstab import Fstab
 from charmhelpers.osplatform import get_platform
 
 __platform__ = get_platform()
 if __platform__ == "ubuntu":
-    from charmhelpers.core.host_factory.ubuntu import (
+    from charmhelpers.core.host_factory.ubuntu import (  # NOQA:F401
         service_available,
         add_new_group,
         lsb_release,
@@ -48,7 +48,7 @@ if __platform__ == "ubuntu":
         CompareHostReleases,
     )  # flake8: noqa -- ignore F401 for this import
 elif __platform__ == "centos":
-    from charmhelpers.core.host_factory.centos import (
+    from charmhelpers.core.host_factory.centos import (  # NOQA:F401
         service_available,
         add_new_group,
         lsb_release,
@@ -57,6 +57,7 @@ elif __platform__ == "centos":
     )  # flake8: noqa -- ignore F401 for this import
 
 UPDATEDB_PATH = '/etc/updatedb.conf'
+
 
 def service_start(service_name, **kwargs):
     """Start a system service.
@@ -287,8 +288,8 @@ def service_running(service_name, **kwargs):
                 for key, value in six.iteritems(kwargs):
                     parameter = '%s=%s' % (key, value)
                     cmd.append(parameter)
-                output = subprocess.check_output(cmd,
-                    stderr=subprocess.STDOUT).decode('UTF-8')
+                output = subprocess.check_output(
+                    cmd, stderr=subprocess.STDOUT).decode('UTF-8')
             except subprocess.CalledProcessError:
                 return False
             else:
@@ -442,7 +443,7 @@ def add_user_to_group(username, group):
 
 
 def chage(username, lastday=None, expiredate=None, inactive=None,
-           mindays=None, maxdays=None, root=None, warndays=None):
+          mindays=None, maxdays=None, root=None, warndays=None):
     """Change user password expiry information
 
     :param str username: User to update
@@ -482,7 +483,9 @@ def chage(username, lastday=None, expiredate=None, inactive=None,
     cmd.append(username)
     subprocess.check_call(cmd)
 
+
 remove_password_expiry = functools.partial(chage, expiredate='-1', inactive='-1', mindays='0', maxdays='-1')
+
 
 def rsync(from_path, to_path, flags='-r', options=None, timeout=None):
     """Replicate the contents of a path"""
@@ -535,13 +538,15 @@ def write_file(path, content, owner='root', group='root', perms=0o444):
     # lets see if we can grab the file and compare the context, to avoid doing
     # a write.
     existing_content = None
-    existing_uid, existing_gid = None, None
+    existing_uid, existing_gid, existing_perms = None, None, None
     try:
         with open(path, 'rb') as target:
             existing_content = target.read()
         stat = os.stat(path)
-        existing_uid, existing_gid = stat.st_uid, stat.st_gid
-    except:
+        existing_uid, existing_gid, existing_perms = (
+            stat.st_uid, stat.st_gid, stat.st_mode
+        )
+    except Exception:
         pass
     if content != existing_content:
         log("Writing file {} {}:{} {:o}".format(path, owner, group, perms),
@@ -554,7 +559,7 @@ def write_file(path, content, owner='root', group='root', perms=0o444):
             target.write(content)
         return
     # the contents were the same, but we might still need to change the
-    # ownership.
+    # ownership or permissions.
     if existing_uid != uid:
         log("Changing uid on already existing content: {} -> {}"
             .format(existing_uid, uid), level=DEBUG)
@@ -563,6 +568,10 @@ def write_file(path, content, owner='root', group='root', perms=0o444):
         log("Changing gid on already existing content: {} -> {}"
             .format(existing_gid, gid), level=DEBUG)
         os.chown(path, -1, gid)
+    if existing_perms != perms:
+        log("Changing permissions on existing content: {} -> {}"
+            .format(existing_perms, perms), level=DEBUG)
+        os.chmod(path, perms)
 
 
 def fstab_remove(mp):
@@ -827,7 +836,7 @@ def list_nics(nic_type=None):
         ip_output = subprocess.check_output(cmd).decode('UTF-8').split('\n')
         ip_output = (line.strip() for line in ip_output if line)
 
-        key = re.compile('^[0-9]+:\s+(.+):')
+        key = re.compile(r'^[0-9]+:\s+(.+):')
         for line in ip_output:
             matched = re.search(key, line)
             if matched:
@@ -1040,3 +1049,27 @@ def modulo_distribution(modulo=3, wait=30, non_zero_wait=False):
         return modulo * wait
     else:
         return calculated_wait_time
+
+
+def install_ca_cert(ca_cert, name=None):
+    """
+    Install the given cert as a trusted CA.
+
+    The ``name`` is the stem of the filename where the cert is written, and if
+    not provided, it will default to ``juju-{charm_name}``.
+
+    If the cert is empty or None, or is unchanged, nothing is done.
+    """
+    if not ca_cert:
+        return
+    if not isinstance(ca_cert, bytes):
+        ca_cert = ca_cert.encode('utf8')
+    if not name:
+        name = 'juju-{}'.format(charm_name())
+    cert_file = '/usr/local/share/ca-certificates/{}.crt'.format(name)
+    new_hash = hashlib.md5(ca_cert).hexdigest()
+    if file_hash(cert_file) == new_hash:
+        return
+    log("Installing new CA cert at: {}".format(cert_file), level=INFO)
+    write_file(cert_file, ca_cert)
+    subprocess.check_call(['update-ca-certificates', '--fresh'])

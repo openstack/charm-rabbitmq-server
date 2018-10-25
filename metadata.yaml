@@ -26,6 +26,8 @@ requires:
     scope: container
   ceph:
     interface: ceph-client
+  certificates:
+    interface: tls-certificates
 peers:
   cluster:
     interface: rabbitmq-ha

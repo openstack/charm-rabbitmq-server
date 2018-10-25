@@ -63,14 +63,14 @@ class RelationUtil(CharmTestCase):
     @patch('rabbitmq_server_relations.cmp_pkgrevno')
     @patch('rabbitmq_server_relations.is_clustered')
     @patch('rabbitmq_server_relations.ssl_utils.configure_client_ssl')
-    @patch('rabbitmq_server_relations.rabbit.get_unit_ip')
+    @patch('rabbitmq_server_relations.ch_ip.get_relation_ip')
     @patch('rabbitmq_server_relations.relation_get')
     @patch('rabbitmq_server_relations.is_elected_leader')
     def test_amqp_changed_compare_versions_ha_queues(
             self,
             is_elected_leader,
             relation_get,
-            get_unit_ip,
+            get_relation_ip,
             configure_client_ssl,
             is_clustered,
             cmp_pkgrevno,
@@ -92,7 +92,7 @@ class RelationUtil(CharmTestCase):
         mock_leader_node_is_ready.return_value = True
         mock_config.side_effect = config
         host_addr = "10.1.2.3"
-        get_unit_ip.return_value = host_addr
+        get_relation_ip.return_value = host_addr
         is_elected_leader.return_value = True
         relation_get.return_value = {}
         is_clustered.return_value = False
@@ -119,14 +119,14 @@ class RelationUtil(CharmTestCase):
     @patch('rabbitmq_server_relations.cmp_pkgrevno')
     @patch('rabbitmq_server_relations.is_clustered')
     @patch('rabbitmq_server_relations.ssl_utils.configure_client_ssl')
-    @patch('rabbitmq_server_relations.rabbit.get_unit_ip')
+    @patch('rabbitmq_server_relations.ch_ip.get_relation_ip')
     @patch('rabbitmq_server_relations.relation_get')
     @patch('rabbitmq_server_relations.is_elected_leader')
     def test_amqp_changed_compare_versions_ha_queues_prefer_ipv6(
             self,
             is_elected_leader,
             relation_get,
-            get_unit_ip,
+            get_relation_ip,
             configure_client_ssl,
             is_clustered,
             cmp_pkgrevno,
@@ -148,7 +148,7 @@ class RelationUtil(CharmTestCase):
         mock_leader_node_is_ready.return_value = True
         mock_config.side_effect = config
         ipv6_addr = "2001:db8:1:0:f816:3eff:fed6:c140"
-        get_unit_ip.return_value = ipv6_addr
+        get_relation_ip.return_value = ipv6_addr
         is_elected_leader.return_value = True
         relation_get.return_value = {}
         is_clustered.return_value = False

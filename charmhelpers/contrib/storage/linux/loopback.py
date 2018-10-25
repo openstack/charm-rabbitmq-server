@@ -39,7 +39,7 @@ def loopback_devices():
     devs = [d.strip().split(' ') for d in
             check_output(cmd).splitlines() if d != '']
     for dev, _, f in devs:
-        loopbacks[dev.replace(':', '')] = re.search('\((\S+)\)', f).groups()[0]
+        loopbacks[dev.replace(':', '')] = re.search(r'\((\S+)\)', f).groups()[0]
     return loopbacks
 
 
