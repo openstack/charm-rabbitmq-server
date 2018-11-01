@@ -40,7 +40,7 @@ def load_config():
 
     if not config:
         logging.error('Could not find config.yaml in any parent directory '
-                      'of %s. ' % file)
+                      'of %s. ' % __file__)
         raise Exception
 
     return yaml.safe_load(open(config).read())['options']
