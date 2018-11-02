@@ -150,7 +150,7 @@ def patch_open():
 
     Yields the mock for "open" and "file", respectively.'''
     mock_open = MagicMock(spec=open)
-    mock_file = MagicMock(spec=file)
+    mock_file = MagicMock(spec=__file__)
 
     @contextmanager
     def stub_open(*args, **kwargs):
