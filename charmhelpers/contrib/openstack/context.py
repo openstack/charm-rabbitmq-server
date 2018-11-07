@@ -642,7 +642,7 @@ class HAProxyContext(OSContextGenerator):
             return {}
 
         l_unit = local_unit().replace('/', '-')
-        cluster_hosts = {}
+        cluster_hosts = collections.OrderedDict()
 
         # NOTE(jamespage): build out map of configured network endpoints
         # and associated backends
