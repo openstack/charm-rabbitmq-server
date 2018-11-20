@@ -50,7 +50,7 @@ def get_connection(host_port, user, password, vhost, ssl, ssl_ca):
 
         ret = amqp.Connection(**params)
 
-    except (socket.error, TypeError), e:
+    except (socket.error, TypeError) as e:
         print("ERROR: Could not connect to RabbitMQ server {}:{}"
               .format(options.host, options.port))
         if options.verbose:
@@ -74,7 +74,7 @@ def setup_exchange(conn, exchange_name, exchange_type):
     try:
         chan.exchange_declare(exchange=exchange_name, type=exchange_type,
                               passive=True)
-    except (amqp.AMQPConnectionException, amqp.AMQPChannelException), e:
+    except (amqp.AMQPConnectionException, amqp.AMQPChannelException) as e:
         if e.amqp_reply_code == 404:
             must_create = True
             # amqplib kills the channel on error.... we dispose of it too

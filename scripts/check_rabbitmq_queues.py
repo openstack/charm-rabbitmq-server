@@ -10,6 +10,7 @@ from itertools import chain
 import argparse
 import sys
 
+
 def gen_data_lines(filename):
     with open(filename, "rb") as fin:
         for line in fin:
@@ -66,11 +67,20 @@ def check_stats(stats_collated, limits):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='RabbitMQ queue size nagios check.')
-    parser.add_argument('-c', nargs=4, action='append', required=True,
+    parser = argparse.ArgumentParser(
+        description='RabbitMQ queue size nagios check.')
+    parser.add_argument(
+        '-c',
+        nargs=4,
+        action='append',
+        required=True,
         metavar=('vhost', 'queue', 'warn', 'crit'),
         help=('Vhost and queue to check. Can be used multiple times'))
-    parser.add_argument('stats_file', nargs='*', type=str, help='file containing queue stats')
+    parser.add_argument(
+        'stats_file',
+        nargs='*',
+        type=str,
+        help='file containing queue stats')
     args = parser.parse_args()
 
     # Start generating stats from all files given on the command line.

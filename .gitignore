@@ -6,6 +6,7 @@ revision
 .testrepository
 *.sw[nop]
 *.pyc
+__pycache__/
 .project
 .pydevproject
 .stestr
