@@ -79,6 +79,11 @@ from charmhelpers.contrib.hardening.harden import harden
 from charmhelpers.fetch import (
     add_source,
 )
+from charmhelpers.fetch import (
+    apt_install,
+    apt_update,
+    filter_installed_packages,
+)
 
 from charmhelpers.core.hookenv import (
     open_port,
@@ -746,6 +751,14 @@ def upgrade_charm():
 
     # Ensure all client connections are up to date on upgrade
     update_clients()
+
+    # BUG:#1804348
+    # for the check_rabbitmq.py script, python3-amqplib needs to be installed;
+    # if previous version was a python2 version of the charm this won't happen
+    # unless the source is changed.  Ensure it is installed here if needed.
+    apt_update(fatal=True)
+    if filter_installed_packages(['python3-amqplib']):
+        apt_install(['python3-amqplib'], fatal=True)
 
 
 MAN_PLUGIN = 'rabbitmq_management'

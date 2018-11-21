@@ -181,7 +181,10 @@ def main_loop(conn, exname):
 
 def main(host, port, exname, extype, user, password, vhost, ssl, ssl_ca):
     """ setup the connection and the communication channel """
-    sys.stdout = os.fdopen(os.dup(1), "w", 0)
+    # BUG:#1804348 - can't have unbuffered text output in PY3 (unlike PY2), and
+    # this is essentially duping stdout which has to use text (str) and not
+    # bytes.  The only compromise is to lose the unbuffered output.
+    sys.stdout = os.fdopen(os.dup(1), "w")
     host_port = "{}:{}".format(host, port)
     conn = get_connection(host_port, user, password, vhost, ssl, ssl_ca)
 
@@ -240,9 +243,13 @@ if __name__ == '__main__':
 
     (options, args) = parser.parse_args()
     if options.verbose:
-        print("""
-Using AMQP setup: host:port={}:{} exchange_name={} exchange_type={}
-""".format(options.host, options.port, options.exchange, options.type))
+        print("")
+        print("Using AMQP setup: host:port={}:{} exchange_name={} "
+              "exchange_type={} "
+              .format(options.host,
+                      options.port,
+                      options.exchange,
+                      options.type))
     ret = main(options.host, options.port, options.exchange, options.type,
                options.user, options.password, options.vhost, options.ssl,
                options.ssl_ca)

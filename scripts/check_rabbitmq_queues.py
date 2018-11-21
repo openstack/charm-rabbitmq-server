@@ -12,7 +12,7 @@ import sys
 
 
 def gen_data_lines(filename):
-    with open(filename, "rb") as fin:
+    with open(filename, "rt") as fin:
         for line in fin:
             if not line.startswith("#"):
                 yield line
