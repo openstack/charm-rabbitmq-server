@@ -44,7 +44,7 @@ if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
 TMP_DATA_FILE=$(mktemp -p ${DATA_DIR})
-echo "#Vhost Name Messages_ready Messages_unacknowledged Messages Consumers Memory Time" > $DATA_FILE
+echo "#Vhost Name Messages_ready Messages_unacknowledged Messages Consumers Memory Time" > ${TMP_DATA_FILE}
 /usr/sbin/rabbitmqctl -q list_vhosts | \
 while read VHOST; do
     /usr/sbin/rabbitmqctl -q list_queues -p $VHOST name messages_ready messages_unacknowledged messages consumers memory | \
