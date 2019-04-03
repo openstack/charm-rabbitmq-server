@@ -59,6 +59,59 @@ Enable SSL, passing in the key and certificate as configuration settings:
 
     juju set rabbitmq-server ssl_enabled=True ssl_key="`cat rabbit-server-privkey.pem`" ssl_cert="`cat rabbit-server-cert.pem`"
 
+# Monitoring
+
+This charm supports monitoring queue thresholds to alert when queues are
+becoming full or are not being processed in a timely fashion. This is 
+done via the `queue_thresholds` config option.
+
+`queue_thresholds` is a list of queue check thresholds in yaml format.
+
+Each item in the list represents a single check and is defined as 
+an array containing the vhost to check, the specific queue (or queue
+match string), the warning level, and the critical level. An example 
+would be:
+
+    [
+        ['/', 'queue1', 50, 100]
+        ['/', 'queue2', 200, 300]
+    ]
+
+This would create two checks, one on queue1 that has a warn limit of
+50, and a critical limit of 100, and a second on queue2 that warns at
+200, and has a critical limit of 300.
+
+You can create a check that monitors several queues at once by using 
+fileglob matching, or regex matching, though the format is slightly
+different.
+
+For simple matches, you can use * to match portions of an event queue
+name.  For example:
+
+    [
+        ['/', 'queue*', 50, 100]
+    ]
+
+would create a check that would monitor any queue beginning with the
+word queue and containing any additional characters after.  
+
+To use regex, you must wrap the queue name in / characters, and provide 
+a python-compatible regex.  For example:
+
+    [
+        ['/', '/^queue\d+$/', 50, 100]
+    ]
+
+Would match any queue that starts with the word `queue` and contains
+any number of digits following it.  Note that these regex's are python
+compatible, meaning that to negate a match, for example, you need
+to use the `(?!foo)` format.
+
+It should be noted that when using queue matching, the levels provided
+are cumulative.  That is to say that a critical level of 100 would
+trigger if all of the matched queues added together contained 100 
+messages, even if some of those queues contained nothing at all.
+
 # Configuration: source
 
 To change the source that the charm uses for packages:

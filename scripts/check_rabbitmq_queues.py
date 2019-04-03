@@ -7,6 +7,7 @@
 from collections import defaultdict
 from fnmatch import fnmatchcase
 from itertools import chain
+import re
 import argparse
 import sys
 
@@ -36,10 +37,30 @@ def collate_stats(stats, limits):
     # store the stat without collating.
     collated = defaultdict(lambda: 0)
     for vhost, queue, m_all in stats:
-        for l_vhost, l_queue, _, _ in limits:
-            if fnmatchcase(vhost, l_vhost) and fnmatchcase(queue, l_queue):
-                collated[l_vhost, l_queue] += m_all
-                break
+        if limits:
+            for limit in limits:
+                vhost_matched = False
+                queue_matched = False
+
+                # if we have a vhost regex, use that to match vhosts
+                # otherwise use fileglob
+                if 'vhost_re' in limit:
+                    if limit['vhost_re'].search(vhost): 
+                        vhost_matched = True
+                elif fnmatchcase(vhost, limit['vhost']):
+                    vhost_matched = True
+
+                if vhost_matched:
+                    # if we have a queue regex, use that. otherwise
+                    # use fileglob
+                    if 'queue_re' in limit:
+                        if limit['queue_re'].search(queue): 
+                            queue_matched = True
+                    elif fnmatchcase(queue, limit['queue']):
+                        queue_matched = True
+                    if queue_matched:
+                        collated[limit['vhost'], limit['queue']] += m_all
+                        break
         else:
             collated[vhost, queue] += m_all
     return collated
@@ -48,8 +69,8 @@ def collate_stats(stats, limits):
 def check_stats(stats_collated, limits):
     # Create a limits lookup dict with keys of the form (vhost, queue).
     limits_lookup = dict(
-        ((l_vhost, l_queue), (int(t_warning), int(t_critical)))
-        for l_vhost, l_queue, t_warning, t_critical in limits)
+        ((limit['vhost'], limit['queue']), (int(limit['warn']), int(limit['crit'])))
+        for limit in limits)
     if not (stats_collated):
         yield 'No Queues Found', 'No Vhosts Found', None, "UNKNOWN"
     # Go through the stats and compare again limits, if any.
@@ -83,13 +104,34 @@ if __name__ == "__main__":
         help='file containing queue stats')
     args = parser.parse_args()
 
+    limits = []
+    re_check = re.compile('^/(.*)/(i)?$')
+    for l_vhost, l_queue, warn, crit in args.c:
+        limit = {"vhost": l_vhost, "queue": l_queue, "warn": warn, "crit": crit}
+
+        m = re_check.search(l_vhost)
+        if m:
+            if m.group(2) == 'i':
+                limit['vhost_re'] = re.compile(m.group(1), re.IGNORECASE)
+            else:
+                limit['vhost_re'] = re.compile(m.group(1))
+
+        m = re_check.search(l_queue)
+        if m:
+            if m.group(2) == 'i':
+                limit['queue_re'] = re.compile(m.group(1), re.IGNORECASE)
+            else:
+                limit['queue_re'] = re.compile(m.group(1))
+        limits.append(limit)
+    print(limits)
+
     # Start generating stats from all files given on the command line.
     stats = gen_stats(
         chain.from_iterable(
             gen_data_lines(filename) for filename in args.stats_file))
     # Collate stats according to limit definitions and check.
-    stats_collated = collate_stats(stats, args.c)
-    stats_checked = check_stats(stats_collated, args.c)
+    stats_collated = collate_stats(stats, limits)
+    stats_checked = check_stats(stats_collated, limits)
     criticals, warnings = [], []
     for queue, vhost, message_no, status in stats_checked:
         if status == "CRIT":
