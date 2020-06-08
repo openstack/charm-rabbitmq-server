@@ -14,7 +14,7 @@
 
 
 from unit_tests.test_utils import CharmTestCase
-from mock import patch
+from unittest.mock import patch
 
 import ssl_utils
 

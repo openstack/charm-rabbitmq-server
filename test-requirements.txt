@@ -13,11 +13,6 @@ setuptools<50.0.0  # https://github.com/pypa/setuptools/commit/04e3df22df840c6bb
 
 requests>=2.18.4
 
-# Newer mock seems to have some syntax which is newer than python3.5 (e.g.
-# f'{something}'
-mock>=1.2,<4.0.0; python_version < '3.6'
-mock>=1.2; python_version >= '3.6'
-
 stestr>=2.2.0
 
 # Dependency of stestr. Workaround for

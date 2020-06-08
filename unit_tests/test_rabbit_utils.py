@@ -15,7 +15,7 @@
 import collections
 from functools import wraps
 import json
-import mock
+from unittest import mock
 import os
 import sys
 import tempfile
@@ -1443,13 +1443,8 @@ class UtilsTests(CharmTestCase):
         for mode, policy in expected_policy.items():
             rabbit_utils.set_ha_mode('test_vhost', mode,
                                      params=policy.get('ha-params'))
-
-            mock_set_policy.assert_called_once()
-
-            self.assertEqual(mock_set_policy.call_args.args[0:3],
-                             ('test_vhost', 'HA', r'^(?!amq\.).*',))
-
-            generated_policy = json.loads(mock_set_policy.call_args.args[3])
-            self.assertEqual(generated_policy, policy)
-
+            mock_set_policy.assert_called_once_with(
+                'test_vhost', 'HA', r'^(?!amq\.).*',
+                json.dumps(policy, sort_keys=True)
+            )
             mock_set_policy.reset_mock()

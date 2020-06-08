@@ -19,7 +19,7 @@ import os
 import yaml
 
 from contextlib import contextmanager
-from mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 patch('charmhelpers.contrib.openstack.utils.set_os_workload_status').start()
 patch('charmhelpers.core.hookenv.status_set').start()
