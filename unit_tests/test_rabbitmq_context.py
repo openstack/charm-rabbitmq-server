@@ -84,18 +84,64 @@ class TestRabbitMQSSLContext(unittest.TestCase):
 
 class TestRabbitMQClusterContext(unittest.TestCase):
 
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
     @mock.patch("rabbitmq_context.config")
-    def test_context_ssl_off(self, config):
-        config.return_value = "ignore"
+    def test_context_ssl_off(self, config, mock_cmp_pkgrevno):
+        config_data = {'cluster-partition-handling': 'ignore',
+                       'connection-backlog': 200,
+                       'queue-master-locator': 'client-local'}
+        config.side_effect = config_data.get
+        mock_cmp_pkgrevno.return_value = 0
 
         self.assertEqual(
             rabbitmq_context.RabbitMQClusterContext().__call__(), {
                 'cluster_partition_handling': "ignore",
-                'connection_backlog': "ignore"
+                'connection_backlog': 200,
+                'queue_master_locator': 'client-local',
+            })
+
+        config.assert_has_calls([mock.call("cluster-partition-handling"),
+                                 mock.call("connection-backlog")],
+                                mock.call('queue-master-locator'))
+
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
+    @mock.patch("rabbitmq_context.config")
+    def test_queue_master_locator_min_masters(self, config, mock_cmp_pkgrevno):
+        config_data = {'cluster-partition-handling': 'ignore',
+                       'connection-backlog': 200,
+                       'queue-master-locator': 'min-masters'}
+        config.side_effect = config_data.get
+        mock_cmp_pkgrevno.return_value = 0
+
+        self.assertEqual(
+            rabbitmq_context.RabbitMQClusterContext().__call__(), {
+                'cluster_partition_handling': "ignore",
+                'connection_backlog': 200,
+                'queue_master_locator': 'min-masters',
+            })
+
+        config.assert_has_calls([mock.call("cluster-partition-handling"),
+                                 mock.call("connection-backlog")],
+                                mock.call('queue-master-locator'))
+
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
+    @mock.patch("rabbitmq_context.config")
+    def test_rabbit_server_3pt6(self, config, mock_cmp_pkgrevno):
+        config_data = {'cluster-partition-handling': 'ignore',
+                       'queue-master-locator': 'min-masters',
+                       'connection-backlog': 200}
+        config.side_effect = config_data.get
+        mock_cmp_pkgrevno.return_value = -1
+
+        self.assertEqual(
+            rabbitmq_context.RabbitMQClusterContext().__call__(), {
+                'cluster_partition_handling': "ignore",
+                'connection_backlog': 200,
             })
 
         config.assert_has_calls([mock.call("cluster-partition-handling"),
                                  mock.call("connection-backlog")])
+        assert mock.call('queue-master-locator') not in config.mock_calls
 
 
 class TestRabbitMQEnvContext(unittest.TestCase):

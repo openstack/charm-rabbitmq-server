@@ -306,3 +306,12 @@ options:
       When using nrpe to monitor the Rabbitmq host, we monitor functionality on
       one vhost.  This option configures additional vhost name(s) to check.
       Space separated list.
+  queue-master-locator:
+    type: string
+    default: min-masters
+    description: |
+      Queue master location strategy. Available strategies are:
+         - min-masters, Pick the node hosting the minimum number of bound masters.
+         - client-local, Pick the node the client that declares the queue is connected to.
+         - random, Pick a random node.
+      This option is only available for RabbitMQ >= 3.6

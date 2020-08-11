@@ -22,7 +22,7 @@ import sys
 import ssl_utils
 
 from charmhelpers.contrib.ssl.service import ServiceCA
-from charmhelpers.core.host import is_container
+from charmhelpers.core.host import is_container, cmp_pkgrevno
 from charmhelpers.fetch import apt_install
 from charmhelpers.core.hookenv import (
     open_port,
@@ -185,6 +185,9 @@ class RabbitMQClusterContext(object):
 
         if config('connection-backlog'):
             ctxt['connection_backlog'] = config('connection-backlog')
+
+        if cmp_pkgrevno('rabbitmq-server', '3.6') >= 0:
+            ctxt['queue_master_locator'] = config('queue-master-locator')
 
         return ctxt
 
