@@ -12,10 +12,10 @@ gate_bundles:
   - bionic-train
   - bionic-ussuri
   - focal-ussuri
+  - focal-victoria
   - trusty-mitaka
 dev_bundles:
   - groovy-victoria
-  - focal-victoria
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RmqTests
 tests_options:
