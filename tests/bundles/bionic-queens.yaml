@@ -11,6 +11,8 @@ relations:
     - percona-cluster:shared-db
   - - nrpe:nrpe-external-master
     - rabbitmq-server:nrpe-external-master
+  - - nrpe:monitors
+    - nagios:monitors
 
 applications:
   rabbitmq-server:
@@ -37,5 +39,8 @@ applications:
     num_units: 1
     options:
       admin-password: openstack
+  nagios:
+    charm: cs:nagios
+    num_units: 1
   nrpe:
     charm: cs:nrpe
