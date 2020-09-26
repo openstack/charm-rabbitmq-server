@@ -29,6 +29,8 @@ from subprocess import check_call, CalledProcessError
 
 import six
 
+import charmhelpers.contrib.storage.linux.ceph as ch_ceph
+
 from charmhelpers.contrib.openstack.audits.openstack_security_guide import (
     _config_ini as config_ini
 )
@@ -56,6 +58,7 @@ from charmhelpers.core.hookenv import (
     status_set,
     network_get_primary_address,
     WARNING,
+    service_name,
 )
 
 from charmhelpers.core.sysctl import create as sysctl_create
@@ -807,6 +810,12 @@ class CephContext(OSContextGenerator):
                     mon_hosts.append(format_ipv6_addr(priv_addr) or priv_addr)
 
         ctxt['mon_hosts'] = ' '.join(sorted(mon_hosts))
+
+        if config('pool-type') and config('pool-type') == 'erasure-coded':
+            base_pool_name = config('rbd-pool') or config('rbd-pool-name')
+            if not base_pool_name:
+                base_pool_name = service_name()
+            ctxt['rbd_default_data_pool'] = base_pool_name
 
         if not os.path.isdir('/etc/ceph'):
             os.mkdir('/etc/ceph')
@@ -3175,3 +3184,90 @@ class SRIOVContext(OSContextGenerator):
         :rtype: Dict[str,int]
         """
         return self._map
+
+
+class CephBlueStoreCompressionContext(OSContextGenerator):
+    """Ceph BlueStore compression options."""
+
+    # Tuple with Tuples that map configuration option name to CephBrokerRq op
+    # property name
+    options = (
+        ('bluestore-compression-algorithm',
+            'compression-algorithm'),
+        ('bluestore-compression-mode',
+            'compression-mode'),
+        ('bluestore-compression-required-ratio',
+            'compression-required-ratio'),
+        ('bluestore-compression-min-blob-size',
+            'compression-min-blob-size'),
+        ('bluestore-compression-min-blob-size-hdd',
+            'compression-min-blob-size-hdd'),
+        ('bluestore-compression-min-blob-size-ssd',
+            'compression-min-blob-size-ssd'),
+        ('bluestore-compression-max-blob-size',
+            'compression-max-blob-size'),
+        ('bluestore-compression-max-blob-size-hdd',
+            'compression-max-blob-size-hdd'),
+        ('bluestore-compression-max-blob-size-ssd',
+            'compression-max-blob-size-ssd'),
+    )
+
+    def __init__(self):
+        """Initialize context by loading values from charm config.
+
+        We keep two maps, one suitable for use with CephBrokerRq's and one
+        suitable for template generation.
+        """
+        charm_config = config()
+
+        # CephBrokerRq op map
+        self.op = {}
+        # Context exposed for template generation
+        self.ctxt = {}
+        for config_key, op_key in self.options:
+            value = charm_config.get(config_key)
+            self.ctxt.update({config_key.replace('-', '_'): value})
+            self.op.update({op_key: value})
+
+    def __call__(self):
+        """Get context.
+
+        :returns: Context
+        :rtype: Dict[str,any]
+        """
+        return self.ctxt
+
+    def get_op(self):
+        """Get values for use in CephBrokerRq op.
+
+        :returns: Context values with CephBrokerRq op property name as key.
+        :rtype: Dict[str,any]
+        """
+        return self.op
+
+    def get_kwargs(self):
+        """Get values for use as keyword arguments.
+
+        :returns: Context values with key suitable for use as kwargs to
+                  CephBrokerRq add_op_create_*_pool methods.
+        :rtype: Dict[str,any]
+        """
+        return {
+            k.replace('-', '_'): v
+            for k, v in self.op.items()
+        }
+
+    def validate(self):
+        """Validate options.
+
+        :raises: AssertionError
+        """
+        # We slip in a dummy name on class instantiation to allow validation of
+        # the other options. It will not affect further use.
+        #
+        # NOTE: once we retire Python 3.5 we can fold this into a in-line
+        # dictionary comprehension in the call to the initializer.
+        dummy_op = {'name': 'dummy-name'}
+        dummy_op.update(self.op)
+        pool = ch_ceph.BasePool('dummy-service', op=dummy_op)
+        pool.validate()

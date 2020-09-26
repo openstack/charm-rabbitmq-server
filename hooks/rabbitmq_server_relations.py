@@ -697,7 +697,8 @@ def update_nrpe_checks():
             cmd = ('{}/check_rabbitmq.py --user {} --password {} '
                    '--vhost {}'.format(NAGIOS_PLUGINS, user,
                                        password, vhost['vhost']))
-            log('Adding rabbitmq non-SSL check for {}'.format(vhost['vhost']), level=DEBUG)
+            log('Adding rabbitmq non-SSL check for {}'.format(vhost['vhost']),
+                level=DEBUG)
             description = 'Check RabbitMQ {} {}'.format(myunit, vhost['vhost'])
             nrpe_compat.add_check(
                 shortname=vhost['shortname'],
@@ -709,8 +710,10 @@ def update_nrpe_checks():
                    '--vhost {} --ssl --ssl-ca {} --port {}'.format(
                        NAGIOS_PLUGINS, user, password, vhost['vhost'],
                        SSL_CA_FILE, int(config('ssl_port'))))
-            log('Adding rabbitmq SSL check for {}'.format(vhost['vhost']), level=DEBUG)
-            description = 'Check RabbitMQ (SSL) {} {}'.format(myunit, vhost['vhost'])
+            log('Adding rabbitmq SSL check for {}'.format(vhost['vhost']),
+                level=DEBUG)
+            description = ('Check RabbitMQ (SSL) {} {}'
+                           .format(myunit, vhost['vhost']))
             nrpe_compat.add_check(
                 shortname=vhost['shortname'] + "_ssl",
                 description=description,
@@ -964,7 +967,6 @@ def certs_changed(relation_id=None, unit=None):
 @harden()
 def update_status():
     log('Updating status.')
-
 
 
 if __name__ == '__main__':

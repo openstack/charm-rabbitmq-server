@@ -7,10 +7,11 @@
 #       requirements.  They are intertwined.  Also, Zaza itself should specify
 #       all of its own requirements and if it doesn't, fix it there.
 #
+setuptools<50.0.0  # https://github.com/pypa/setuptools/commit/04e3df22df840c6bb244e9b27bc56750c44b7c85
 charm-tools>=2.4.4
 requests>=2.18.4
 mock>=1.2
-flake8>=2.2.4,<=2.4.1
+flake8>=2.2.4
 stestr>=2.2.0
 coverage>=4.5.2
 pyudev              # for ceph-* charm unit tests (need to fix the ceph-* charm unit tests/mocking)
