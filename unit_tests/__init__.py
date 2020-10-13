@@ -15,9 +15,12 @@
 import os
 import sys
 
+
 _path = os.path.dirname(os.path.realpath(__file__))
 _actions = os.path.abspath(os.path.join(_path, '../actions'))
 _hooks = os.path.abspath(os.path.join(_path, '../hooks'))
+_files = os.path.abspath(os.path.join(_path, '../files'))
+_tests = os.path.abspath(os.path.join(_path, '../unit_tests'))
 
 
 def _add_path(path):
@@ -27,3 +30,5 @@ def _add_path(path):
 
 _add_path(_actions)
 _add_path(_hooks)
+_add_path(_files)
+_add_path(_tests)

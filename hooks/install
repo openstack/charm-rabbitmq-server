@@ -17,4 +17,7 @@ for dep in ${DEPS[@]}; do
     check_and_install ${PYTHON} ${dep}
 done
 
+# python3-croniter not available on trusty
+[ "$( lsb_release -sc )" != "trusty" ] && check_and_install ${PYTHON} croniter
+
 exec ./hooks/install.real

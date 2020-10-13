@@ -17,3 +17,5 @@ coverage>=4.5.2
 pyudev              # for ceph-* charm unit tests (need to fix the ceph-* charm unit tests/mocking)
 git+https://github.com/openstack-charmers/zaza.git#egg=zaza;python_version>='3.0'
 git+https://github.com/openstack-charmers/zaza-openstack-tests.git#egg=zaza.openstack
+
+croniter            # needed for charm-rabbitmq-server unit tests

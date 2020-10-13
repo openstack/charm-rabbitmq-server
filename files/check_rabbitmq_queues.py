@@ -5,10 +5,18 @@
 # Author: Liam Young, Jacek Nykis
 
 from collections import defaultdict
+from datetime import datetime
 from fnmatch import fnmatchcase
 from itertools import chain
 import argparse
+import os
 import sys
+
+from charmhelpers.core.hookenv import config
+from charmhelpers.core.host import CompareHostReleases, get_distrib_codename
+
+if CompareHostReleases(get_distrib_codename()) > 'trusty':
+    from croniter import croniter
 
 
 def gen_data_lines(filename):
@@ -66,6 +74,43 @@ def check_stats(stats_collated, limits):
                 yield l_queue, l_vhost, m_all, "WARN"
 
 
+def get_cron_interval(cronspec, base):
+    """Estimate cron interval by subtracting last from next job runtime
+
+    :param cronspec: Cronjob schedule string
+    :param base: datetime from when to check cron schedule
+    :return: timedelta
+    """
+    it = croniter(cronspec, base)
+    return it.get_next(datetime) - it.get_prev(datetime)
+
+
+def check_stats_file_freshness(stats_file, asof=None):
+    """Check if a rabbitmq stats file is fresh
+
+    Fresh here is defined as modified within the last 2* cron job intervals
+
+    :param stats_file: file name to check
+    :param asof: datetime from when to check, defaults to datetime.now()
+    :return: tuple (status, message)
+    """
+    if asof is None:
+        asof = datetime.now()
+    file_mtime = datetime.fromtimestamp(os.path.getmtime(stats_file))
+    cronspec = config("stats_cron_schedule")
+    interval = get_cron_interval(cronspec, asof)
+    # We expect the file to be modified in the last 2 cron intervals
+    cutoff_time = asof - (2 * interval)
+    if file_mtime < cutoff_time:
+        return (
+            "CRIT",
+            "Rabbit stats file not updated since {}".format(
+                file_mtime
+            ),
+        )
+    return ("OK", "")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='RabbitMQ queue size nagios check.')
@@ -98,6 +143,14 @@ if __name__ == "__main__":
         elif status == "WARN":
             warnings.append(
                 "%s in %s has %s messages" % (queue, vhost, message_no))
+
+    if "croniter" in sys.modules.keys():  # not on trusty and imported croniter
+        freshness_results = [check_stats_file_freshness(f)
+                             for f in args.stats_file]
+        criticals.append(
+            msg for status, msg in freshness_results if status == "CRIT"
+        )
+
     if len(criticals) > 0:
         print("CRITICAL: {}".format(", ".join(criticals)))
         sys.exit(2)

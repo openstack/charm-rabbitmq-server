@@ -719,7 +719,8 @@ def update_nrpe_checks():
                 description=description,
                 check_cmd=cmd)
 
-    if config('queue_thresholds'):
+    if config('queue_thresholds') and config('stats_cron_schedule'):
+        # Only add queue check if there's also a cronjob for creating stats
         cmd = ""
         # If value of queue_thresholds is incorrect we want the hook to fail
         for item in yaml.safe_load(config('queue_thresholds')):
