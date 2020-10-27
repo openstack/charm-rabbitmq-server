@@ -33,38 +33,18 @@ def _add_path(path):
 _add_path(_root)
 
 
-try:
-    import yaml  # flake8: noqa
-except ImportError:
-    if sys.version_info.major == 2:
-        subprocess.check_call(['apt-get', 'install', '-y', 'python-yaml'])
-    else:
-        subprocess.check_call(['apt-get', 'install', '-y', 'python3-yaml'])
-    import yaml  # flake8: noqa
-
-try:
-    import requests  # flake8: noqa
-except ImportError:
-    if sys.version_info.major == 2:
-        subprocess.check_call(['apt-get', 'install', '-y',
-                               'python-requests'])
-    else:
-        subprocess.check_call(['apt-get', 'install', '-y',
-                               'python3-requests'])
-    import requests  # noqa: F401
-
 import rabbit_net_utils
 import rabbit_utils as rabbit
 import ssl_utils
-from rabbitmq_context import SSL_CA_FILE
 
 from lib.utils import (
     chown, chmod,
     is_newer,
 )
+from charmhelpers.contrib.charmsupport import nrpe
 from charmhelpers.contrib.hahelpers.cluster import (
     is_clustered,
-    is_elected_leader
+    is_elected_leader,
 )
 from charmhelpers.contrib.openstack.utils import (
     is_unit_paused_set,
@@ -108,18 +88,14 @@ from charmhelpers.core.hookenv import (
     Hooks,
     UnregisteredHookError,
     is_leader,
-    charm_dir,
     status_set,
     unit_private_ip,
 )
 from charmhelpers.core.host import (
     cmp_pkgrevno,
-    rsync,
     service_stop,
     service_restart,
-    write_file,
 )
-from charmhelpers.contrib.charmsupport import nrpe
 
 from charmhelpers.contrib.peerstorage import (
     peer_echo,
@@ -142,14 +118,6 @@ POOL_NAME = SERVICE_NAME
 RABBIT_DIR = '/var/lib/rabbitmq'
 RABBIT_USER = 'rabbitmq'
 RABBIT_GROUP = 'rabbitmq'
-NAGIOS_PLUGINS = '/usr/local/lib/nagios/plugins'
-SCRIPTS_DIR = '/usr/local/bin'
-STATS_CRONFILE = '/etc/cron.d/rabbitmq-stats'
-STATS_DATAFILE = os.path.join(RABBIT_DIR, 'data',
-                              '{}_queue_stats.dat'
-                              ''.format(rabbit.get_unit_hostname()))
-CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
-               "{command} 2>&1 | logger -p local0.notice\n")
 INITIAL_CLIENT_UPDATE_KEY = 'initial_client_update_done'
 
 
@@ -647,102 +615,37 @@ def ceph_changed():
 
 @hooks.hook('nrpe-external-master-relation-changed')
 def update_nrpe_checks():
-    if os.path.isdir(NAGIOS_PLUGINS):
-        rsync(os.path.join(charm_dir(), 'files',
-                           'check_rabbitmq.py'),
-              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq.py'))
-        rsync(os.path.join(charm_dir(), 'files',
-                           'check_rabbitmq_queues.py'),
-              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
-        if config('management_plugin'):
-            rsync(os.path.join(charm_dir(), 'files',
-                               'check_rabbitmq_cluster.py'),
-                  os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
+    # NOTE (rgildein): This function has been changed to remove redundant
+    # checks and scripts based on rabbitmq configuration, but the main logic
+    # was unchanged.
+    #
+    # The function logic is based on these three functions:
+    # 1) copy all the custom NRPE scripts and create cron file
+    # 2) add NRPE checks and remove redundant
+    # 2.a) update the NRPE vhost check for TLS and non-TLS
+    # 2.b) update the NRPE queues check
+    # 2.c) update the NRPE cluster check
+    # 3) remove redundant scripts - this must be done after removing
+    #                               the relevant check
+    rabbit.sync_nrpe_files()
 
-    if config('stats_cron_schedule'):
-        script = os.path.join(SCRIPTS_DIR, 'collect_rabbitmq_stats.sh')
-        cronjob = CRONJOB_CMD.format(schedule=config('stats_cron_schedule'),
-                                     timeout=config('cron-timeout'),
-                                     command=script)
-        rsync(os.path.join(charm_dir(), 'files',
-                           'collect_rabbitmq_stats.sh'), script)
-        write_file(STATS_CRONFILE, cronjob)
-    elif os.path.isfile(STATS_CRONFILE):
-        os.remove(STATS_CRONFILE)
-
-    # Find out if nrpe set nagios_hostname
-    hostname = nrpe.get_nagios_hostname()
-    myunit = nrpe.get_nagios_unit_name()
-
-    # create unique user and vhost for each unit
-    current_unit = local_unit().replace('/', '-')
-    user = 'nagios-{}'.format(current_unit)
-    vhosts = [{'vhost': user, 'shortname': rabbit.RABBIT_USER}]
-    password = rabbit.get_rabbit_password(user, local=True)
-
+    hostname, unit, vhosts, user, password = rabbit.get_nrpe_credentials()
     nrpe_compat = nrpe.NRPE(hostname=hostname)
-    rabbit.create_user(user, password, ['monitoring'])
-
-    if config('check-vhosts'):
-        for other_vhost in config('check-vhosts').split(' '):
-            if other_vhost:
-                item = {'vhost': other_vhost,
-                        'shortname': 'rabbit_{}'.format(other_vhost)}
-                vhosts.append(item)
 
     for vhost in vhosts:
         rabbit.create_vhost(vhost['vhost'])
         rabbit.grant_permissions(user, vhost['vhost'])
-        if config('ssl') in ['off', 'on']:
-            cmd = ('{}/check_rabbitmq.py --user {} --password {} '
-                   '--vhost {}'.format(NAGIOS_PLUGINS, user,
-                                       password, vhost['vhost']))
-            log('Adding rabbitmq non-SSL check for {}'.format(vhost['vhost']),
-                level=DEBUG)
-            description = 'Check RabbitMQ {} {}'.format(myunit, vhost['vhost'])
-            nrpe_compat.add_check(
-                shortname=vhost['shortname'],
-                description=description,
-                check_cmd=cmd)
 
-        if config('ssl') in ['only', 'on']:
-            cmd = ('{}/check_rabbitmq.py --user {} --password {} '
-                   '--vhost {} --ssl --ssl-ca {} --port {}'.format(
-                       NAGIOS_PLUGINS, user, password, vhost['vhost'],
-                       SSL_CA_FILE, int(config('ssl_port'))))
-            log('Adding rabbitmq SSL check for {}'.format(vhost['vhost']),
-                level=DEBUG)
-            description = ('Check RabbitMQ (SSL) {} {}'
-                           .format(myunit, vhost['vhost']))
-            nrpe_compat.add_check(
-                shortname=vhost['shortname'] + "_ssl",
-                description=description,
-                check_cmd=cmd)
+        rabbit.nrpe_update_vhost_check(
+            nrpe_compat, unit, user, password, vhost)
+        rabbit.nrpe_update_vhost_ssl_check(
+            nrpe_compat, unit, user, password, vhost)
 
-    if config('queue_thresholds') and config('stats_cron_schedule'):
-        # Only add queue check if there's also a cronjob for creating stats
-        cmd = ""
-        # If value of queue_thresholds is incorrect we want the hook to fail
-        for item in yaml.safe_load(config('queue_thresholds')):
-            cmd += ' -c "{}" "{}" {} {}'.format(*item)
-        nrpe_compat.add_check(
-            shortname=rabbit.RABBIT_USER + '_queue',
-            description='Check RabbitMQ Queues',
-            check_cmd='{}/check_rabbitmq_queues.py{} {}'.format(
-                        NAGIOS_PLUGINS, cmd, STATS_DATAFILE)
-        )
-    if config('management_plugin'):
-        # add NRPE check
-        _check_cmd = (
-            '{}/check_rabbitmq_cluster.py --port {} --user {} --password {}'
-            .format(NAGIOS_PLUGINS, rabbit.get_managment_port(),
-                    user, password))
-        nrpe_compat.add_check(
-            shortname=rabbit.RABBIT_USER + '_cluster',
-            description='Check RabbitMQ Cluster',
-            check_cmd=_check_cmd)
-
+    rabbit.nrpe_update_queues_check(nrpe_compat, RABBIT_DIR)
+    rabbit.nrpe_update_cluster_check(nrpe_compat, user, password)
     nrpe_compat.write()
+
+    rabbit.remove_nrpe_files()
 
 
 @hooks.hook('upgrade-charm')

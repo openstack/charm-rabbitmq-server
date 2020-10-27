@@ -22,6 +22,7 @@ import tempfile
 import time
 import shutil
 import socket
+import yaml
 
 from collections import OrderedDict
 
@@ -29,8 +30,10 @@ from rabbitmq_context import (
     RabbitMQSSLContext,
     RabbitMQClusterContext,
     RabbitMQEnvContext,
+    SSL_CA_FILE,
 )
 
+from charmhelpers.contrib.charmsupport import nrpe
 from charmhelpers.core.templating import render
 
 from charmhelpers.contrib.openstack.utils import (
@@ -63,6 +66,7 @@ from charmhelpers.core.hookenv import (
     is_leader,
     leader_get,
     local_unit,
+    charm_dir
 )
 
 from charmhelpers.core.host import (
@@ -72,6 +76,7 @@ from charmhelpers.core.host import (
     cmp_pkgrevno,
     path_hash,
     service as system_service,
+    rsync,
 )
 
 from charmhelpers.contrib.peerstorage import (
@@ -100,6 +105,11 @@ ENABLED_PLUGINS = '/etc/rabbitmq/enabled_plugins'
 RABBIT_USER = 'rabbitmq'
 LIB_PATH = '/var/lib/rabbitmq/'
 HOSTS_FILE = '/etc/hosts'
+NAGIOS_PLUGINS = '/usr/local/lib/nagios/plugins'
+SCRIPTS_DIR = '/usr/local/bin'
+STATS_CRONFILE = '/etc/cron.d/rabbitmq-stats'
+CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
+               "{command} 2>&1 | logger -p local0.notice\n")
 
 _named_passwd = '/var/lib/charm/{}/{}.passwd'
 _local_named_passwd = '/var/lib/charm/{}/{}.local_passwd'
@@ -1200,3 +1210,236 @@ def install_or_upgrade_packages():
     status_set('maintenance', 'Installing/upgrading RabbitMQ packages')
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
+
+
+def remove_file(path):
+    """Delete the file or skip it if not exist.
+
+    :param path: the file to delete
+    :type path: str
+    """
+    if os.path.isfile(path):
+        os.remove(path)
+    elif os.path.exists(path):
+        log('{} path is not file'.format(path), level='ERROR')
+    else:
+        log('{} file does not exist'.format(path), level='DEBUG')
+
+
+def sync_nrpe_files():
+    """Sync all NRPE-related files.
+
+    Copy all the custom NRPE scripts and create the cron file to run
+    rabbitmq stats collection
+    """
+    if not os.path.exists(NAGIOS_PLUGINS):
+        os.makedirs(NAGIOS_PLUGINS, exist_ok=True)
+
+    if config('ssl'):
+        rsync(os.path.join(charm_dir(), 'files', 'check_rabbitmq.py'),
+              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq.py'))
+    if config('queue_thresholds') and config('stats_cron_schedule'):
+        rsync(os.path.join(charm_dir(), 'files', 'check_rabbitmq_queues.py'),
+              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
+    if config('management_plugin'):
+        rsync(os.path.join(charm_dir(), 'files', 'check_rabbitmq_cluster.py'),
+              os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
+
+    if config('stats_cron_schedule'):
+        rsync(os.path.join(charm_dir(), 'files', 'collect_rabbitmq_stats.sh'),
+              os.path.join(SCRIPTS_DIR, 'collect_rabbitmq_stats.sh'))
+        cronjob = CRONJOB_CMD.format(
+            schedule=config('stats_cron_schedule'),
+            timeout=config('cron-timeout'),
+            command=os.path.join(SCRIPTS_DIR, 'collect_rabbitmq_stats.sh'))
+        write_file(STATS_CRONFILE, cronjob)
+
+
+def remove_nrpe_files():
+    """Remove the cron file and all the custom NRPE scripts."""
+    if not config('stats_cron_schedule'):
+        # These scripts are redundant if the value `stats_cron_schedule`
+        # isn't in the config
+        remove_file(STATS_CRONFILE)
+        remove_file(os.path.join(SCRIPTS_DIR, 'collect_rabbitmq_stats.sh'))
+
+    if not config('ssl'):
+        # This script is redundant if the value `ssl` isn't in the config
+        remove_file(os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq.py'))
+
+    if not config('queue_thresholds') or not config('stats_cron_schedule'):
+        # This script is redundant if the value `queue_thresholds` or
+        # `stats_cron_schedule` isn't in the config
+        remove_file(os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
+
+    if not config('management_plugin'):
+        # This script is redundant if the value `management_plugin` isn't
+        # in the config
+        remove_file(os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
+
+
+def get_nrpe_credentials():
+    """Get the NRPE hostname, unit and user details.
+
+    :returns: (hostname, unit, vhosts, user, password)
+    :rtype: Tuple[str, str, List[Dict[str, str]], str, str]
+    """
+    # Find out if nrpe set nagios_hostname
+    hostname = nrpe.get_nagios_hostname()
+    unit = nrpe.get_nagios_unit_name()
+
+    # create unique user and vhost for each unit
+    current_unit = local_unit().replace('/', '-')
+    user = 'nagios-{}'.format(current_unit)
+    vhosts = [{'vhost': user, 'shortname': RABBIT_USER}]
+    password = get_rabbit_password(user, local=True)
+    create_user(user, password, ['monitoring'])
+
+    if config('check-vhosts'):
+        for other_vhost in config('check-vhosts').split(' '):
+            if other_vhost:
+                item = {'vhost': other_vhost,
+                        'shortname': 'rabbit_{}'.format(other_vhost)}
+                vhosts.append(item)
+
+    return hostname, unit, vhosts, user, password
+
+
+def nrpe_update_vhost_check(nrpe_compat, unit, user, password, vhost):
+    """Add/Remove the RabbitMQ non-SSL check
+
+    If the SSL is set to `off` or `on`, it will add the non-SSL RabbitMQ check,
+    otherwise it will remove it.
+
+    :param nrpe_compat: the NRPE class object
+    :type: nrpe.NRPE
+    :param unit: NRPE unit
+    :type: str
+    :param user: username of NRPE user
+    :type: str
+    :param password: password of NRPE user
+    :type: str
+    :param vhost: dictionary with vhost and shortname
+    :type: Dict[str, str]
+    """
+    ssl_config = config('ssl') or ''
+    if ssl_config.lower() in ['off', 'on']:
+        log('Adding rabbitmq non-SSL check for {}'.format(vhost['vhost']),
+            level=DEBUG)
+        nrpe_compat.add_check(
+            shortname=vhost['shortname'],
+            description='Check RabbitMQ {} {}'.format(unit, vhost['vhost']),
+            check_cmd='{}/check_rabbitmq.py --user {} --password {} '
+                      '--vhost {}'.format(
+                          NAGIOS_PLUGINS, user, password, vhost['vhost']))
+    else:
+        log('Removing rabbitmq non-SSL check for {}'.format(vhost['vhost']),
+            level=DEBUG)
+        nrpe_compat.remove_check(
+            shortname=vhost['shortname'],
+            description='Remove check RabbitMQ {} {}'.format(
+                unit, vhost['vhost']),
+            check_cmd='{}/check_rabbitmq.py'.format(NAGIOS_PLUGINS))
+
+
+def nrpe_update_vhost_ssl_check(nrpe_compat, unit, user, password, vhost):
+    """Add/Remove the RabbitMQ SSL check
+
+    If the SSL is set to `only` or `on`, it will add the SSL RabbitMQ check,
+    otherwise it will remove it.
+
+    :param nrpe_compat: the NRPE class object
+    :type: nrpe.NRPE
+    :param unit: NRPE unit
+    :type: str
+    :param user: username of NRPE user
+    :type: str
+    :param password: password of NRPE user
+    :type: str
+    :param vhost: dictionary with vhost and shortname
+    :type: Dict[str, str]
+    """
+    ssl_config = config('ssl') or ''
+    if ssl_config.lower() in ['only', 'on']:
+        log('Adding rabbitmq SSL check for {}'.format(vhost['vhost']),
+            level=DEBUG)
+        nrpe_compat.add_check(
+            shortname=vhost['shortname'] + "_ssl",
+            description='Check RabbitMQ (SSL) {} {}'.format(
+                unit, vhost['vhost']),
+            check_cmd='{}/check_rabbitmq.py --user {} --password {} '
+                      '--vhost {} --ssl --ssl-ca {} --port {}'.format(
+                          NAGIOS_PLUGINS, user, password, vhost['vhost'],
+                          SSL_CA_FILE, int(config('ssl_port'))))
+    else:
+        log('Removing rabbitmq SSL check for {}'.format(vhost['vhost']),
+            level=DEBUG)
+        nrpe_compat.remove_check(
+            shortname=vhost['shortname'] + "_ssl",
+            description='Remove check RabbitMQ (SSL) {} {}'.format(
+                unit, vhost['vhost']),
+            check_cmd='{}/check_rabbitmq.py'.format(NAGIOS_PLUGINS))
+
+
+def nrpe_update_queues_check(nrpe_compat, rabbit_dir):
+    """Add/Remove the RabbitMQ queues check
+
+    The RabbitMQ Queues check should be added if the `queue_thresholds` and
+    the `stats_cron_schedule` variables are in the configuration. Otherwise,
+    this check should be removed.
+    The cron job configured with the `stats_cron_schedule`
+    variable is responsible for creating the data files read by this check.
+
+    :param nrpe_compat: the NRPE class object
+    :type: nrpe.NRPE
+    :param rabbit_dir: path to the RabbitMQ directory
+    :type: str
+    """
+    stats_datafile = os.path.join(
+        rabbit_dir, 'data', '{}_queue_stats.dat'.format(get_unit_hostname()))
+
+    if config('queue_thresholds') and config('stats_cron_schedule'):
+        cmd = ""
+        # If value of queue_thresholds is incorrect we want the hook to fail
+        for item in yaml.safe_load(config('queue_thresholds')):
+            cmd += ' -c "{}" "{}" {} {}'.format(*item)
+        nrpe_compat.add_check(
+            shortname=RABBIT_USER + '_queue',
+            description='Check RabbitMQ Queues',
+            check_cmd='{}/check_rabbitmq_queues.py{} {}'.format(
+                NAGIOS_PLUGINS, cmd, stats_datafile))
+    else:
+        log('Removing rabbitmq Queues check', level=DEBUG)
+        nrpe_compat.remove_check(
+            shortname=RABBIT_USER + '_queue',
+            description='Remove check RabbitMQ Queues',
+            check_cmd='{}/check_rabbitmq_queues.py'.format(NAGIOS_PLUGINS))
+
+
+def nrpe_update_cluster_check(nrpe_compat, user, password):
+    """Add/Remove the RabbitMQ cluster check
+
+    If the management_plugin is set to `True`, it will add the cluster RabbitMQ
+    check, otherwise it will remove it.
+
+    :param nrpe_compat: the NRPE class object
+    :type: nrpe.NRPE
+    :param user: username of NRPE user
+    :type: str
+    :param password: password of NRPE user
+    :type: str
+    """
+    if config('management_plugin'):
+        cmd = '{}/check_rabbitmq_cluster.py --port {} ' \
+              '--user {} --password {}'.format(
+                  NAGIOS_PLUGINS, get_managment_port(), user, password)
+        nrpe_compat.add_check(
+            shortname=RABBIT_USER + '_cluster',
+            description='Check RabbitMQ Cluster',
+            check_cmd=cmd)
+    else:
+        log('Removing rabbitmq Cluster check', level=DEBUG)
+        nrpe_compat.remove_check(
+            shortname=RABBIT_USER + '_cluster',
+            description='Remove check RabbitMQ Cluster',
+            check_cmd='{}/check_rabbitmq_cluster.py'.format(NAGIOS_PLUGINS))
