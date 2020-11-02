@@ -2,3 +2,5 @@
 host=review.opendev.org
 port=29418
 project=openstack/charm-rabbitmq-server.git
+
+defaultbranch=stable/20.10
