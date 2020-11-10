@@ -78,7 +78,10 @@ class ClusterStatusTestCase(CharmTestCase):
 
 
 class CheckQueuesTestCase(CharmTestCase):
-    TEST_QUEUE_RESULT = b'Listing queues ...\ntest\t0\ntest\t0\n""'
+    TEST_QUEUE_RESULTS = [
+        b'Listing queues ...\ntest\t0\ntest\t0\n',
+        b'name\tmessage\ntest\t0\ntest\t0\n',
+    ]
 
     def dummy_action_get(self, key):
         action_values = {"queue-depth": -1, "vhost": "/"}
@@ -91,24 +94,28 @@ class CheckQueuesTestCase(CharmTestCase):
 
     def test_check_queues(self):
         self.action_get.side_effect = self.dummy_action_get
-        self.check_output.return_value = self.TEST_QUEUE_RESULT
-
-        actions.check_queues([])
-        self.check_output.assert_called_once_with(['rabbitmqctl',
-                                                   'list_queues',
-                                                   '-p', "/"])
-        self.action_set.assert_called()
+        for queue_res in self.TEST_QUEUE_RESULTS:
+            with self.subTest(queue_res=queue_res):
+                self.check_output.return_value = queue_res
+                actions.check_queues([])
+                self.check_output.assert_called_once_with(
+                    ['rabbitmqctl', 'list_queues', '-q', '-p', '/'],
+                )
+                self.check_output.reset_mock()
+                self.action_set.assert_called_once_with(
+                    {'outcome': 'Success', 'output': {'test': 0}}
+                )
+                self.action_set.reset_mock()
 
     def test_check_queues_execption(self):
         self.action_get.side_effect = self.dummy_action_get
-        self.check_output.return_value = self.TEST_QUEUE_RESULT
-
-        self.check_output.side_effect = actions.CalledProcessError(1,
-                                                                   "Failure")
+        self.check_output.side_effect = actions.CalledProcessError(
+            1, "Failure"
+        )
         actions.check_queues([])
-        self.check_output.assert_called_once_with(['rabbitmqctl',
-                                                   'list_queues',
-                                                   '-p', '/'])
+        self.check_output.assert_called_once_with(
+            ['rabbitmqctl', 'list_queues', '-q', '-p', '/']
+        )
 
 
 class ListUnconsumedQueuesTestCase(CharmTestCase):

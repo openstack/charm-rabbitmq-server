@@ -96,19 +96,19 @@ def check_queues(args):
     Return those queues to the user."""
     queue_depth = (action_get('queue-depth'))
     vhost = (action_get('vhost'))
-    result = []
     # rabbitmqctl's output contains lines we don't want, such as
     # 'Listing queues ..' and '...done.', which may vary by release.
     # Actual queue results *should* always look like 'test\t0'
-    queue_pattern = re.compile('.*\t[0-9]*')
+    queue_pattern = re.compile(r"^(.*)\t([0-9]+$)")
     try:
-        queues = check_output(['rabbitmqctl', 'list_queues',
-                               '-p', vhost]).decode('utf-8').split('\n')
-        result = list({queue: size for (queue, size) in
-                       [i.split('\t') for i in queues
-                        if re.search(queue_pattern, i)]
-                       if int(size) >= queue_depth})
-
+        queue_lines = check_output(
+            ['rabbitmqctl', 'list_queues', '-q', '-p', vhost]
+        ).decode('utf-8').splitlines()
+        filtered = filter(
+            None,  # filter out empty records
+            map(lambda line: queue_pattern.findall(line), queue_lines))
+        queues = [(queue, int(size)) for [[queue, size]] in filtered]
+        result = {queue: size for queue, size in queues if size >= queue_depth}
         action_set({'output': result, 'outcome': 'Success'})
     except CalledProcessError as e:
         action_set({'output': e.output})
