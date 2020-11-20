@@ -41,6 +41,7 @@ from subprocess import (
 )
 from charmhelpers import deprecate
 from charmhelpers.core.hookenv import (
+    application_name,
     config,
     service_name,
     local_unit,
@@ -160,6 +161,17 @@ def get_osd_settings(relation_name):
                 else:
                     osd_settings[key] = value
     return _order_dict_by_key(osd_settings)
+
+
+def send_application_name(relid=None):
+    """Send the application name down the relation.
+
+    :param relid: Relation id to set application name in.
+    :type relid: str
+    """
+    relation_set(
+        relation_id=relid,
+        relation_settings={'application-name': application_name()})
 
 
 def send_osd_settings():
@@ -1074,7 +1086,10 @@ def create_erasure_profile(service, profile_name,
                            erasure_plugin_technique=None):
     """Create a new erasure code profile if one does not already exist for it.
 
-    Updates the profile if it exists. Please refer to [0] for more details.
+    Profiles are considered immutable so will not be updated if the named
+    profile already exists.
+
+    Please refer to [0] for more details.
 
     0: http://docs.ceph.com/docs/master/rados/operations/erasure-code-profile/
 
@@ -1110,6 +1125,11 @@ def create_erasure_profile(service, profile_name,
     :type erasure_plugin_technique: str
     :return: None.  Can raise CalledProcessError, ValueError or AssertionError
     """
+    if erasure_profile_exists(service, profile_name):
+        log('EC profile {} exists, skipping update'.format(profile_name),
+            level=WARNING)
+        return
+
     plugin_techniques = {
         'jerasure': [
             'reed_sol_van',
@@ -1208,9 +1228,6 @@ def create_erasure_profile(service, profile_name,
             cmd.append('d={}'.format(str(helper_chunks)))
         if scalar_mds:
             cmd.append('scalar-mds={}'.format(scalar_mds))
-
-    if erasure_profile_exists(service, profile_name):
-        cmd.append('--force')
 
     check_call(cmd)
 
@@ -2198,6 +2215,7 @@ def send_request_if_needed(request, relation='ceph'):
         for rid in relation_ids(relation):
             log('Sending request {}'.format(request.request_id), level=DEBUG)
             relation_set(relation_id=rid, broker_req=request.request)
+            relation_set(relation_id=rid, relation_settings={'unit-name': local_unit()})
 
 
 def has_broker_rsp(rid=None, unit=None):
