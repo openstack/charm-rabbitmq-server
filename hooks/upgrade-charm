@@ -1,1 +1,23 @@
-rabbitmq_server_relations.py
+#!/bin/bash -e
+# Wrapper to ensure that the required py3 versions are installed if upgrading
+# from a py2 charm to a py3 based charm.
+
+declare -a DEPS=('apt' 'netaddr' 'netifaces' 'pip' 'yaml' 'dnspython' 'requests')
+
+check_and_install() {
+    pkg="${1}-${2}"
+    if ! dpkg -s ${pkg} 2>&1 > /dev/null; then
+        apt-get -y install ${pkg}
+    fi
+}
+
+PYTHON="python3"
+
+for dep in ${DEPS[@]}; do
+    check_and_install ${PYTHON} ${dep}
+done
+
+# python3-croniter not available on trusty
+[ "$( lsb_release -sc )" != "trusty" ] && check_and_install ${PYTHON} croniter
+
+exec ./hooks/upgrade-charm.real
