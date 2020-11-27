@@ -115,6 +115,9 @@ class TestConfig(object):
             raise KeyError
         self.config[attr] = value
 
+    def unset(self, attr):
+        self.config.pop(attr)
+
     def __getitem__(self, key):
         return self.get(key)
 

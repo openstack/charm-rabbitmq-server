@@ -307,8 +307,9 @@ class RelationUtil(CharmTestCase):
                 shutil.rmtree(tmpdir)
 
     @patch('rabbit_utils.create_user')
-    @patch('rabbitmq_server_relations.local_unit')
-    @patch('charmhelpers.contrib.charmsupport.nrpe.NRPE.add_check')
+    @patch('rabbit_utils.local_unit')
+    @patch('rabbit_utils.nrpe.NRPE.add_check')
+    @patch('rabbit_utils.nrpe.NRPE.remove_check')
     @patch('subprocess.check_call')
     @patch('rabbit_utils.get_rabbit_password_on_disk')
     @patch('charmhelpers.contrib.charmsupport.nrpe.relation_ids')
@@ -316,10 +317,14 @@ class RelationUtil(CharmTestCase):
     @patch('charmhelpers.contrib.charmsupport.nrpe.get_nagios_unit_name')
     @patch('charmhelpers.contrib.charmsupport.nrpe.get_nagios_hostname')
     @patch('os.fchown')
-    @patch('rabbitmq_server_relations.charm_dir')
+    @patch('rabbit_utils.charm_dir')
     @patch('subprocess.check_output')
     @patch('rabbitmq_server_relations.config')
+    @patch('rabbit_utils.config')
+    @patch('rabbit_utils.remove_file')
     def test_update_nrpe_checks(self,
+                                mock_remove_file,
+                                mock_config3,
                                 mock_config,
                                 mock_check_output,
                                 mock_charm_dir, mock_fchown,
@@ -327,7 +332,8 @@ class RelationUtil(CharmTestCase):
                                 mock_get_nagios_unit_name, mock_config2,
                                 mock_nrpe_relation_ids,
                                 mock_get_rabbit_password_on_disk,
-                                mock_check_call, mock_add_check,
+                                mock_check_call,
+                                mock_remove_check, mock_add_check,
                                 mock_local_unit,
                                 mock_create_user):
 
@@ -336,8 +342,13 @@ class RelationUtil(CharmTestCase):
         mock_charm_dir.side_effect = lambda: self.tmp_dir
         mock_config.side_effect = self.test_config
         mock_config2.side_effect = self.test_config
-        rabbitmq_server_relations.STATS_CRONFILE = os.path.join(
-            self.tmp_dir, "rabbitmq-stats")
+        mock_config3.side_effect = self.test_config
+        stats_confile = os.path.join(self.tmp_dir, "rabbitmq-stats")
+        rabbit_utils.STATS_CRONFILE = stats_confile
+        nagios_plugins = os.path.join(self.tmp_dir, "nagios_plugins")
+        rabbit_utils.NAGIOS_PLUGINS = nagios_plugins
+        scripts_dir = os.path.join(self.tmp_dir, "scripts_dir")
+        rabbit_utils.SCRIPTS_DIR = scripts_dir
         mock_get_nagios_hostname.return_value = "foo-0"
         mock_get_nagios_unit_name.return_value = "bar-0"
         mock_get_rabbit_password_on_disk.return_value = "qwerty"
@@ -348,35 +359,66 @@ class RelationUtil(CharmTestCase):
         rabbitmq_server_relations.update_nrpe_checks()
         mock_check_output.assert_any_call(
             ['/usr/bin/rsync', '-r', '--delete', '--executability',
-             '%s/files/collect_rabbitmq_stats.sh' % self.tmp_dir,
-             '/usr/local/bin/collect_rabbitmq_stats.sh'],
+             '{}/files/collect_rabbitmq_stats.sh'.format(self.tmp_dir),
+             '{}/collect_rabbitmq_stats.sh'.format(scripts_dir)],
             stderr=subprocess.STDOUT)
 
         # regular check on 5672
-        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
-               '--password {password} --vhost {vhost}').format(
-                   plugins_dir=rabbitmq_server_relations.NAGIOS_PLUGINS,
-                   user='nagios-unit-0', vhost='nagios-unit-0',
-                   password='qwerty')
+        cmd_5672 = ('{plugins_dir}/check_rabbitmq.py --user {user} '
+                    '--password {password} --vhost {vhost}').format(
+                        plugins_dir=nagios_plugins,
+                        user='nagios-unit-0', vhost='nagios-unit-0',
+                        password='qwerty')
 
         mock_add_check.assert_any_call(
             shortname=rabbit_utils.RABBIT_USER,
             description='Check RabbitMQ {} {}'.format('bar-0',
                                                       'nagios-unit-0'),
-            check_cmd=cmd)
+            check_cmd=cmd_5672)
 
         # check on ssl port 5671
-        cmd = ('{plugins_dir}/check_rabbitmq.py --user {user} '
-               '--password {password} --vhost {vhost} '
-               '--ssl --ssl-ca {ssl_ca} --port {port}').format(
-                   plugins_dir=rabbitmq_server_relations.NAGIOS_PLUGINS,
-                   user='nagios-unit-0',
-                   password='qwerty',
-                   port=int(self.test_config['ssl_port']),
-                   vhost='nagios-unit-0',
-                   ssl_ca=rabbitmq_server_relations.SSL_CA_FILE)
+        cmd_5671 = ('{plugins_dir}/check_rabbitmq.py --user {user} '
+                    '--password {password} --vhost {vhost} '
+                    '--ssl --ssl-ca {ssl_ca} --port {port}').format(
+                        plugins_dir=nagios_plugins,
+                        user='nagios-unit-0',
+                        password='qwerty',
+                        port=int(self.test_config['ssl_port']),
+                        vhost='nagios-unit-0',
+                        ssl_ca=rabbit_utils.SSL_CA_FILE)
         mock_add_check.assert_any_call(
             shortname=rabbit_utils.RABBIT_USER + "_ssl",
             description='Check RabbitMQ (SSL) {} {}'.format('bar-0',
                                                             'nagios-unit-0'),
-            check_cmd=cmd)
+            check_cmd=cmd_5671)
+
+        # test stats_cron_schedule has been removed
+        mock_remove_file.reset_mock()
+        mock_add_check.reset_mock()
+        mock_remove_check.reset_mock()
+        self.test_config.unset('stats_cron_schedule')
+        rabbitmq_server_relations.update_nrpe_checks()
+        mock_remove_file.assert_has_calls([
+            call(stats_confile),
+            call('{}/collect_rabbitmq_stats.sh'.format(scripts_dir)),
+            call('{}/check_rabbitmq_queues.py'.format(nagios_plugins)),
+            call('{}/check_rabbitmq_cluster.py'.format(nagios_plugins))])
+        mock_add_check.assert_has_calls([
+            call(shortname=rabbit_utils.RABBIT_USER,
+                 description='Check RabbitMQ {} {}'.format('bar-0',
+                                                           'nagios-unit-0'),
+                 check_cmd=cmd_5672),
+            call(shortname=rabbit_utils.RABBIT_USER + "_ssl",
+                 description='Check RabbitMQ (SSL) {} {}'.format(
+                     'bar-0', 'nagios-unit-0'),
+                 check_cmd=cmd_5671),
+        ])
+        mock_remove_check.assert_has_calls([
+            call(shortname=rabbit_utils.RABBIT_USER + '_queue',
+                 description='Remove check RabbitMQ Queues',
+                 check_cmd='{}/check_rabbitmq_queues.py'.format(
+                     nagios_plugins)),
+            call(shortname=rabbit_utils.RABBIT_USER + '_cluster',
+                 description='Remove check RabbitMQ Cluster',
+                 check_cmd='{}/check_rabbitmq_cluster.py'.format(
+                     nagios_plugins))])

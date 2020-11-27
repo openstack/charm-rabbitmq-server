@@ -152,6 +152,14 @@ class UtilsTests(CharmTestCase):
     def setUp(self):
         super(UtilsTests, self).setUp(rabbit_utils,
                                       TO_PATCH)
+        self.tmp_dir = tempfile.mkdtemp()
+        self.nrpe_compat = mock.MagicMock()
+        self.nrpe_compat.add_check = mock.MagicMock()
+        self.nrpe_compat.remove_check = mock.MagicMock()
+
+    def tearDown(self):
+        super(UtilsTests, self).tearDown()
+        self.nrpe_compat.reset_mock()
 
     @mock.patch("rabbit_utils.log")
     def test_update_empty_hosts_file(self, mock_log):
@@ -948,3 +956,264 @@ class UtilsTests(CharmTestCase):
             "active",
             "message is ignored")
         self.assertEqual(_expected, rabbit_utils.assess_cluster_status())
+
+    @mock.patch("rabbit_utils.log")
+    def test_remove_file(self, mock_log):
+        """test delete existing and non-existent file"""
+        with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+            rabbit_utils.remove_file(tmpfile.name)
+            mock_log.asset_not_called()
+
+            mock_log.reset_mock()
+            rabbit_utils.remove_file(tmpfile.name)
+            mock_log.assert_has_calls([
+                mock.call('{} file does not exist'.format(tmpfile.name),
+                          level='DEBUG')
+            ])
+
+    @mock.patch('os.path.isdir')
+    @mock.patch('rabbit_utils.charm_dir')
+    @mock.patch('rabbit_utils.config')
+    @mock.patch('rabbit_utils.rsync')
+    @mock.patch("rabbit_utils.write_file")
+    def test_sync_nrpe_files(self,
+                             mock_write_file,
+                             mock_rsync,
+                             mock_config,
+                             mock_charm_dir,
+                             mock_isdir):
+        """Testing copy the NRPE files"""
+        self.test_config.set('stats_cron_schedule', '*/1 * * * *')
+        self.test_config.set('cron-timeout', '300')
+        self.test_config.unset('management_plugin')
+        rabbit_utils.NAGIOS_PLUGINS = self.tmp_dir
+        rabbit_utils.SCRIPTS_DIR = self.tmp_dir
+        rabbit_utils.STATS_CRONFILE = os.path.join(self.tmp_dir, 'cronfile')
+        rabbit_utils.CRONJOB_CMD = '{schedule} {timeout} {command}'
+
+        mock_config.side_effect = self.test_config
+        mock_isdir.return_value = True
+        mock_charm_dir.side_effect = lambda: self.tmp_dir
+        rabbit_utils.sync_nrpe_files()
+        mock_rsync.assert_has_calls([
+            mock.call(os.path.join(self.tmp_dir, 'files', 'check_rabbitmq.py'),
+                      os.path.join(self.tmp_dir, 'check_rabbitmq.py')),
+            mock.call(os.path.join(self.tmp_dir, 'files',
+                                   'check_rabbitmq_queues.py'),
+                      os.path.join(self.tmp_dir, 'check_rabbitmq_queues.py')),
+            mock.call(os.path.join(self.tmp_dir, 'files',
+                                   'collect_rabbitmq_stats.sh'),
+                      os.path.join(self.tmp_dir, 'collect_rabbitmq_stats.sh'))
+        ])
+        mock_write_file.assert_has_calls([
+            mock.call(os.path.join(self.tmp_dir, 'cronfile'),
+                      '*/1 * * * * 300 {}/collect_rabbitmq_stats.sh'.format(
+                          self.tmp_dir))
+        ])
+
+    @mock.patch('rabbit_utils.config')
+    @mock.patch('rabbit_utils.remove_file')
+    def test_remove_nrpe_files(self, mock_remove_file, mock_config):
+        """Testing remove the NRPE scripts and the cron file"""
+        self.test_config.unset('stats_cron_schedule')
+        self.test_config.unset('management_plugin')
+        rabbit_utils.NAGIOS_PLUGINS = self.tmp_dir
+        rabbit_utils.SCRIPTS_DIR = self.tmp_dir
+        rabbit_utils.STATS_CRONFILE = os.path.join(self.tmp_dir, 'cronfile')
+
+        mock_config.side_effect = self.test_config
+        rabbit_utils.remove_nrpe_files()
+        mock_remove_file.assert_has_calls([
+            mock.call(os.path.join(self.tmp_dir, 'cronfile')),
+            mock.call(os.path.join(self.tmp_dir, 'collect_rabbitmq_stats.sh')),
+            mock.call(os.path.join(self.tmp_dir, 'check_rabbitmq_queues.py')),
+            mock.call(os.path.join(self.tmp_dir, 'check_rabbitmq_cluster.py')),
+        ])
+
+    @mock.patch('charmhelpers.contrib.charmsupport.nrpe.get_nagios_hostname')
+    @mock.patch('charmhelpers.contrib.charmsupport.nrpe.get_nagios_unit_name')
+    @mock.patch('rabbit_utils.create_user')
+    @mock.patch('rabbit_utils.get_rabbit_password_on_disk')
+    @mock.patch('rabbit_utils.local_unit')
+    @mock.patch('rabbit_utils.config')
+    def test_get_nrpe_credentials(self,
+                                  mock_config,
+                                  mock_local_unit,
+                                  mock_get_rabbit_password_on_disk,
+                                  mock_create_user,
+                                  mock_get_nagios_unit_name,
+                                  mock_get_nagios_hostname):
+        """Testing get the NRPE credentials"""
+        self.test_config.unset('check-vhosts')
+
+        mock_get_nagios_hostname.return_value = "foo-0"
+        mock_get_nagios_unit_name.return_value = "bar-0"
+        mock_local_unit.return_value = 'unit/0'
+        mock_config.side_effect = self.test_config
+        mock_get_rabbit_password_on_disk.return_value = "qwerty"
+
+        nrpe_credentials = rabbit_utils.get_nrpe_credentials()
+        self.assertTupleEqual(nrpe_credentials,
+                              ('foo-0',
+                               'bar-0',
+                               [{'vhost': 'nagios-unit-0',
+                                 'shortname': 'rabbitmq'}],
+                               'nagios-unit-0',
+                               'qwerty'))
+
+    @mock.patch('charmhelpers.contrib.charmsupport.nrpe.config')
+    @mock.patch('rabbit_utils.config')
+    def test_nrpe_update_vhost_check(self, mock_config, mock_config2):
+        """Testing add and remove RabbitMQ non-SSL check"""
+        mock_config.side_effect = self.test_config
+        mock_config2.side_effect = self.test_config
+        rabbit_utils.NAGIOS_PLUGINS = self.tmp_dir
+
+        # call with ssl set to 'on'
+        self.test_config.set('ssl', 'on')
+        rabbit_utils.nrpe_update_vhost_check(
+            nrpe_compat=self.nrpe_compat,
+            unit='bar-0',
+            user='nagios-unit-0',
+            password='qwerty',
+            vhost={'vhost': 'nagios-unit-0', 'shortname': 'rabbitmq'})
+        self.nrpe_compat.add_check.assert_called_with(
+            shortname='rabbitmq',
+            description='Check RabbitMQ bar-0 nagios-unit-0',
+            check_cmd='{}/check_rabbitmq.py --user nagios-unit-0 '
+                      '--password qwerty '
+                      '--vhost nagios-unit-0'.format(self.tmp_dir))
+        self.nrpe_compat.remove_check.assert_not_called()
+
+        self.nrpe_compat.reset_mock()
+
+        # call with ssl set to 'only'
+        self.test_config.set('ssl', 'only')
+        rabbit_utils.nrpe_update_vhost_check(
+            nrpe_compat=self.nrpe_compat,
+            unit='bar-0',
+            user='nagios-unit-0',
+            password='qwerty',
+            vhost={'vhost': 'nagios-unit-0', 'shortname': 'rabbitmq'})
+        self.nrpe_compat.add_check.assert_not_called()
+        self.nrpe_compat.remove_check.assert_called_with(
+            shortname='rabbitmq',
+            description='Remove check RabbitMQ bar-0 nagios-unit-0',
+            check_cmd='{}/check_rabbitmq.py'.format(self.tmp_dir))
+
+    @mock.patch('charmhelpers.contrib.charmsupport.nrpe.config')
+    @mock.patch('rabbit_utils.config')
+    def test_nrpe_update_vhost_ssl_check(self, mock_config, mock_config2):
+        """Testing add and remove RabbitMQ SSL check"""
+        mock_config.side_effect = self.test_config
+        mock_config2.side_effect = self.test_config
+        rabbit_utils.NAGIOS_PLUGINS = self.tmp_dir
+
+        # call with ssl set to 'on'
+        self.test_config.set('ssl', 'on')
+        rabbit_utils.nrpe_update_vhost_ssl_check(
+            nrpe_compat=self.nrpe_compat,
+            unit='bar-0',
+            user='nagios-unit-0',
+            password='qwerty',
+            vhost={'vhost': 'nagios-unit-0', 'shortname': 'rabbitmq'})
+        self.nrpe_compat.add_check.assert_called_with(
+            shortname='rabbitmq_ssl',
+            description='Check RabbitMQ (SSL) bar-0 nagios-unit-0',
+            check_cmd='{}/check_rabbitmq.py --user nagios-unit-0 '
+                      '--password qwerty --vhost nagios-unit-0 --ssl '
+                      '--ssl-ca /etc/rabbitmq/rabbit-server-ca.pem '
+                      '--port 5671'.format(self.tmp_dir))
+        self.nrpe_compat.remove_check.assert_not_called()
+
+        self.nrpe_compat.reset_mock()
+
+        # call with ssl set to 'off'
+        self.test_config.set('ssl', 'off')
+        rabbit_utils.nrpe_update_vhost_ssl_check(
+            nrpe_compat=self.nrpe_compat,
+            unit='bar-0',
+            user='nagios-unit-0',
+            password='qwerty',
+            vhost={'vhost': 'nagios-unit-0', 'shortname': 'rabbitmq'})
+        self.nrpe_compat.add_check.assert_not_called()
+        self.nrpe_compat.remove_check.assert_called_with(
+            shortname='rabbitmq_ssl',
+            description='Remove check RabbitMQ (SSL) bar-0 nagios-unit-0',
+            check_cmd='{}/check_rabbitmq.py'.format(self.tmp_dir))
+
+    @mock.patch('charmhelpers.contrib.charmsupport.nrpe.config')
+    @mock.patch('rabbit_utils.config')
+    @mock.patch('rabbit_utils.get_unit_hostname')
+    def test_nrpe_update_queues_check(self,
+                                      mock_get_unit_hostname,
+                                      mock_config,
+                                      mock_config2):
+        """Testing add and remove RabbitMQ queues check"""
+        mock_config.side_effect = self.test_config
+        mock_config2.side_effect = self.test_config
+        mock_get_unit_hostname.return_value = 'test'
+        rabbit_utils.NAGIOS_PLUGINS = self.tmp_dir
+
+        # call with stats_cron_schedule set to '*/5 * * * *'
+        self.test_config.set('stats_cron_schedule', '*/5 * * * *')
+        rabbit_utils.nrpe_update_queues_check(self.nrpe_compat, self.tmp_dir)
+        self.nrpe_compat.add_check.assert_called_with(
+            shortname='rabbitmq_queue',
+            description='Check RabbitMQ Queues',
+            check_cmd='{}/check_rabbitmq_queues.py -c "\\*" "\\*" 100 200 '
+                      '{}/data/test_queue_stats.dat'.format(self.tmp_dir,
+                                                            self.tmp_dir))
+        self.nrpe_compat.remove_check.assert_not_called()
+
+        self.nrpe_compat.reset_mock()
+
+        # call with unset stats_cron_schedule
+        self.test_config.unset('stats_cron_schedule')
+        rabbit_utils.nrpe_update_queues_check(self.nrpe_compat, self.tmp_dir)
+        self.nrpe_compat.add_check.assert_not_called()
+        self.nrpe_compat.remove_check.assert_called_with(
+            shortname='rabbitmq_queue',
+            description='Remove check RabbitMQ Queues',
+            check_cmd='{}/check_rabbitmq_queues.py'.format(self.tmp_dir))
+
+    @mock.patch('charmhelpers.contrib.charmsupport.nrpe.config')
+    @mock.patch('rabbit_utils.config')
+    @mock.patch('rabbit_utils.get_managment_port')
+    def test_nrpe_update_cluster_check(self,
+                                       mock_get_managment_port,
+                                       mock_config,
+                                       mock_config2):
+        """Testing add and remove RabbitMQ cluster check"""
+        mock_config.side_effect = self.test_config
+        mock_config2.side_effect = self.test_config
+        mock_get_managment_port.return_value = '1234'
+        rabbit_utils.NAGIOS_PLUGINS = self.tmp_dir
+
+        # call with management_plugin set to True
+        self.test_config.set('management_plugin', True)
+        rabbit_utils.nrpe_update_cluster_check(
+            nrpe_compat=self.nrpe_compat,
+            user='nagios-unit-0',
+            password='qwerty')
+        self.nrpe_compat.add_check.assert_called_with(
+            shortname='rabbitmq_cluster',
+            description='Check RabbitMQ Cluster',
+            check_cmd='{}/check_rabbitmq_cluster.py --port 1234 '
+                      '--user nagios-unit-0 --password qwerty'.format(
+                          self.tmp_dir))
+        self.nrpe_compat.remove_check.assert_not_called()
+
+        self.nrpe_compat.reset_mock()
+
+        # call with management_plugin set to False
+        self.test_config.set('management_plugin', False)
+        rabbit_utils.nrpe_update_cluster_check(
+            nrpe_compat=self.nrpe_compat,
+            user='nagios-unit-0',
+            password='qwerty')
+        self.nrpe_compat.add_check.assert_not_called()
+        self.nrpe_compat.remove_check.assert_called_with(
+            shortname='rabbitmq_cluster',
+            description='Remove check RabbitMQ Cluster',
+            check_cmd='{}/check_rabbitmq_cluster.py'.format(self.tmp_dir))
