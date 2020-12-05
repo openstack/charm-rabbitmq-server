@@ -13,18 +13,32 @@
 # limitations under the License.
 
 from datetime import datetime, timedelta
-from tempfile import NamedTemporaryFile
+from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 import unittest
 
-from mock import MagicMock, patch
 import check_rabbitmq_queues
 
 
 class CheckRabbitTest(unittest.TestCase):
-    @patch(
-        "check_rabbitmq_queues.config",
-        MagicMock(return_value="*/5 * * * *"),
-    )
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdir = TemporaryDirectory()
+        cronjob = Path(cls.tmpdir.name) / "rabbitmq-stats"
+        with cronjob.open('w') as f:
+            f.write("*/5 * * * * root timeout -k 10s -s SIGINT 300 "
+                    "/usr/local/bin/collect_rabbitmq_stats.sh 2>&1 | "
+                    "logger -p local0.notice")
+        cls.old_cron = check_rabbitmq_queues.CRONJOB
+        check_rabbitmq_queues.CRONJOB = str(cronjob)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Tear down class fixture."""
+        cls.tmpdir.cleanup()
+        check_rabbitmq_queues.CRONJOB = cls.old_cron
+
     def test_check_stats_file_freshness_fresh(self):
         with NamedTemporaryFile() as stats_file:
             results = check_rabbitmq_queues.check_stats_file_freshness(
@@ -32,10 +46,6 @@ class CheckRabbitTest(unittest.TestCase):
             )
             self.assertEqual(results[0], "OK")
 
-    @patch(
-        "check_rabbitmq_queues.config",
-        MagicMock(return_value="*/5 * * * *"),
-    )
     def test_check_stats_file_freshness_nonfresh(self):
         with NamedTemporaryFile() as stats_file:
             next_hour = datetime.now() + timedelta(hours=1)
@@ -43,3 +53,7 @@ class CheckRabbitTest(unittest.TestCase):
                 stats_file.name, asof=next_hour
             )
             self.assertEqual(results[0], "CRIT")
+
+    def test_get_stats_cron_schedule(self):
+        schedule = check_rabbitmq_queues.get_stats_cron_schedule()
+        self.assertEqual(schedule, "*/5 * * * *")
