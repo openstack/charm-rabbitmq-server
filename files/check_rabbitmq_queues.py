@@ -38,12 +38,22 @@ def gen_stats(data_lines):
         yield vhost, queue, int(m_all)
 
 
-def collate_stats(stats, limits):
+def collate_stats(stats, limits, exclude):
     # Create a dict with stats collated according to the definitions in the
     # limits file. If none of the definitions in the limits file is matched,
     # store the stat without collating.
     collated = defaultdict(lambda: 0)
     for vhost, queue, m_all in stats:
+        skip = False
+
+        for e_vhost, e_queue in exclude:
+            if fnmatchcase(vhost, e_vhost) and fnmatchcase(queue, e_queue):
+                skip = True
+                break
+
+        if skip:
+            continue
+
         for l_vhost, l_queue, _, _ in limits:
             if fnmatchcase(vhost, l_vhost) and fnmatchcase(queue, l_queue):
                 collated[l_vhost, l_queue] += m_all
@@ -120,7 +130,18 @@ if __name__ == "__main__":
         action='append',
         required=True,
         metavar=('vhost', 'queue', 'warn', 'crit'),
-        help=('Vhost and queue to check. Can be used multiple times'))
+        help='Vhost and queue to check. Can be used multiple times'
+    )
+    parser.add_argument(
+        '-e',
+        nargs=2,
+        action='append',
+        required=False,
+        default=[],
+        metavar=('vhost', 'queue'),
+        help='Vhost and queue to exclude from checks. Can be used multiple \
+        times'
+    )
     parser.add_argument(
         'stats_file',
         nargs='*',
@@ -133,7 +154,7 @@ if __name__ == "__main__":
         chain.from_iterable(
             gen_data_lines(filename) for filename in args.stats_file))
     # Collate stats according to limit definitions and check.
-    stats_collated = collate_stats(stats, args.c)
+    stats_collated = collate_stats(stats, args.c, args.e)
     stats_checked = check_stats(stats_collated, args.c)
     criticals, warnings = [], []
     for queue, vhost, message_no, status in stats_checked:

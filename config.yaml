@@ -106,6 +106,20 @@ options:
       Wildcards '*' are accepted to monitor all vhosts and/or queues.
       In case of multiple matches, only the first will apply: wildcards should
       therefore be used last in order to avoid unexpected behavior.
+  exclude_queues:
+    type: string
+    default: "[]"
+    description: |
+      List of RabbitMQ queues that should be skipped when checking thresholds.
+      Interpreted as YAML in format [<vhost>, <queue>]
+      Per-queue thresholds can be expressed as a multi-line YAML array:
+      - ['/', 'queue1']
+      - ['/', 'queue2']
+      Or as a list of lists:
+      [['/', 'queue1'], ['/', 'queue2']]
+      Wildcards '*' are accepted to exclude, for example, single queue on all
+      hosts. Note that the wildcard asterisk must be double-escaped. Example:
+      [['\\*', 'queue1']]
   connection-backlog:
     type: int
     default:
