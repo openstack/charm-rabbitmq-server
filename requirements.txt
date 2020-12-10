@@ -7,11 +7,13 @@
 #       requirements.  They are intertwined.  Also, Zaza itself should specify
 #       all of its own requirements and if it doesn't, fix it there.
 #
-setuptools<50.0.0  # https://github.com/pypa/setuptools/commit/04e3df22df840c6bb244e9b27bc56750c44b7c85
 pbr>=1.8.0,<1.9.0
 simplejson>=2.2.0
 netifaces>=0.10.4
-netaddr>=0.7.12,!=0.7.16
+
+# Strange import error with newer netaddr:
+netaddr>0.7.16,<0.8.0
+
 Jinja2>=2.6  # BSD License (3 clause)
 six>=1.9.0
 
