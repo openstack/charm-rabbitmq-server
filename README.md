@@ -33,8 +33,8 @@ pocket (e.g. 'cloud:bionic-train'). In the case of a non-OpenStack project,
 there is no guarantee that a candidate will be found in the stated UCA pocket.
 
 > **Note:** Changing the value of this option post-deployment will trigger a
-  software upgrade. See appendix [OpenStack upgrades][cdg-openstack-upgrades]
-  in the [OpenStack Charms Deployment Guide][cdg].
+  software upgrade. See [OpenStack upgrade][cdg-upgrade-openstack] in the
+  [OpenStack Charms Deployment Guide][cdg].
 
 #### `ssl`
 
@@ -116,7 +116,7 @@ For general charm questions refer to the [OpenStack Charm Guide][cg].
 
 [cg]: https://docs.openstack.org/charm-guide
 [cdg]: https://docs.openstack.org/project-deploy-guide/charm-deployment-guide
-[cdg-openstack-upgrades]: https://docs.openstack.org/project-deploy-guide/charm-deployment-guide/latest/app-upgrade-openstack.html
+[cdg-upgrade-openstack]: https://docs.openstack.org/project-deploy-guide/charm-deployment-guide/latest/upgrade-openstack.html
 [lp-bugs-charm-rabbitmq-server]: https://bugs.launchpad.net/charm-rabbitmq-server/+filebug
 [juju-docs-actions]: https://jaas.ai/docs/actions
 [charms-requires-rabbitmq]: https://jaas.ai/search?requires=rabbitmq
