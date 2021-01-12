@@ -19,6 +19,7 @@
 #  Nick Moffitt <nick.moffitt@canonical.com>
 #  Matthew Wedgwood <matthew.wedgwood@canonical.com>
 
+import errno
 import os
 import re
 import pwd
@@ -59,6 +60,7 @@ elif __platform__ == "centos":
     )  # flake8: noqa -- ignore F401 for this import
 
 UPDATEDB_PATH = '/etc/updatedb.conf'
+CA_CERT_DIR = '/usr/local/share/ca-certificates'
 
 
 def service_start(service_name, **kwargs):
@@ -677,7 +679,7 @@ def check_hash(path, checksum, hash_type='md5'):
 
     :param str checksum: Value of the checksum used to validate the file.
     :param str hash_type: Hash algorithm used to generate `checksum`.
-        Can be any hash alrgorithm supported by :mod:`hashlib`,
+        Can be any hash algorithm supported by :mod:`hashlib`,
         such as md5, sha1, sha256, sha512, etc.
     :raises ChecksumError: If the file fails the checksum
 
@@ -825,7 +827,8 @@ def list_nics(nic_type=None):
     if nic_type:
         for int_type in int_types:
             cmd = ['ip', 'addr', 'show', 'label', int_type + '*']
-            ip_output = subprocess.check_output(cmd).decode('UTF-8')
+            ip_output = subprocess.check_output(
+                cmd).decode('UTF-8', errors='replace')
             ip_output = ip_output.split('\n')
             ip_output = (line for line in ip_output if line)
             for line in ip_output:
@@ -841,7 +844,8 @@ def list_nics(nic_type=None):
                         interfaces.append(iface)
     else:
         cmd = ['ip', 'a']
-        ip_output = subprocess.check_output(cmd).decode('UTF-8').split('\n')
+        ip_output = subprocess.check_output(
+            cmd).decode('UTF-8', errors='replace').split('\n')
         ip_output = (line.strip() for line in ip_output if line)
 
         key = re.compile(r'^[0-9]+:\s+(.+):')
@@ -865,7 +869,8 @@ def set_nic_mtu(nic, mtu):
 def get_nic_mtu(nic):
     """Return the Maximum Transmission Unit (MTU) for a network interface."""
     cmd = ['ip', 'addr', 'show', nic]
-    ip_output = subprocess.check_output(cmd).decode('UTF-8').split('\n')
+    ip_output = subprocess.check_output(
+        cmd).decode('UTF-8', errors='replace').split('\n')
     mtu = ""
     for line in ip_output:
         words = line.split()
@@ -877,7 +882,7 @@ def get_nic_mtu(nic):
 def get_nic_hwaddr(nic):
     """Return the Media Access Control (MAC) for a network interface."""
     cmd = ['ip', '-o', '-0', 'addr', 'show', nic]
-    ip_output = subprocess.check_output(cmd).decode('UTF-8')
+    ip_output = subprocess.check_output(cmd).decode('UTF-8', errors='replace')
     hwaddr = ""
     words = ip_output.split()
     if 'link/ether' in words:
@@ -889,7 +894,7 @@ def get_nic_hwaddr(nic):
 def chdir(directory):
     """Change the current working directory to a different directory for a code
     block and return the previous directory after the block exits. Useful to
-    run commands from a specificed directory.
+    run commands from a specified directory.
 
     :param str directory: The directory path to change to for this context.
     """
@@ -924,9 +929,13 @@ def chownr(path, owner, group, follow_links=True, chowntopdir=False):
     for root, dirs, files in os.walk(path, followlinks=follow_links):
         for name in dirs + files:
             full = os.path.join(root, name)
-            broken_symlink = os.path.lexists(full) and not os.path.exists(full)
-            if not broken_symlink:
+            try:
                 chown(full, uid, gid)
+            except (IOError, OSError) as e:
+                # Intended to ignore "file not found". Catching both to be
+                # compatible with both Python 2.7 and 3.x.
+                if e.errno == errno.ENOENT:
+                    pass
 
 
 def lchownr(path, owner, group):
@@ -1074,7 +1083,7 @@ def install_ca_cert(ca_cert, name=None):
         ca_cert = ca_cert.encode('utf8')
     if not name:
         name = 'juju-{}'.format(charm_name())
-    cert_file = '/usr/local/share/ca-certificates/{}.crt'.format(name)
+    cert_file = '{}/{}.crt'.format(CA_CERT_DIR, name)
     new_hash = hashlib.md5(ca_cert).hexdigest()
     if file_hash(cert_file) == new_hash:
         return

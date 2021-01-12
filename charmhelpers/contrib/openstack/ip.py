@@ -33,6 +33,7 @@ INTERNAL = 'int'
 ADMIN = 'admin'
 ACCESS = 'access'
 
+# TODO: reconcile 'int' vs 'internal' binding names
 ADDRESS_MAP = {
     PUBLIC: {
         'binding': 'public',
@@ -57,6 +58,14 @@ ADDRESS_MAP = {
         'config': 'access-network',
         'fallback': 'private-address',
         'override': 'os-access-hostname',
+    },
+    # Note (thedac) bridge to begin the reconciliation between 'int' vs
+    # 'internal' binding names
+    'internal': {
+        'binding': 'internal',
+        'config': 'os-internal-network',
+        'fallback': 'private-address',
+        'override': 'os-internal-hostname',
     },
 }
 
@@ -114,6 +123,25 @@ def _get_address_override(endpoint_type=PUBLIC):
         return addr_override.format(service_name=service_name())
 
 
+def local_address(unit_get_fallback='public-address'):
+    """Return a network address for this unit.
+
+    Attempt to retrieve a 'default' IP address for this unit
+    from network-get. If this is running with an old version of Juju then
+    fallback to unit_get.
+
+    :param unit_get_fallback: Either 'public-address' or 'private-address'.
+                              Only used with old versions of Juju.
+    :type unit_get_fallback: str
+    :returns: IP Address
+    :rtype: str
+    """
+    try:
+        return network_get_primary_address('juju-info')
+    except NotImplementedError:
+        return unit_get(unit_get_fallback)
+
+
 def resolve_address(endpoint_type=PUBLIC, override=True):
     """Return unit address depending on net config.
 
@@ -167,7 +195,7 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
         if config('prefer-ipv6'):
             fallback_addr = get_ipv6_addr(exc_list=vips)[0]
         else:
-            fallback_addr = unit_get(net_fallback)
+            fallback_addr = local_address(unit_get_fallback=net_fallback)
 
         if net_addr:
             resolved_address = get_address_in_network(net_addr, fallback_addr)
@@ -195,3 +223,10 @@ def get_vip_in_network(network):
             if is_address_in_network(network, vip):
                 matching_vip = vip
     return matching_vip
+
+
+def get_default_api_bindings():
+    _default_bindings = []
+    for binding in [INTERNAL, ADMIN, PUBLIC]:
+        _default_bindings.append(ADDRESS_MAP[binding]['binding'])
+    return _default_bindings

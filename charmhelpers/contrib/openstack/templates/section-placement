@@ -15,5 +15,6 @@ password = {{ admin_password }}
 {% endif -%}
 {% if region -%}
 os_region_name = {{ region }}
+region_name = {{ region }}
 {% endif -%}
 randomize_allocation_candidates = true

@@ -646,7 +646,7 @@ def _add_apt_repository(spec):
     # passed as environment variables (See lp:1433761). This is not the case
     # LTS and non-LTS releases below bionic.
     _run_with_retries(['add-apt-repository', '--yes', spec],
-                      cmd_env=env_proxy_settings(['https']))
+                      cmd_env=env_proxy_settings(['https', 'http']))
 
 
 def _add_cloud_pocket(pocket):

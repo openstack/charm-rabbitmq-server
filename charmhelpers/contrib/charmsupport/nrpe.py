@@ -139,10 +139,11 @@ define service {{
                         """{description}
     check_command                   check_nrpe!{command}
     servicegroups                   {nagios_servicegroup}
+{service_config_overrides}
 }}
 """)
 
-    def __init__(self, shortname, description, check_cmd):
+    def __init__(self, shortname, description, check_cmd, max_check_attempts=None):
         super(Check, self).__init__()
         # XXX: could be better to calculate this from the service name
         if not re.match(self.shortname_re, shortname):
@@ -155,6 +156,7 @@ define service {{
         # The default is: illegal_object_name_chars=`~!$%^&*"|'<>?,()=
         self.description = description
         self.check_cmd = self._locate_cmd(check_cmd)
+        self.max_check_attempts = max_check_attempts
 
     def _get_check_filename(self):
         return os.path.join(NRPE.nrpe_confdir, '{}.cfg'.format(self.command))
@@ -216,12 +218,19 @@ define service {{
                              nagios_servicegroups):
         self._remove_service_files()
 
+        if self.max_check_attempts:
+            service_config_overrides = '    max_check_attempts              {}'.format(
+                self.max_check_attempts
+            )  # Note indentation is here rather than in the template to avoid trailing spaces
+        else:
+            service_config_overrides = ''  # empty string to avoid printing 'None'
         templ_vars = {
             'nagios_hostname': hostname,
             'nagios_servicegroup': nagios_servicegroups,
             'description': self.description,
             'shortname': self.shortname,
             'command': self.command,
+            'service_config_overrides': service_config_overrides,
         }
         nrpe_service_text = Check.service_template.format(**templ_vars)
         nrpe_service_file = self._get_service_filename(hostname)
@@ -327,6 +336,11 @@ class NRPE(object):
             nrpe_monitors[nrpecheck.shortname] = {
                 "command": nrpecheck.command,
             }
+            # If we were passed max_check_attempts, add that to the relation data
+            try:
+                nrpe_monitors[nrpecheck.shortname]['max_check_attempts'] = nrpecheck.max_check_attempts
+            except AttributeError:
+                pass
 
         # update-status hooks are configured to firing every 5 minutes by
         # default. When nagios-nrpe-server is restarted, the nagios server

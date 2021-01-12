@@ -34,6 +34,10 @@ from charmhelpers.core.hookenv import (
     INFO,
 )
 
+# This file contains the CA cert from the charms ssl_ca configuration
+# option, in future the file name should be updated reflect that.
+CONFIG_CA_CERT_FILE = 'keystone_juju_ca_cert'
+
 
 def get_cert(cn=None):
     # TODO: deal with multiple https endpoints via charm config
@@ -83,4 +87,4 @@ def retrieve_ca_cert(cert_file):
 
 
 def install_ca_cert(ca_cert):
-    host.install_ca_cert(ca_cert, 'keystone_juju_ca_cert')
+    host.install_ca_cert(ca_cert, CONFIG_CA_CERT_FILE)
