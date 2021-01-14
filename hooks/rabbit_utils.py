@@ -1403,6 +1403,9 @@ def nrpe_update_queues_check(nrpe_compat, rabbit_dir):
         # If value of queue_thresholds is incorrect we want the hook to fail
         for item in yaml.safe_load(config('queue_thresholds')):
             cmd += ' -c "{}" "{}" {} {}'.format(*item)
+        for item in yaml.safe_load(config('exclude_queues')):
+            cmd += ' -e "{}" "{}"'.format(*item)
+
         nrpe_compat.add_check(
             shortname=RABBIT_USER + '_queue',
             description='Check RabbitMQ Queues',

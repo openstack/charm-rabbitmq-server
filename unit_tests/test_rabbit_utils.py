@@ -1157,13 +1157,25 @@ class UtilsTests(CharmTestCase):
 
         # call with stats_cron_schedule set to '*/5 * * * *'
         self.test_config.set('stats_cron_schedule', '*/5 * * * *')
+        # set some queues to exclude to test proper command generation
+        # with '-e' parameter
+        self.test_config.set('exclude_queues',
+                             "[['\\*', 'event.sample'], "
+                             "['\\*', 'notifications_designate.info']]")
         rabbit_utils.nrpe_update_queues_check(self.nrpe_compat, self.tmp_dir)
+        default_excludes = [
+            ('\\*', 'event.sample'),
+            ('\\*', 'notifications_designate.info'),
+        ]
+        exclude_queues = ''
+        for vhost, queue in default_excludes:
+            exclude_queues += '-e "{}" "{}" '.format(vhost, queue)
         self.nrpe_compat.add_check.assert_called_with(
             shortname='rabbitmq_queue',
             description='Check RabbitMQ Queues',
-            check_cmd='{}/check_rabbitmq_queues.py -c "\\*" "\\*" 100 200 '
-                      '{}/data/test_queue_stats.dat'.format(self.tmp_dir,
-                                                            self.tmp_dir))
+            check_cmd='{0}/check_rabbitmq_queues.py -c "\\*" "\\*" 100 200 {1}'
+                      '{0}/data/test_queue_stats.dat'.format(self.tmp_dir,
+                                                             exclude_queues))
         self.nrpe_compat.remove_check.assert_not_called()
 
         self.nrpe_compat.reset_mock()
