@@ -12,11 +12,18 @@ import argparse
 import os
 import sys
 
-from charmhelpers.core.hookenv import config
-from charmhelpers.core.host import CompareHostReleases, get_distrib_codename
 
-if CompareHostReleases(get_distrib_codename()) > 'trusty':
+lsb_dict = {}
+with open("/etc/lsb-release") as f:
+    lsb = [s.split("=") for s in f.readlines()]
+    lsb_dict = dict([(k, v.strip()) for k, v in lsb])
+
+if lsb_dict.get("DISTRIB_CODENAME") != "trusty":
+    # Trusty doesn't have croniter
     from croniter import croniter
+
+
+CRONJOB = "/etc/cron.d/rabbitmq-stats"
 
 
 def gen_data_lines(filename):
@@ -95,6 +102,12 @@ def get_cron_interval(cronspec, base):
     return it.get_next(datetime) - it.get_prev(datetime)
 
 
+def get_stats_cron_schedule():
+    with open(CRONJOB) as f:
+        cronjob = f.read()
+        return cronjob.split("root")[0].strip()
+
+
 def check_stats_file_freshness(stats_file, asof=None):
     """Check if a rabbitmq stats file is fresh
 
@@ -107,7 +120,7 @@ def check_stats_file_freshness(stats_file, asof=None):
     if asof is None:
         asof = datetime.now()
     file_mtime = datetime.fromtimestamp(os.path.getmtime(stats_file))
-    cronspec = config("stats_cron_schedule")
+    cronspec = get_stats_cron_schedule()
     interval = get_cron_interval(cronspec, asof)
     # We expect the file to be modified in the last 2 cron intervals
     cutoff_time = asof - (2 * interval)
@@ -168,7 +181,7 @@ if __name__ == "__main__":
     if "croniter" in sys.modules.keys():  # not on trusty and imported croniter
         freshness_results = [check_stats_file_freshness(f)
                              for f in args.stats_file]
-        criticals.append(
+        criticals.extend(
             msg for status, msg in freshness_results if status == "CRIT"
         )
 
