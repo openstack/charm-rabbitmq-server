@@ -129,7 +129,7 @@ class Cache(object):
             else:
                 data = line.split(None, 4)
                 status = data.pop(0)
-                if status != 'ii':
+                if status not in ('ii', 'hi'):
                     continue
                 pkg = {}
                 pkg.update({k.lower(): v for k, v in zip(headings, data)})
@@ -265,3 +265,48 @@ def version_compare(a, b):
         raise RuntimeError('Unable to compare "{}" and "{}", according to '
                            'our logic they are neither greater, equal nor '
                            'less than each other.')
+
+
+class PkgVersion():
+    """Allow package versions to be compared.
+
+    For example::
+
+        >>> import charmhelpers.fetch as fetch
+        >>> (fetch.apt_pkg.PkgVersion('2:20.4.0') <
+        ...  fetch.apt_pkg.PkgVersion('2:20.5.0'))
+        True
+        >>> pkgs = [fetch.apt_pkg.PkgVersion('2:20.4.0'),
+        ...         fetch.apt_pkg.PkgVersion('2:21.4.0'),
+        ...         fetch.apt_pkg.PkgVersion('2:17.4.0')]
+        >>> pkgs.sort()
+        >>> pkgs
+        [2:17.4.0, 2:20.4.0, 2:21.4.0]
+    """
+
+    def __init__(self, version):
+        self.version = version
+
+    def __lt__(self, other):
+        return version_compare(self.version, other.version) == -1
+
+    def __le__(self, other):
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __gt__(self, other):
+        return version_compare(self.version, other.version) == 1
+
+    def __ge__(self, other):
+        return self.__gt__(other) or self.__eq__(other)
+
+    def __eq__(self, other):
+        return version_compare(self.version, other.version) == 0
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return self.version
+
+    def __hash__(self):
+        return hash(repr(self))

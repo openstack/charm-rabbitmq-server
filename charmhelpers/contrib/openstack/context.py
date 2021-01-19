@@ -49,7 +49,6 @@ from charmhelpers.core.hookenv import (
     relation_ids,
     related_units,
     relation_set,
-    unit_get,
     unit_private_ip,
     charm_name,
     DEBUG,
@@ -98,6 +97,7 @@ from charmhelpers.contrib.openstack.ip import (
     ADMIN,
     PUBLIC,
     ADDRESS_MAP,
+    local_address,
 )
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
@@ -247,7 +247,7 @@ class SharedDBContext(OSContextGenerator):
                 hostname_key = "hostname"
             access_hostname = get_address_in_network(
                 access_network,
-                unit_get('private-address'))
+                local_address(unit_get_fallback='private-address'))
             set_hostname = relation_get(attribute=hostname_key,
                                         unit=local_unit())
             if set_hostname != access_hostname:
@@ -1088,7 +1088,7 @@ class ApacheSSLContext(OSContextGenerator):
             # NOTE(jamespage): Fallback must always be private address
             #                  as this is used to bind services on the
             #                  local unit.
-            fallback = unit_get("private-address")
+            fallback = local_address(unit_get_fallback="private-address")
             if net_config:
                 addr = get_address_in_network(net_config,
                                               fallback)
@@ -1260,7 +1260,7 @@ class NeutronContext(OSContextGenerator):
         if is_clustered():
             host = config('vip')
         else:
-            host = unit_get('private-address')
+            host = local_address(unit_get_fallback='private-address')
 
         ctxt = {'network_manager': self.network_manager,
                 'neutron_url': '%s://%s:%s' % (proto, host, '9696')}
@@ -1534,8 +1534,23 @@ class SubordinateConfigContext(OSContextGenerator):
                                         ctxt[k][section] = config_list
                             else:
                                 ctxt[k] = v
-        log("%d section(s) found" % (len(ctxt['sections'])), level=DEBUG)
-        return ctxt
+        if self.context_complete(ctxt):
+            log("%d section(s) found" % (len(ctxt['sections'])), level=DEBUG)
+            return ctxt
+        else:
+            return {}
+
+    def context_complete(self, ctxt):
+        """Overridden here to ensure the context is actually complete.
+
+        :param ctxt: The current context members
+        :type ctxt: Dict[str, ANY]
+        :returns: True if the context is complete
+        :rtype: bool
+        """
+        if not ctxt.get('sections'):
+            return False
+        return super(SubordinateConfigContext, self).context_complete(ctxt)
 
 
 class LogLevelContext(OSContextGenerator):
@@ -3050,6 +3065,9 @@ class SRIOVContext(OSContextGenerator):
         blanket = 'blanket'
         explicit = 'explicit'
 
+    PCIDeviceNumVFs = collections.namedtuple(
+        'PCIDeviceNumVFs', ['device', 'numvfs'])
+
     def _determine_numvfs(self, device, sriov_numvfs):
         """Determine number of Virtual Functions (VFs) configured for device.
 
@@ -3165,14 +3183,15 @@ class SRIOVContext(OSContextGenerator):
                                'configuration.')
 
         self._map = {
-            device.interface_name: self._determine_numvfs(device, sriov_numvfs)
+            device.pci_address: self.PCIDeviceNumVFs(
+                device, self._determine_numvfs(device, sriov_numvfs))
             for device in devices.pci_devices
             if device.sriov and
             self._determine_numvfs(device, sriov_numvfs) is not None
         }
 
     def __call__(self):
-        """Provide SR-IOV context.
+        """Provide backward compatible SR-IOV context.
 
         :returns: Map interface name: min(configured, max) virtual functions.
         Example:
@@ -3182,6 +3201,23 @@ class SRIOVContext(OSContextGenerator):
                'eth2': 64,
            }
         :rtype: Dict[str,int]
+        """
+        return {
+            pcidnvfs.device.interface_name: pcidnvfs.numvfs
+            for _, pcidnvfs in self._map.items()
+        }
+
+    @property
+    def get_map(self):
+        """Provide map of configured SR-IOV capable PCI devices.
+
+        :returns: Map PCI-address: (PCIDevice, min(configured, max) VFs.
+        Example:
+            {
+                '0000:81:00.0': self.PCIDeviceNumVFs(<PCIDevice object>, 32),
+                '0000:81:00.1': self.PCIDeviceNumVFs(<PCIDevice object>, 32),
+            }
+        :rtype: Dict[str, self.PCIDeviceNumVFs]
         """
         return self._map
 

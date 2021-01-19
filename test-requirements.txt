@@ -37,6 +37,8 @@ importlib-resources<3.0.0; python_version < '3.6'
 # dropped support for python 3.5:
 osprofiler<2.7.0;python_version<'3.6'
 stevedore<1.31.0;python_version<'3.6'
+debtcollector<1.22.0;python_version<'3.6'
+oslo.utils<=3.41.0;python_version<'3.6'
 
 coverage>=4.5.2
 pyudev              # for ceph-* charm unit tests (need to fix the ceph-* charm unit tests/mocking)

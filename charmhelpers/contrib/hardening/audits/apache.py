@@ -98,3 +98,8 @@ class DisabledModuleAudit(BaseAudit):
     def _restart_apache():
         """Restarts the apache process"""
         subprocess.check_output(['service', 'apache2', 'restart'])
+
+    @staticmethod
+    def is_ssl_enabled():
+        """Check if SSL module is enabled or not"""
+        return 'ssl' in DisabledModuleAudit._get_loaded_modules()

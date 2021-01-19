@@ -268,6 +268,7 @@ class BasePool(object):
         'compression-max-blob-size': (int, None),
         'compression-max-blob-size-hdd': (int, None),
         'compression-max-blob-size-ssd': (int, None),
+        'rbd-mirroring-mode': (str, ('image', 'pool'))
     }
 
     def __init__(self, service, name=None, percent_data=None, app_name=None,
@@ -1767,6 +1768,7 @@ class CephBrokerRq(object):
                                         max_bytes=None,
                                         max_objects=None,
                                         namespace=None,
+                                        rbd_mirroring_mode='pool',
                                         weight=None):
         """Build common part of a create pool operation.
 
@@ -1825,6 +1827,9 @@ class CephBrokerRq(object):
         :type max_objects: Optional[int]
         :param namespace: Group namespace
         :type namespace: Optional[str]
+        :param rbd_mirroring_mode: Pool mirroring mode used when Ceph RBD
+                                   mirroring is enabled.
+        :type rbd_mirroring_mode: Optional[str]
         :param weight: The percentage of data that is expected to be contained
                        in the pool from the total available space on the OSDs.
                        Used to calculate number of Placement Groups to create
@@ -1849,6 +1854,7 @@ class CephBrokerRq(object):
             'max-bytes': max_bytes,
             'max-objects': max_objects,
             'group-namespace': namespace,
+            'rbd-mirroring-mode': rbd_mirroring_mode,
             'weight': weight,
         }
 
