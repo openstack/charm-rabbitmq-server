@@ -130,6 +130,9 @@ def local_address(unit_get_fallback='public-address'):
     from network-get. If this is running with an old version of Juju then
     fallback to unit_get.
 
+    Note on juju < 2.9 the binding to juju-info may not exist, so fall back to
+    the unit-get.
+
     :param unit_get_fallback: Either 'public-address' or 'private-address'.
                               Only used with old versions of Juju.
     :type unit_get_fallback: str
@@ -138,7 +141,7 @@ def local_address(unit_get_fallback='public-address'):
     """
     try:
         return network_get_primary_address('juju-info')
-    except NotImplementedError:
+    except (NotImplementedError, NoNetworkBinding):
         return unit_get(unit_get_fallback)
 
 
