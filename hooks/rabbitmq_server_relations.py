@@ -53,7 +53,6 @@ from charmhelpers.contrib.openstack.utils import (
     clear_unit_upgrading,
 )
 
-import charmhelpers.contrib.storage.linux.ceph as ceph
 from charmhelpers.contrib.openstack.utils import save_script_rc
 from charmhelpers.contrib.hardening.harden import harden
 
@@ -479,23 +478,13 @@ def ha_joined():
     vip = config('vip')
     vip_iface = config('vip_iface')
     vip_cidr = config('vip_cidr')
-    rbd_name = config('rbd-name')
     vip_only = config('ha-vip-only')
 
     if None in [corosync_bindiface, corosync_mcastport, vip, vip_iface,
-                vip_cidr, rbd_name] and vip_only is False:
-        log('Insufficient configuration data to configure hacluster.',
-            level=ERROR)
-        sys.exit(1)
-    elif None in [corosync_bindiface, corosync_mcastport, vip, vip_iface,
-                  vip_cidr] and vip_only is True:
+                vip_cidr] and vip_only is True:
         log('Insufficient configuration data to configure VIP-only hacluster.',
             level=ERROR)
         sys.exit(1)
-
-    if not is_relation_made('ceph', 'auth') and vip_only is False:
-        log('ha_joined: No ceph relation yet, deferring.')
-        return
 
     ctxt = {rabbit.ENV_CONF: rabbit.CONFIG_FILES[rabbit.ENV_CONF]}
     rabbit.ConfigRenderer(ctxt).write(rabbit.ENV_CONF)
@@ -514,31 +503,15 @@ def ha_joined():
         }
     else:
         relation_settings['resources'] = {
-            'res_rabbitmq_rbd': 'ocf:ceph:rbd',
-            'res_rabbitmq_fs': 'ocf:heartbeat:Filesystem',
             'res_rabbitmq_vip': 'ocf:heartbeat:IPaddr2',
             'res_rabbitmq-server': 'lsb:rabbitmq-server',
         }
 
         relation_settings['resource_params'] = {
-            'res_rabbitmq_rbd': 'params name="%s" pool="%s" user="%s" '
-                                'secret="%s"' %
-                                (rbd_name, POOL_NAME,
-                                 SERVICE_NAME, ceph._keyfile_path(
-                                     SERVICE_NAME)),
-            'res_rabbitmq_fs': 'params device="/dev/rbd/%s/%s" directory="%s" '
-                               'fstype="ext4" op start start-delay="10s"' %
-                               (POOL_NAME, rbd_name, RABBIT_DIR),
             'res_rabbitmq_vip': 'params ip="%s" cidr_netmask="%s" nic="%s"' %
                                 (vip, vip_cidr, vip_iface),
             'res_rabbitmq-server': 'op start start-delay="5s" '
                                    'op monitor interval="5s"',
-        }
-
-        relation_settings['groups'] = {
-            'grp_rabbitmq':
-            'res_rabbitmq_rbd res_rabbitmq_fs res_rabbitmq_vip '
-            'res_rabbitmq-server',
         }
 
     for rel_id in relation_ids('ha'):
@@ -559,58 +532,6 @@ def ha_changed():
     log('ha_changed(): We are now HA clustered. '
         'Advertising our VIP (%s) to all AMQP clients.' %
         vip)
-
-
-@hooks.hook('ceph-relation-joined')
-def ceph_joined():
-    log('Start Ceph Relation Joined')
-    # NOTE fixup
-    # utils.configure_source()
-    ceph.install()
-    log('Finish Ceph Relation Joined')
-
-
-@hooks.hook('ceph-relation-changed')
-def ceph_changed():
-    log('Start Ceph Relation Changed')
-    auth = relation_get('auth')
-    key = relation_get('key')
-    use_syslog = str(config('use-syslog')).lower()
-    if None in [auth, key]:
-        log('Missing key or auth in relation')
-        sys.exit(0)
-
-    ceph.configure(service=SERVICE_NAME, key=key, auth=auth,
-                   use_syslog=use_syslog)
-
-    if is_elected_leader('res_rabbitmq_vip'):
-        rbd_img = config('rbd-name')
-        rbd_size = config('rbd-size')
-        sizemb = int(rbd_size.split('G')[0]) * 1024
-        blk_device = '/dev/rbd/%s/%s' % (POOL_NAME, rbd_img)
-        ceph.create_pool(service=SERVICE_NAME, name=POOL_NAME,
-                         replicas=int(config('ceph-osd-replication-count')))
-        ceph.ensure_ceph_storage(service=SERVICE_NAME, pool=POOL_NAME,
-                                 rbd_img=rbd_img, sizemb=sizemb,
-                                 fstype='ext4', mount_point=RABBIT_DIR,
-                                 blk_device=blk_device,
-                                 system_services=['rabbitmq-server'])
-        subprocess.check_call(['chown', '-R', '%s:%s' %
-                               (RABBIT_USER, RABBIT_GROUP), RABBIT_DIR])
-    else:
-        log('This is not the peer leader. Not configuring RBD.')
-        log('Stopping rabbitmq-server.')
-        service_stop('rabbitmq-server')
-
-    # If 'ha' relation has been made before the 'ceph' relation
-    # it is important to make sure the ha-relation data is being
-    # sent.
-    if is_relation_made('ha'):
-        log('*ha* relation exists. Triggering ha_joined()')
-        ha_joined()
-    else:
-        log('*ha* relation does not exist.')
-    log('Finish Ceph Relation Changed')
 
 
 @hooks.hook('nrpe-external-master-relation-changed')

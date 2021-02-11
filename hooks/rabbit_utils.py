@@ -918,15 +918,12 @@ def restart_on_change(restart_map, stopstart=False):
     This function is used a decorator, for example::
 
         @restart_on_change({
-            '/etc/ceph/ceph.conf': [ 'cinder-api', 'cinder-volume' ]
             '/etc/apache/sites-enabled/*': [ 'apache2' ]
             })
         def config_changed():
             pass  # your code here
 
-    In this example, the cinder-api and cinder-volume services
-    would be restarted if /etc/ceph/ceph.conf is changed by the
-    ceph_client_changed function. The apache2 service would be
+    In this example the apache2 service would be
     restarted if any file matching the pattern got changed, created
     or removed. Standard wildcards are supported, see documentation
     for the 'glob' module for more information.

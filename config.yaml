@@ -259,29 +259,6 @@ options:
       hacluster charm will keep rabbit in active/active setup, but in addition
       it will deploy a VIP that can be used by services that cannot work
       with mutiple AMQPs (like Glance in pre-Icehouse).
-  rbd-size:
-    type: string
-    default: 5G
-    description: |
-      Default rbd storage size to create when setting up block storage.
-      This value should be specified in GB (e.g. 100G).
-  rbd-name:
-    type: string
-    default: rabbitmq1
-    description: |
-      The name that will be used to create the Ceph's RBD image with. If the
-      image name exists in Ceph, it will be re-used and the data will be
-      overwritten.
-  ceph-osd-replication-count:
-    default: 3
-    type: int
-    description: |
-      This value dictates the number of replicas ceph must make of any
-      object it stores within the rabbitmq rbd pool. Of course, this only
-      applies if using Ceph as a backend store. Note that once the rabbitmq
-      rbd pool has been created, changing this value will not have any effect
-      (although it can be changed in ceph by manually configuring your ceph
-      cluster).
   modulo-nodes:
     type: int
     default:
