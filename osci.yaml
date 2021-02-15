@@ -1,0 +1,4 @@
+- project:
+    templates:
+      - charm-unit-jobs
+      - charm-functional-jobs
