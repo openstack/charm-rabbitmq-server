@@ -3,18 +3,19 @@ smoke_bundles:
   - focal-ussuri
 gate_bundles:
   - xenial-mitaka
-  - xenial-ocata
-  - xenial-pike
-  - xenial-queens
   - bionic-queens
-  - bionic-rocky
   - bionic-stein
   - bionic-train
   - bionic-ussuri
   - focal-ussuri
   - focal-victoria
   - groovy-victoria
+dev_bundles:
   - trusty-mitaka
+  - xenial-ocata
+  - xenial-pike
+  - xenial-queens
+  - bionic-rocky
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RmqTests
 tests_options:
