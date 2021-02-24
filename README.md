@@ -14,8 +14,10 @@ charms officially supported by the OpenStack Charms project are published by
 
 ## Configuration
 
-This section covers common configuration options. See file `config.yaml` for
-the full list of options, along with their descriptions and default values.
+This section covers common and/or important configuration options. See file
+`config.yaml` for the full list of options, along with their descriptions and
+default values. See the [Juju documentation][juju-docs-config-apps] for details
+on configuring applications.
 
 #### `min-cluster-size`
 
@@ -36,15 +38,6 @@ there is no guarantee that a candidate will be found in the stated UCA pocket.
   software upgrade. See [OpenStack upgrade][cdg-upgrade-openstack] in the
   [OpenStack Charms Deployment Guide][cdg].
 
-#### `ssl`
-
-The `ssl` option enables encryption for client-server communication. It can
-take on several values:
-
-* 'off': disables SSL (the default)
-* 'on': enables SSL for compatible clients
-* 'only': enforces SSL
-
 ## Deployment
 
 To deploy a single rabbitmq-server unit:
@@ -62,29 +55,23 @@ When more than one unit is deployed the charm will bring up a native RabbitMQ
 HA active/active cluster. The ``min-cluster-size`` option should be used (see
 description above).
 
-To deploy a three-node cluster:
+See [Infrastructure high availability][cdg-ha-rabbitmq] in the [OpenStack Charms
+Deployment Guide][cdg] for details.
 
-    juju deploy -n 3 --config min-cluster-size=3 rabbitmq-server
-
-### SSL
+### TLS
 
 Communication between the AMQP message queue and client services (OpenStack
-applications) can be encrypted with SSL. There are two methods for managing
-keys and certificates:
+applications) can be TLS-encrypted. There are two methods for managing keys and
+certificates:
 
 1. with Vault
-1. manually (via `openssl` commands and charm options)
+1. manually (via charm options)
 
 Vault can set up private keys and server certificates for an application. It
 also stores a central CA certificate for the cloud. See the
 [vault][vault-charm] charm for more information.
 
 Vault is the recommended method and is what will be covered here.
-
-Enable SSL by passing the `ssl` option (see description above) to the deployed
-rabbitmq-server application:
-
-    juju config rabbitmq-server ssl=only
 
 The private key and server certificate (and its signing) are managed via a
 relation made to the vault application:
@@ -103,12 +90,18 @@ Actions allow specific operations to be performed on a per-unit basis.
 * `pause`
 * `resume`
 
-To display action descriptions run `juju actions rabbitmq-server`. If the charm
-is not deployed then see file ``actions.yaml``.
+To display action descriptions run `juju actions --schema rabbitmq-server`. If
+the charm is not deployed then see file ``actions.yaml``.
+
+# Documentation
+
+The OpenStack Charms project maintains two documentation guides:
+
+* [OpenStack Charm Guide][cg]: for project information, including development
+  and support notes
+* [OpenStack Charms Deployment Guide][cdg]: for charm usage information
 
 # Bugs
-
-Please report bugs on [Launchpad][lp-bugs-charm-rabbitmq-server].
 
 For general charm questions refer to the [OpenStack Charm Guide][cg].
 
@@ -122,3 +115,5 @@ For general charm questions refer to the [OpenStack Charm Guide][cg].
 [charms-requires-rabbitmq]: https://jaas.ai/search?requires=rabbitmq
 [vault-charm]: https://jaas.ai/vault
 [uca]: https://wiki.ubuntu.com/OpenStack/CloudArchive
+[cdg-ha-rabbitmq]: https://docs.openstack.org/project-deploy-guide/charm-deployment-guide/latest/app-ha.html#rabbitmq
+[juju-docs-config-apps]: https://juju.is/docs/configuring-applications

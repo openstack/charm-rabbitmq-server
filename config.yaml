@@ -148,8 +148,11 @@ options:
       Enable SSL for client communication. Valid values are 'off', 'on', and
       'only'. If ssl_key, ssl_cert, ssl_ca are provided then those values will
       be used. Otherwise the service will act as its own certificate authority
-      and pass its CA cert to clients. For clustered RabbitMQ, ssl_key and
-      ssl_cert must be provided.
+      and pass its CA certificate to clients. For clustered RabbitMQ, ssl_key
+      and ssl_cert must be provided.
+      .
+      Vault can be used instead of the ssl_* config values and works for
+      clustered and non-clustered cases.
   ssl_enabled:
     type: boolean
     default: False
