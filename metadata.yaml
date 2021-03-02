@@ -13,8 +13,8 @@ series:
 - xenial
 - bionic
 - focal
-- trusty
 - groovy
+- hirsute
 provides:
   amqp:
     interface: rabbitmq
