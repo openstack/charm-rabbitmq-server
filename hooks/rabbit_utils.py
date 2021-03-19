@@ -42,6 +42,7 @@ from charmhelpers.contrib.openstack.utils import (
     pause_unit,
     resume_unit,
     is_unit_paused_set,
+    pausable_restart_on_change,
 )
 
 from charmhelpers.contrib.hahelpers.cluster import (
@@ -74,8 +75,6 @@ from charmhelpers.core.host import (
     mkdir,
     write_file,
     cmp_pkgrevno,
-    path_hash,
-    service as system_service,
     rsync,
 )
 
@@ -928,29 +927,11 @@ def restart_on_change(restart_map, stopstart=False):
     or removed. Standard wildcards are supported, see documentation
     for the 'glob' module for more information.
     """
-    def wrap(f):
-        def wrapped_f(*args, **kwargs):
-            if is_unit_paused_set():
-                return f(*args, **kwargs)
-            checksums = {path: path_hash(path) for path in restart_map}
-            f(*args, **kwargs)
-            restarts = []
-            for path in restart_map:
-                if path_hash(path) != checksums[path]:
-                    restarts += restart_map[path]
-            services_list = list(OrderedDict.fromkeys(restarts))
-            cluster_wait()
-            if not stopstart:
-                for svc_name in services_list:
-                    system_service('restart', svc_name)
-                    wait_app()
-            else:
-                for action in ['stop', 'start']:
-                    for svc_name in services_list:
-                        system_service(action, svc_name)
-                        wait_app()
-        return wrapped_f
-    return wrap
+    return pausable_restart_on_change(
+        restart_map,
+        stopstart=stopstart,
+        pre_restarts_wait_f=cluster_wait
+    )
 
 
 def assess_status(configs):

@@ -483,9 +483,26 @@ def get_swift_codename(version):
     return None
 
 
-@deprecate("moved to charmhelpers.contrib.openstack.utils.get_installed_os_version()", "2021-01", log=juju_log)
 def get_os_codename_package(package, fatal=True):
-    '''Derive OpenStack release codename from an installed package.'''
+    """Derive OpenStack release codename from an installed package.
+
+    Initially, see if the openstack-release pkg is available (by trying to
+    install it) and use it instead.
+
+    If it isn't then it falls back to the existing method of checking the
+    version of the package passed and then resolving the version from that
+    using lookup tables.
+
+    Note: if possible, charms should use get_installed_os_version() to
+    determine the version of the "openstack-release" pkg.
+
+    :param package: the package to test for version information.
+    :type package: str
+    :param fatal: If True (default), then die via error_out()
+    :type fatal: bool
+    :returns: the OpenStack release codename (e.g. ussuri)
+    :rtype: str
+    """
 
     codename = get_installed_os_version()
     if codename:
@@ -579,8 +596,22 @@ def get_os_version_package(pkg, fatal=True):
 
 
 def get_installed_os_version():
-    apt_install(filter_installed_packages(['openstack-release']), fatal=False)
-    print("OpenStack Release: {}".format(openstack_release()))
+    """Determine the OpenStack release code name from openstack-release pkg.
+
+    This uses the "openstack-release" pkg (if it exists) to return the
+    OpenStack release codename (e.g. usurri, mitaka, ocata, etc.)
+
+    Note, it caches the result so that it is only done once per hook.
+
+    :returns: the OpenStack release codename, if available
+    :rtype: Optional[str]
+    """
+    @cached
+    def _do_install():
+        apt_install(filter_installed_packages(['openstack-release']),
+                    fatal=False, quiet=True)
+
+    _do_install()
     return openstack_release().get('OPENSTACK_CODENAME')
 
 
@@ -1717,7 +1748,10 @@ def make_assess_status_func(*args, **kwargs):
 
 
 def pausable_restart_on_change(restart_map, stopstart=False,
-                               restart_functions=None):
+                               restart_functions=None,
+                               can_restart_now_f=None,
+                               post_svc_restart_f=None,
+                               pre_restarts_wait_f=None):
     """A restart_on_change decorator that checks to see if the unit is
     paused. If it is paused then the decorated function doesn't fire.
 
@@ -1743,11 +1777,28 @@ def pausable_restart_on_change(restart_map, stopstart=False,
     function won't be called if the decorated function is never called.  Note,
     retains backwards compatibility for passing a non-callable dictionary.
 
-    @param f: the function to decorate
-    @param restart_map: (optionally callable, which then returns the
-        restart_map) the restart map {conf_file: [services]}
-    @param stopstart: DEFAULT false; whether to stop, start or just restart
-    @returns decorator to use a restart_on_change with pausability
+    :param f: function to decorate.
+    :type f: Callable
+    :param restart_map: Optionally callable, which then returns the restart_map or
+                        the restart map {conf_file: [services]}
+    :type restart_map: Union[Callable[[],], Dict[str, List[str,]]
+    :param stopstart: whether to stop, start or restart a service
+    :type stopstart: booleean
+    :param restart_functions: nonstandard functions to use to restart services
+                              {svc: func, ...}
+    :type restart_functions: Dict[str, Callable[[str], None]]
+    :param can_restart_now_f: A function used to check if the restart is
+                              permitted.
+    :type can_restart_now_f: Callable[[str, List[str]], boolean]
+    :param post_svc_restart_f: A function run after a service has
+                               restarted.
+    :type post_svc_restart_f: Callable[[str], None]
+    :param pre_restarts_wait_f: A function callled before any restarts.
+    :type pre_restarts_wait_f: Callable[None, None]
+    :returns: decorator to use a restart_on_change with pausability
+    :rtype: decorator
+
+
     """
     def wrap(f):
         # py27 compatible nonlocal variable.  When py3 only, replace with
@@ -1763,8 +1814,13 @@ def pausable_restart_on_change(restart_map, stopstart=False,
                     if callable(restart_map) else restart_map
             # otherwise, normal restart_on_change functionality
             return restart_on_change_helper(
-                (lambda: f(*args, **kwargs)), __restart_map_cache['cache'],
-                stopstart, restart_functions)
+                (lambda: f(*args, **kwargs)),
+                __restart_map_cache['cache'],
+                stopstart,
+                restart_functions,
+                can_restart_now_f,
+                post_svc_restart_f,
+                pre_restarts_wait_f)
         return wrapped_f
     return wrap
 
@@ -2418,3 +2474,26 @@ def get_api_application_status():
             msg = 'Some units are not ready'
     juju_log(msg, 'DEBUG')
     return app_state, msg
+
+
+def sequence_status_check_functions(*functions):
+    """Sequence the functions passed so that they all get a chance to run as
+    the charm status check functions.
+
+    :param *functions: a list of functions that return (state, message)
+    :type *functions: List[Callable[[OSConfigRender], (str, str)]]
+    :returns: the Callable that takes configs and returns (state, message)
+    :rtype: Callable[[OSConfigRender], (str, str)]
+    """
+    def _inner_sequenced_functions(configs):
+        state, message = 'unknown', ''
+        for f in functions:
+            new_state, new_message = f(configs)
+            state = workload_state_compare(state, new_state)
+            if message:
+                message = "{}, {}".format(message, new_message)
+            else:
+                message = new_message
+        return state, message
+
+    return _inner_sequenced_functions

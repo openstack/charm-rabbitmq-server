@@ -34,7 +34,7 @@ import itertools
 import six
 
 from contextlib import contextmanager
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from .hookenv import log, INFO, DEBUG, local_unit, charm_name
 from .fstab import Fstab
 from charmhelpers.osplatform import get_platform
@@ -694,74 +694,223 @@ class ChecksumError(ValueError):
     pass
 
 
-def restart_on_change(restart_map, stopstart=False, restart_functions=None):
-    """Restart services based on configuration files changing
+class restart_on_change(object):
+    """Decorator and context manager to handle restarts.
 
-    This function is used a decorator, for example::
+    Usage:
 
-        @restart_on_change({
-            '/etc/ceph/ceph.conf': [ 'cinder-api', 'cinder-volume' ]
-            '/etc/apache/sites-enabled/*': [ 'apache2' ]
-            })
-        def config_changed():
-            pass  # your code here
+       @restart_on_change(restart_map, ...)
+       def function_that_might_trigger_a_restart(...)
+           ...
 
-    In this example, the cinder-api and cinder-volume services
-    would be restarted if /etc/ceph/ceph.conf is changed by the
-    ceph_client_changed function. The apache2 service would be
-    restarted if any file matching the pattern got changed, created
-    or removed. Standard wildcards are supported, see documentation
-    for the 'glob' module for more information.
+    Or:
 
-    @param restart_map: {path_file_name: [service_name, ...]
-    @param stopstart: DEFAULT false; whether to stop, start OR restart
-    @param restart_functions: nonstandard functions to use to restart services
-                              {svc: func, ...}
-    @returns result from decorated function
+       with restart_on_change(restart_map, ...):
+           do_stuff_that_might_trigger_a_restart()
+           ...
     """
-    def wrap(f):
+
+    def __init__(self, restart_map, stopstart=False, restart_functions=None,
+                 can_restart_now_f=None, post_svc_restart_f=None,
+                 pre_restarts_wait_f=None):
+        """
+        :param restart_map: {file: [service, ...]}
+        :type restart_map: Dict[str, List[str,]]
+        :param stopstart: whether to stop, start or restart a service
+        :type stopstart: booleean
+        :param restart_functions: nonstandard functions to use to restart
+                                  services {svc: func, ...}
+        :type restart_functions: Dict[str, Callable[[str], None]]
+        :param can_restart_now_f: A function used to check if the restart is
+                                  permitted.
+        :type can_restart_now_f: Callable[[str, List[str]], boolean]
+        :param post_svc_restart_f: A function run after a service has
+                                   restarted.
+        :type post_svc_restart_f: Callable[[str], None]
+        :param pre_restarts_wait_f: A function callled before any restarts.
+        :type pre_restarts_wait_f: Callable[None, None]
+        """
+        self.restart_map = restart_map
+        self.stopstart = stopstart
+        self.restart_functions = restart_functions
+        self.can_restart_now_f = can_restart_now_f
+        self.post_svc_restart_f = post_svc_restart_f
+        self.pre_restarts_wait_f = pre_restarts_wait_f
+
+    def __call__(self, f):
+        """Work like a decorator.
+
+        Returns a wrapped function that performs the restart if triggered.
+
+        :param f: The function that is being wrapped.
+        :type f: Callable[[Any], Any]
+        :returns: the wrapped function
+        :rtype: Callable[[Any], Any]
+        """
         @functools.wraps(f)
         def wrapped_f(*args, **kwargs):
             return restart_on_change_helper(
-                (lambda: f(*args, **kwargs)), restart_map, stopstart,
-                restart_functions)
+                (lambda: f(*args, **kwargs)),
+                self.restart_map,
+                stopstart=self.stopstart,
+                restart_functions=self.restart_functions,
+                can_restart_now_f=self.can_restart_now_f,
+                post_svc_restart_f=self.post_svc_restart_f,
+                pre_restarts_wait_f=self.pre_restarts_wait_f)
         return wrapped_f
-    return wrap
+
+    def __enter__(self):
+        """Enter the runtime context related to this object. """
+        self.checksums = _pre_restart_on_change_helper(self.restart_map)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit the runtime context related to this object.
+
+        The parameters describe the exception that caused the context to be
+        exited. If the context was exited without an exception, all three
+        arguments will be None.
+        """
+        if exc_type is None:
+            _post_restart_on_change_helper(
+                self.checksums,
+                self.restart_map,
+                stopstart=self.stopstart,
+                restart_functions=self.restart_functions,
+                can_restart_now_f=self.can_restart_now_f,
+                post_svc_restart_f=self.post_svc_restart_f,
+                pre_restarts_wait_f=self.pre_restarts_wait_f)
+        # All is good, so return False; any exceptions will propagate.
+        return False
 
 
 def restart_on_change_helper(lambda_f, restart_map, stopstart=False,
-                             restart_functions=None):
+                             restart_functions=None,
+                             can_restart_now_f=None,
+                             post_svc_restart_f=None,
+                             pre_restarts_wait_f=None):
     """Helper function to perform the restart_on_change function.
 
     This is provided for decorators to restart services if files described
     in the restart_map have changed after an invocation of lambda_f().
 
-    @param lambda_f: function to call.
-    @param restart_map: {file: [service, ...]}
-    @param stopstart: whether to stop, start or restart a service
-    @param restart_functions: nonstandard functions to use to restart services
+    This functions allows for a number of helper functions to be passed.
+
+    `restart_functions` is a map with a service as the key and the
+    corresponding value being the function to call to restart the service. For
+    example if `restart_functions={'some-service': my_restart_func}` then
+    `my_restart_func` should a function which takes one argument which is the
+    service name to be retstarted.
+
+    `can_restart_now_f` is a function which checks that a restart is permitted.
+    It should return a bool which indicates if a restart is allowed and should
+    take a service name (str) and a list of changed files (List[str]) as
+    arguments.
+
+    `post_svc_restart_f` is a function which runs after a service has been
+    restarted. It takes the service name that was restarted as an argument.
+
+    `pre_restarts_wait_f` is a function which is called before any restarts
+    occur. The use case for this is an application which wants to try and
+    stagger restarts between units.
+
+    :param lambda_f: function to call.
+    :type lambda_f: Callable[[], ANY]
+    :param restart_map: {file: [service, ...]}
+    :type restart_map: Dict[str, List[str,]]
+    :param stopstart: whether to stop, start or restart a service
+    :type stopstart: booleean
+    :param restart_functions: nonstandard functions to use to restart services
                               {svc: func, ...}
-    @returns result of lambda_f()
+    :type restart_functions: Dict[str, Callable[[str], None]]
+    :param can_restart_now_f: A function used to check if the restart is
+                              permitted.
+    :type can_restart_now_f: Callable[[str, List[str]], boolean]
+    :param post_svc_restart_f: A function run after a service has
+                               restarted.
+    :type post_svc_restart_f: Callable[[str], None]
+    :param pre_restarts_wait_f: A function callled before any restarts.
+    :type pre_restarts_wait_f: Callable[None, None]
+    :returns: result of lambda_f()
+    :rtype: ANY
+    """
+    checksums = _pre_restart_on_change_helper(restart_map)
+    r = lambda_f()
+    _post_restart_on_change_helper(checksums,
+                                   restart_map,
+                                   stopstart,
+                                   restart_functions,
+                                   can_restart_now_f,
+                                   post_svc_restart_f,
+                                   pre_restarts_wait_f)
+    return r
+
+
+def _pre_restart_on_change_helper(restart_map):
+    """Take a snapshot of file hashes.
+
+    :param restart_map: {file: [service, ...]}
+    :type restart_map: Dict[str, List[str,]]
+    :returns: Dictionary of file paths and the files checksum.
+    :rtype: Dict[str, str]
+    """
+    return {path: path_hash(path) for path in restart_map}
+
+
+def _post_restart_on_change_helper(checksums,
+                                   restart_map,
+                                   stopstart=False,
+                                   restart_functions=None,
+                                   can_restart_now_f=None,
+                                   post_svc_restart_f=None,
+                                   pre_restarts_wait_f=None):
+    """Check whether files have changed.
+
+    :param checksums: Dictionary of file paths and the files checksum.
+    :type checksums: Dict[str, str]
+    :param restart_map: {file: [service, ...]}
+    :type restart_map: Dict[str, List[str,]]
+    :param stopstart: whether to stop, start or restart a service
+    :type stopstart: booleean
+    :param restart_functions: nonstandard functions to use to restart services
+                              {svc: func, ...}
+    :type restart_functions: Dict[str, Callable[[str], None]]
+    :param can_restart_now_f: A function used to check if the restart is
+                              permitted.
+    :type can_restart_now_f: Callable[[str, List[str]], boolean]
+    :param post_svc_restart_f: A function run after a service has
+                               restarted.
+    :type post_svc_restart_f: Callable[[str], None]
+    :param pre_restarts_wait_f: A function callled before any restarts.
+    :type pre_restarts_wait_f: Callable[None, None]
     """
     if restart_functions is None:
         restart_functions = {}
-    checksums = {path: path_hash(path) for path in restart_map}
-    r = lambda_f()
+    changed_files = defaultdict(list)
+    restarts = []
     # create a list of lists of the services to restart
-    restarts = [restart_map[path]
-                for path in restart_map
-                if path_hash(path) != checksums[path]]
+    for path, services in restart_map.items():
+        if path_hash(path) != checksums[path]:
+            restarts.append(services)
+            for svc in services:
+                changed_files[svc].append(path)
     # create a flat list of ordered services without duplicates from lists
     services_list = list(OrderedDict.fromkeys(itertools.chain(*restarts)))
     if services_list:
+        if pre_restarts_wait_f:
+            pre_restarts_wait_f()
         actions = ('stop', 'start') if stopstart else ('restart',)
         for service_name in services_list:
+            if can_restart_now_f:
+                if not can_restart_now_f(service_name,
+                                         changed_files[service_name]):
+                    continue
             if service_name in restart_functions:
                 restart_functions[service_name](service_name)
             else:
                 for action in actions:
                     service(action, service_name)
-    return r
+            if post_svc_restart_f:
+                post_svc_restart_f(service_name)
 
 
 def pwgen(length=None):
@@ -1068,6 +1217,17 @@ def modulo_distribution(modulo=3, wait=30, non_zero_wait=False):
         return calculated_wait_time
 
 
+def ca_cert_absolute_path(basename_without_extension):
+    """Returns absolute path to CA certificate.
+
+    :param basename_without_extension: Filename without extension
+    :type basename_without_extension: str
+    :returns: Absolute full path
+    :rtype: str
+    """
+    return '{}/{}.crt'.format(CA_CERT_DIR, basename_without_extension)
+
+
 def install_ca_cert(ca_cert, name=None):
     """
     Install the given cert as a trusted CA.
@@ -1083,7 +1243,7 @@ def install_ca_cert(ca_cert, name=None):
         ca_cert = ca_cert.encode('utf8')
     if not name:
         name = 'juju-{}'.format(charm_name())
-    cert_file = '{}/{}.crt'.format(CA_CERT_DIR, name)
+    cert_file = ca_cert_absolute_path(name)
     new_hash = hashlib.md5(ca_cert).hexdigest()
     if file_hash(cert_file) == new_hash:
         return

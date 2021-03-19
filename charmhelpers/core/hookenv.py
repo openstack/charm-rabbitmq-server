@@ -226,6 +226,17 @@ def relation_id(relation_name=None, service_or_unit=None):
         raise ValueError('Must specify neither or both of relation_name and service_or_unit')
 
 
+def departing_unit():
+    """The departing unit for the current relation hook.
+
+    Available since juju 2.8.
+
+    :returns: the departing unit, or None if the information isn't available.
+    :rtype: Optional[str]
+    """
+    return os.environ.get('JUJU_DEPARTING_UNIT', None)
+
+
 def local_unit():
     """Local unit ID"""
     return os.environ['JUJU_UNIT_NAME']

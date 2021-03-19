@@ -42,6 +42,7 @@ import pika
 import swiftclient
 
 from charmhelpers.core.decorators import retry_on_exception
+
 from charmhelpers.contrib.amulet.utils import (
     AmuletUtils
 )

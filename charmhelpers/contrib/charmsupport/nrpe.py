@@ -337,10 +337,8 @@ class NRPE(object):
                 "command": nrpecheck.command,
             }
             # If we were passed max_check_attempts, add that to the relation data
-            try:
+            if nrpecheck.max_check_attempts is not None:
                 nrpe_monitors[nrpecheck.shortname]['max_check_attempts'] = nrpecheck.max_check_attempts
-            except AttributeError:
-                pass
 
         # update-status hooks are configured to firing every 5 minutes by
         # default. When nagios-nrpe-server is restarted, the nagios server

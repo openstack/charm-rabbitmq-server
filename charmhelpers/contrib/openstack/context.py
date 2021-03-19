@@ -74,7 +74,6 @@ from charmhelpers.core.host import (
     pwgen,
     lsb_release,
     CompareHostReleases,
-    is_container,
 )
 from charmhelpers.contrib.hahelpers.cluster import (
     determine_apache_port,
@@ -1596,16 +1595,21 @@ def _calculate_workers():
 
     @returns int: number of worker processes to use
     '''
-    multiplier = config('worker-multiplier') or DEFAULT_MULTIPLIER
+    multiplier = config('worker-multiplier')
+
+    # distinguish an empty config and an explicit config as 0.0
+    if multiplier is None:
+        multiplier = DEFAULT_MULTIPLIER
+
     count = int(_num_cpus() * multiplier)
-    if multiplier > 0 and count == 0:
+    if count <= 0:
+        # assign at least one worker
         count = 1
 
-    if config('worker-multiplier') is None and is_container():
+    if config('worker-multiplier') is None:
         # NOTE(jamespage): Limit unconfigured worker-multiplier
         #                  to MAX_DEFAULT_WORKERS to avoid insane
-        #                  worker configuration in LXD containers
-        #                  on large servers
+        #                  worker configuration on large servers
         # Reference: https://pad.lv/1665270
         count = min(count, MAX_DEFAULT_WORKERS)
 

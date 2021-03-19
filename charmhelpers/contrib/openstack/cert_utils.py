@@ -47,7 +47,7 @@ from charmhelpers.contrib.network.ip import (
 )
 
 from charmhelpers.core.host import (
-    CA_CERT_DIR,
+    ca_cert_absolute_path,
     install_ca_cert,
     mkdir,
     write_file,
@@ -307,6 +307,26 @@ def install_certs(ssl_dir, certs, chain=None, user='root', group='root'):
             content=bundle['key'], perms=0o640)
 
 
+def get_cert_relation_ca_name(cert_relation_id=None):
+    """Determine CA certificate name as provided by relation.
+
+    The filename on disk depends on the name chosen for the application on the
+    providing end of the certificates relation.
+
+    :param cert_relation_id: (Optional) Relation id providing the certs
+    :type cert_relation_id: str
+    :returns: CA certificate filename without path nor extension
+    :rtype: str
+    """
+    if cert_relation_id is None:
+        try:
+            cert_relation_id = relation_ids('certificates')[0]
+        except IndexError:
+            return ''
+    return '{}_juju_ca_cert'.format(
+        remote_service_name(relid=cert_relation_id))
+
+
 def _manage_ca_certs(ca, cert_relation_id):
     """Manage CA certs.
 
@@ -316,7 +336,7 @@ def _manage_ca_certs(ca, cert_relation_id):
     :type cert_relation_id: str
     """
     config_ssl_ca = config('ssl_ca')
-    config_cert_file = '{}/{}.crt'.format(CA_CERT_DIR, CONFIG_CA_CERT_FILE)
+    config_cert_file = ca_cert_absolute_path(CONFIG_CA_CERT_FILE)
     if config_ssl_ca:
         log("Installing CA certificate from charm ssl_ca config to {}".format(
             config_cert_file), INFO)
@@ -329,8 +349,7 @@ def _manage_ca_certs(ca, cert_relation_id):
     log("Installing CA certificate from certificate relation", INFO)
     install_ca_cert(
         ca.encode(),
-        name='{}_juju_ca_cert'.format(
-            remote_service_name(relid=cert_relation_id)))
+        name=get_cert_relation_ca_name(cert_relation_id))
 
 
 def process_certificates(service_name, relation_id, unit,
