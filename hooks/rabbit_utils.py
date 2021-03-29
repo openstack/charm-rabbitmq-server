@@ -24,7 +24,7 @@ import shutil
 import socket
 import yaml
 
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 from rabbitmq_context import (
     RabbitMQSSLContext,
@@ -34,6 +34,7 @@ from rabbitmq_context import (
 )
 
 from charmhelpers.contrib.charmsupport import nrpe
+import charmhelpers.contrib.openstack.deferred_events as deferred_events
 from charmhelpers.core.templating import render
 
 from charmhelpers.contrib.openstack.utils import (
@@ -930,7 +931,9 @@ def restart_on_change(restart_map, stopstart=False):
     return pausable_restart_on_change(
         restart_map,
         stopstart=stopstart,
-        pre_restarts_wait_f=cluster_wait
+        pre_restarts_wait_f=cluster_wait,
+        can_restart_now_f=deferred_events.check_and_record_restart_request,
+        post_svc_restart_f=deferred_events.process_svc_restart
     )
 
 
@@ -944,6 +947,7 @@ def assess_status(configs):
     @param configs: a templating.OSConfigRenderer() object
     @returns None - this function is executed for its side-effect
     """
+    deferred_events.check_restart_timestamps()
     assess_status_func(configs)()
     rmq_version = get_upstream_version(VERSION_PACKAGE)
     if rmq_version:
@@ -983,6 +987,23 @@ def assess_status_func(configs):
             # of the first unit.
             if state == "waiting":
                 state = "active"
+        # Deferred restarts should be managed by _determine_os_workload_status
+        # but rabbits wlm code needs refactoring to make it consistent with
+        # other charms as any message returned by _determine_os_workload_status
+        # is currently dropped on the floor if: state == 'active'
+        events = defaultdict(set)
+        for e in deferred_events.get_deferred_events():
+            events[e.action].add(e.service)
+        for action, svcs in events.items():
+            svc_msg = "Services queued for {}: {}".format(
+                action, ', '.join(sorted(svcs)))
+            message = "{}. {}".format(message, svc_msg)
+        deferred_hooks = deferred_events.get_deferred_hooks()
+        if deferred_hooks:
+            svc_msg = "Hooks skipped due to disabled auto restarts: {}".format(
+                ', '.join(sorted(deferred_hooks)))
+            message = "{}. {}".format(message, svc_msg)
+
         status_set(state, message)
 
     return _assess_status_func

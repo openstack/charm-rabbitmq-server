@@ -34,6 +34,9 @@ def _add_path(path):
 _add_path(_root)
 _add_path(_hooks)
 
+import charmhelpers.contrib.openstack.deferred_events as deferred_events
+import charmhelpers.contrib.openstack.utils as os_utils
+
 from charmhelpers.core.host import (
     service_start,
     service_stop,
@@ -53,6 +56,8 @@ from charmhelpers.core.hookenv import (
 from charmhelpers.core.host import (
     cmp_pkgrevno,
 )
+
+import rabbitmq_server_relations
 
 from hooks.rabbit_utils import (
     ConfigRenderer,
@@ -214,6 +219,74 @@ def force_boot(args):
         return False
 
 
+def restart(args):
+    """Restart services.
+
+    :param args: Unused
+    :type args: List[str]
+    """
+    deferred_only = action_get("deferred-only")
+    svcs = action_get("services").split()
+    # Check input
+    if deferred_only and svcs:
+        action_fail("Cannot set deferred-only and services")
+        return
+    if not (deferred_only or svcs):
+        action_fail("Please specify deferred-only or services")
+        return
+    if action_get('run-hooks'):
+        _run_deferred_hooks()
+    if deferred_only:
+        os_utils.restart_services_action(deferred_only=True)
+    else:
+        os_utils.restart_services_action(services=svcs)
+    assess_status(ConfigRenderer(CONFIG_FILES))
+
+
+def _run_deferred_hooks():
+    """Run supported deferred hooks as needed.
+
+    Run supported deferred hooks as needed. If support for deferring a new
+    hook is added to the charm then this method will need updating.
+    """
+    if not deferred_events.is_restart_permitted():
+        if 'config-changed' in deferred_events.get_deferred_hooks():
+            log("Running hook config-changed", level=INFO)
+            rabbitmq_server_relations.config_changed(
+                check_deferred_restarts=False)
+            deferred_events.clear_deferred_hook('config-changed')
+        if 'amqp-relation-changed' in deferred_events.get_deferred_hooks():
+            log("Running hook amqp-relation-changed", level=INFO)
+            # update_clients cycles through amqp relations running
+            # amqp-relation-changed hook.
+            rabbitmq_server_relations.update_clients(
+                check_deferred_restarts=False)
+            deferred_events.clear_deferred_hook('amqp-relation-changed')
+    log("Remaining hooks: {}".format(
+        deferred_events.get_deferred_hooks()),
+        level=INFO)
+
+
+def run_deferred_hooks(args):
+    """Run deferred hooks.
+
+    :param args: Unused
+    :type args: List[str]
+    """
+    _run_deferred_hooks()
+    os_utils.restart_services_action(deferred_only=True)
+    assess_status(ConfigRenderer(CONFIG_FILES))
+
+
+def show_deferred_events(args):
+    """Show the deferred events.
+
+    :param args: Unused
+    :type args: List[str]
+    """
+    os_utils.show_deferred_events_action_helper()
+
+
 # A dictionary of all the defined actions to callables (which take
 # parsed arguments).
 ACTIONS = {
@@ -225,6 +298,9 @@ ACTIONS = {
     "forget-cluster-node": forget_cluster_node,
     "list-unconsumed-queues": list_unconsumed_queues,
     "force-boot": force_boot,
+    "restart-services": restart,
+    "run-deferred-hooks": run_deferred_hooks,
+    "show-deferred-events": show_deferred_events,
 }
 
 

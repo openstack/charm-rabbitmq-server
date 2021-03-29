@@ -512,6 +512,8 @@ class UtilsTests(CharmTestCase):
             callee.assert_called_once_with()
             mock_application_version_set.assert_called_with('3.5.7')
 
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
     @mock.patch.object(rabbit_utils, 'clustered')
     @mock.patch.object(rabbit_utils, 'status_set')
     @mock.patch.object(rabbit_utils, 'assess_cluster_status')
@@ -522,7 +524,11 @@ class UtilsTests(CharmTestCase):
                                 services,
                                 assess_cluster_status,
                                 status_set,
-                                clustered):
+                                clustered,
+                                get_deferred_restarts,
+                                get_deferred_hooks):
+        get_deferred_hooks.return_value = []
+        get_deferred_restarts.return_value = []
         self.leader_get.return_value = None
         services.return_value = 's1'
         _determine_os_workload_status.return_value = ('active', '')
@@ -535,6 +541,8 @@ class UtilsTests(CharmTestCase):
         status_set.assert_called_once_with('active',
                                            'Unit is ready and clustered')
 
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
     @mock.patch.object(rabbit_utils, 'clustered')
     @mock.patch.object(rabbit_utils, 'status_set')
     @mock.patch.object(rabbit_utils, 'assess_cluster_status')
@@ -542,7 +550,10 @@ class UtilsTests(CharmTestCase):
     @mock.patch.object(rabbit_utils, '_determine_os_workload_status')
     def test_assess_status_func_cluster_upgrading(
             self, _determine_os_workload_status, services,
-            assess_cluster_status, status_set, clustered):
+            assess_cluster_status, status_set, clustered,
+            get_deferred_restarts, get_deferred_hooks):
+        get_deferred_hooks.return_value = []
+        get_deferred_restarts.return_value = []
         self.leader_get.return_value = True
         services.return_value = 's1'
         _determine_os_workload_status.return_value = ('active', '')
@@ -557,6 +568,8 @@ class UtilsTests(CharmTestCase):
             'complete-cluster-series-upgrade when the cluster has completed '
             'its upgrade.')
 
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
     @mock.patch.object(rabbit_utils, 'clustered')
     @mock.patch.object(rabbit_utils, 'status_set')
     @mock.patch.object(rabbit_utils, 'assess_cluster_status')
@@ -564,7 +577,10 @@ class UtilsTests(CharmTestCase):
     @mock.patch.object(rabbit_utils, '_determine_os_workload_status')
     def test_assess_status_func_cluster_upgrading_first_unit(
             self, _determine_os_workload_status, services,
-            assess_cluster_status, status_set, clustered):
+            assess_cluster_status, status_set, clustered,
+            get_deferred_restarts, get_deferred_hooks):
+        get_deferred_hooks.return_value = []
+        get_deferred_restarts.return_value = []
         self.leader_get.return_value = True
         services.return_value = 's1'
         _determine_os_workload_status.return_value = ('waiting', 'No peers')

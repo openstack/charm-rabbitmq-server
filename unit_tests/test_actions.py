@@ -18,14 +18,15 @@ from functools import wraps
 from unit_tests.test_utils import CharmTestCase
 
 with mock.patch('charmhelpers.core.hookenv.cached') as cached:
-    def passthrough(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-        wrapper._wrapped = func
-        return wrapper
-    cached.side_effect = passthrough
-    import actions
+    with mock.patch('os.getenv'):
+        def passthrough(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            wrapper._wrapped = func
+            return wrapper
+        cached.side_effect = passthrough
+        import actions
 
 
 class PauseTestCase(CharmTestCase):

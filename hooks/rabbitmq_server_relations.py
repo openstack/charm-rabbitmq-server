@@ -41,12 +41,19 @@ from lib.utils import (
     chown, chmod,
     is_newer,
 )
+
 from charmhelpers.contrib.charmsupport import nrpe
 from charmhelpers.contrib.hahelpers.cluster import (
     is_clustered,
     is_elected_leader,
 )
+from charmhelpers.contrib.openstack.deferred_events import (
+    configure_deferred_restarts,
+    get_deferred_restarts,
+    is_restart_permitted,
+)
 from charmhelpers.contrib.openstack.utils import (
+    is_hook_allowed,
     is_unit_paused_set,
     set_unit_upgrading,
     clear_unit_paused,
@@ -220,21 +227,48 @@ def configure_amqp(username, vhost, relation_id, admin=False):
     return password
 
 
-def update_clients():
+def update_clients(check_deferred_restarts=True):
     """Update amqp client relation hooks
 
     IFF leader node is ready. Client nodes are considered ready once the leader
     has already run amqp_changed.
+
+    :param check_deferred_events: Whether to check if restarts are
+                                  permitted before running hook.
+    :type check_deferred_events: bool
     """
+    if check_deferred_restarts and get_deferred_restarts():
+        log("Not sendinfg client update as a restart is pending.", INFO)
+        return
     if rabbit.leader_node_is_ready() or rabbit.client_node_is_ready():
         for rid in relation_ids('amqp'):
             for unit in related_units(rid):
-                amqp_changed(relation_id=rid, remote_unit=unit)
+                amqp_changed(
+                    relation_id=rid,
+                    remote_unit=unit,
+                    check_deferred_restarts=check_deferred_restarts)
 
 
 @validate_amqp_config_tracker
 @hooks.hook('amqp-relation-changed')
-def amqp_changed(relation_id=None, remote_unit=None):
+def amqp_changed(relation_id=None, remote_unit=None,
+                 check_deferred_restarts=True):
+    """Update amqp relations.
+
+    :param relation_id: Relation id to update
+    :type relation_id: str
+    :param remote_unit: Remote unit on relation_id to update
+    :type remote_unit: str
+    :param check_deferred_events: Whether to check if restarts are
+                                  permitted before running hook.
+    :type check_deferred_events: bool
+    """
+    allowed, reason = is_hook_allowed(
+        'amqp-relation-changed',
+        check_deferred_restarts=check_deferred_restarts)
+    if not allowed:
+        log(reason, "WARN")
+        return
     singleset = set(['username', 'vhost'])
     host_addr = ch_ip.get_relation_ip(
         rabbit_net_utils.AMQP_INTERFACE,
@@ -460,6 +494,8 @@ def update_cookie(leaders_cookie=None):
     if cookie_local == cookie:
         log('Cookie already synchronized with peer.')
         return
+    elif not is_restart_permitted():
+        raise Exception("rabbitmq-server must be restarted but not permitted")
 
     service_stop('rabbitmq-server')
     with open(rabbit.COOKIE_PATH, 'wb') as out:
@@ -616,12 +652,20 @@ MAN_PLUGIN = 'rabbitmq_management'
 @hooks.hook('config-changed')
 @rabbit.restart_on_change(rabbit.restart_map())
 @harden()
-def config_changed():
+def config_changed(check_deferred_restarts=True):
+    """Run config-chaged hook.
 
-    if is_unit_paused_set():
-        log("Do not run config_changed while unit is paused", "WARNING")
+    :param check_deferred_events: Whether to check if restarts are
+                                  permitted before running hook.
+    :type check_deferred_events: bool
+    """
+    configure_deferred_restarts(rabbit.services())
+    allowed, reason = is_hook_allowed(
+        'config-changed',
+        check_deferred_restarts=check_deferred_restarts)
+    if not allowed:
+        log(reason, "WARN")
         return
-
     # Update hosts with this unit's information
     cluster_ip = ch_ip.get_relation_ip(
         rabbit_net_utils.CLUSTER_INTERFACE,

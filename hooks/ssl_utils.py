@@ -18,17 +18,20 @@ import os
 from charmhelpers.contrib.ssl.service import ServiceCA
 
 from charmhelpers.core.hookenv import (
+    INFO,
     config,
     relation_ids,
     relation_set,
     relation_get,
     local_unit,
+    log,
 )
 from charmhelpers.contrib.network.ip import (
     get_hostname,
     get_relation_ip,
 )
 import charmhelpers.contrib.openstack.cert_utils as ch_cert_utils
+import charmhelpers.contrib.openstack.deferred_events as deferred_events
 
 import rabbit_net_utils
 
@@ -112,6 +115,9 @@ def configure_client_ssl(relation_data):
 
 
 def reconfigure_client_ssl(ssl_enabled=False):
+    if deferred_events.get_deferred_restarts():
+        log("Deferred event detected, not updating client", INFO)
+        return
     ssl_config_keys = set(('ssl_key', 'ssl_cert', 'ssl_ca'))
     for rid in relation_ids('amqp'):
         rdata = relation_get(rid=rid, unit=local_unit())

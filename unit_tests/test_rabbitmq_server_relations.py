@@ -56,6 +56,7 @@ class RelationUtil(CharmTestCase):
         shutil.rmtree(self.tmp_dir)
         super(RelationUtil, self).tearDown()
 
+    @patch('rabbitmq_server_relations.is_hook_allowed')
     @patch('rabbitmq_server_relations.rabbit.leader_node_is_ready')
     @patch('rabbitmq_server_relations.peer_store_and_set')
     @patch('rabbitmq_server_relations.config')
@@ -77,7 +78,8 @@ class RelationUtil(CharmTestCase):
             relation_set,
             mock_config,
             mock_peer_store_and_set,
-            mock_leader_node_is_ready):
+            mock_leader_node_is_ready,
+            is_hook_allowed):
         """
         Compare version above and below 3.0.1.
         Make sure ha_queues is set correctly on each side.
@@ -89,6 +91,7 @@ class RelationUtil(CharmTestCase):
 
             return None
 
+        is_hook_allowed.return_value = (True, '')
         mock_leader_node_is_ready.return_value = True
         mock_config.side_effect = config
         host_addr = "10.1.2.3"
@@ -112,6 +115,7 @@ class RelationUtil(CharmTestCase):
                                'hostname': host_addr},
             relation_id=None)
 
+    @patch('rabbitmq_server_relations.is_hook_allowed')
     @patch('rabbitmq_server_relations.rabbit.leader_node_is_ready')
     @patch('rabbitmq_server_relations.peer_store_and_set')
     @patch('rabbitmq_server_relations.config')
@@ -133,7 +137,8 @@ class RelationUtil(CharmTestCase):
             relation_set,
             mock_config,
             mock_peer_store_and_set,
-            mock_leader_node_is_ready):
+            mock_leader_node_is_ready,
+            is_hook_allowed):
         """
         Compare version above and below 3.0.1.
         Make sure ha_queues is set correctly on each side.
@@ -147,6 +152,7 @@ class RelationUtil(CharmTestCase):
 
         mock_leader_node_is_ready.return_value = True
         mock_config.side_effect = config
+        is_hook_allowed.return_value = (True, '')
         ipv6_addr = "2001:db8:1:0:f816:3eff:fed6:c140"
         get_relation_ip.return_value = ipv6_addr
         is_elected_leader.return_value = True
@@ -187,7 +193,8 @@ class RelationUtil(CharmTestCase):
         mock_client_node_is_ready.return_value = False
         rabbitmq_server_relations.update_clients()
         mock_amqp_changed.assert_called_with(relation_id='amqp:0',
-                                             remote_unit='client/0')
+                                             remote_unit='client/0',
+                                             check_deferred_restarts=True)
 
         # Client Ready
         self.relation_ids.return_value = ['amqp:0']
@@ -196,7 +203,8 @@ class RelationUtil(CharmTestCase):
         mock_client_node_is_ready.return_value = True
         rabbitmq_server_relations.update_clients()
         mock_amqp_changed.assert_called_with(relation_id='amqp:0',
-                                             remote_unit='client/0')
+                                             remote_unit='client/0',
+                                             check_deferred_restarts=True)
 
         # Both Ready
         self.relation_ids.return_value = ['amqp:0']
@@ -205,7 +213,8 @@ class RelationUtil(CharmTestCase):
         mock_client_node_is_ready.return_value = True
         rabbitmq_server_relations.update_clients()
         mock_amqp_changed.assert_called_with(relation_id='amqp:0',
-                                             remote_unit='client/0')
+                                             remote_unit='client/0',
+                                             check_deferred_restarts=True)
 
     @patch.object(rabbitmq_server_relations.rabbit,
                   'configure_notification_ttl')

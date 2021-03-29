@@ -309,3 +309,9 @@ options:
          - client-local, Pick the node the client that declares the queue is connected to.
          - random, Pick a random node.
       This option is only available for RabbitMQ >= 3.6
+  enable-auto-restarts:
+    type: boolean
+    default: True
+    description: |
+      Allow the charm and packages to restart services automatically when
+      required.
