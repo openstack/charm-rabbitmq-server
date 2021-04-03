@@ -19,3 +19,8 @@ class OSContextError(Exception):
     This exception is principally used in contrib.openstack.context
     """
     pass
+
+
+class ServiceActionError(Exception):
+    """Raised when a service action (stop/start/ etc) failed."""
+    pass

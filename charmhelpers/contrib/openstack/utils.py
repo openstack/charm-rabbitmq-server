@@ -14,7 +14,7 @@
 
 # Common python helper functions used for OpenStack charms.
 from collections import OrderedDict, namedtuple
-from functools import wraps
+from functools import partial, wraps
 
 import subprocess
 import json
@@ -36,9 +36,12 @@ from charmhelpers.contrib.network import ip
 
 from charmhelpers.core import decorators, unitdata
 
+import charmhelpers.contrib.openstack.deferred_events as deferred_events
+
 from charmhelpers.core.hookenv import (
     WORKLOAD_STATES,
     action_fail,
+    action_get,
     action_set,
     config,
     expected_peer_units,
@@ -112,7 +115,7 @@ from charmhelpers.fetch.snap import (
 
 from charmhelpers.contrib.storage.linux.utils import is_block_device, zap_disk
 from charmhelpers.contrib.storage.linux.loopback import ensure_loopback_device
-from charmhelpers.contrib.openstack.exceptions import OSContextError
+from charmhelpers.contrib.openstack.exceptions import OSContextError, ServiceActionError
 from charmhelpers.contrib.openstack.policyd import (
     policyd_status_message_prefix,
     POLICYD_CONFIG_NAME,
@@ -148,6 +151,7 @@ OPENSTACK_RELEASES = (
     'train',
     'ussuri',
     'victoria',
+    'wallaby',
 )
 
 UBUNTU_OPENSTACK_RELEASE = OrderedDict([
@@ -170,6 +174,7 @@ UBUNTU_OPENSTACK_RELEASE = OrderedDict([
     ('eoan', 'train'),
     ('focal', 'ussuri'),
     ('groovy', 'victoria'),
+    ('hirsute', 'wallaby'),
 ])
 
 
@@ -193,6 +198,7 @@ OPENSTACK_CODENAMES = OrderedDict([
     ('2019.2', 'train'),
     ('2020.1', 'ussuri'),
     ('2020.2', 'victoria'),
+    ('2021.1', 'wallaby'),
 ])
 
 # The ugly duckling - must list releases oldest to newest
@@ -301,8 +307,8 @@ PACKAGE_CODENAMES = {
         ('14', 'rocky'),
         ('15', 'stein'),
         ('16', 'train'),
-        ('18', 'ussuri'),
-        ('19', 'victoria'),
+        ('18', 'ussuri'),  # Note this was actually 17.0 - 18.3
+        ('19', 'victoria'),  # Note this is really 18.6
     ]),
     'ceilometer-common': OrderedDict([
         ('5', 'liberty'),
@@ -1083,6 +1089,18 @@ def _determine_os_workload_status(
     try:
         if config(POLICYD_CONFIG_NAME):
             message = "{} {}".format(policyd_status_message_prefix(), message)
+        deferred_restarts = list(set(
+            [e.service for e in deferred_events.get_deferred_restarts()]))
+        if deferred_restarts:
+            svc_msg = "Services queued for restart: {}".format(
+                ', '.join(sorted(deferred_restarts)))
+            message = "{}. {}".format(message, svc_msg)
+        deferred_hooks = deferred_events.get_deferred_hooks()
+        if deferred_hooks:
+            svc_msg = "Hooks skipped due to disabled auto restarts: {}".format(
+                ', '.join(sorted(deferred_hooks)))
+            message = "{}. {}".format(message, svc_msg)
+
     except Exception:
         pass
 
@@ -1567,6 +1585,33 @@ def is_unit_paused_set():
         return False
 
 
+def is_hook_allowed(hookname, check_deferred_restarts=True):
+    """Check if hook can run.
+
+    :param hookname: Name of hook to check..
+    :type hookname: str
+    :param check_deferred_restarts: Whether to check deferred restarts.
+    :type check_deferred_restarts: bool
+    """
+    permitted = True
+    reasons = []
+    if is_unit_paused_set():
+        reasons.append(
+            "Unit is pause or upgrading. Skipping {}".format(hookname))
+        permitted = False
+
+    if check_deferred_restarts:
+        if deferred_events.is_restart_permitted():
+            permitted = True
+            deferred_events.clear_deferred_hook(hookname)
+        else:
+            if not config().changed('enable-auto-restarts'):
+                deferred_events.set_deferred_hook(hookname)
+            reasons.append("auto restarts are disabled")
+            permitted = False
+    return permitted, " and ".join(reasons)
+
+
 def manage_payload_services(action, services=None, charm_func=None):
     """Run an action against all services.
 
@@ -1725,6 +1770,43 @@ def resume_unit(assess_status_func, services=None, ports=None,
             messages.append(message)
     if messages:
         raise Exception("Couldn't resume: {}".format("; ".join(messages)))
+
+
+def restart_services_action(services=None, when_all_stopped_func=None,
+                            deferred_only=None):
+    """Manage a service restart request via charm action.
+
+    :param services: Services to be restarted
+    :type model_name: List[str]
+    :param when_all_stopped_func: Function to call when all services are
+                                  stopped.
+    :type when_all_stopped_func: Callable[]
+    :param model_name: Only restart services which have a deferred restart
+                       event.
+    :type model_name: bool
+    """
+    if services and deferred_only:
+        raise ValueError(
+            "services and deferred_only are mutually exclusive")
+    if deferred_only:
+        services = list(set(
+            [a.service for a in deferred_events.get_deferred_restarts()]))
+    _, messages = manage_payload_services(
+        'stop',
+        services=services,
+        charm_func=when_all_stopped_func)
+    if messages:
+        raise ServiceActionError(
+            "Error processing service stop request: {}".format(
+                "; ".join(messages)))
+    _, messages = manage_payload_services(
+        'start',
+        services=services)
+    if messages:
+        raise ServiceActionError(
+            "Error processing service start request: {}".format(
+                "; ".join(messages)))
+    deferred_events.clear_deferred_restarts(services)
 
 
 def make_assess_status_func(*args, **kwargs):
@@ -2201,6 +2283,23 @@ def container_scoped_relations():
     return relations
 
 
+def container_scoped_relation_get(attribute=None):
+    """Get relation data from all container scoped relations.
+
+    :param attribute: Name of attribute to get
+    :type attribute: Optional[str]
+    :returns: Iterator with relation data
+    :rtype: Iterator[Optional[any]]
+    """
+    for endpoint_name in container_scoped_relations():
+        for rid in relation_ids(endpoint_name):
+            for unit in related_units(rid):
+                yield relation_get(
+                    attribute=attribute,
+                    unit=unit,
+                    rid=rid)
+
+
 def is_db_ready(use_current_context=False, rel_name=None):
     """Check remote database is ready to be used.
 
@@ -2497,3 +2596,84 @@ def sequence_status_check_functions(*functions):
         return state, message
 
     return _inner_sequenced_functions
+
+
+SubordinatePackages = namedtuple('SubordinatePackages', ['install', 'purge'])
+
+
+def get_subordinate_release_packages(os_release, package_type='deb'):
+    """Iterate over subordinate relations and get package information.
+
+    :param os_release: OpenStack release to look for
+    :type os_release: str
+    :param package_type: Package type (one of 'deb' or 'snap')
+    :type package_type: str
+    :returns: Packages to install and packages to purge or None
+    :rtype: SubordinatePackages[set,set]
+    """
+    install = set()
+    purge = set()
+
+    for rdata in container_scoped_relation_get('releases-packages-map'):
+        rp_map = json.loads(rdata or '{}')
+        # The map provided by subordinate has OpenStack release name as key.
+        # Find package information from subordinate matching requested release
+        # or the most recent release prior to requested release by sorting the
+        # keys in reverse order. This follows established patterns in our
+        # charms for templates and reactive charm implementations, i.e. as long
+        # as nothing has changed the definitions for the prior OpenStack
+        # release is still valid.
+        for release in sorted(rp_map.keys(), reverse=True):
+            if (CompareOpenStackReleases(release) <= os_release and
+                    package_type in rp_map[release]):
+                for name, container in (
+                        ('install', install),
+                        ('purge', purge)):
+                    for pkg in rp_map[release][package_type].get(name, []):
+                        container.add(pkg)
+                break
+    return SubordinatePackages(install, purge)
+
+
+os_restart_on_change = partial(
+    pausable_restart_on_change,
+    can_restart_now_f=deferred_events.check_and_record_restart_request,
+    post_svc_restart_f=deferred_events.process_svc_restart)
+
+
+def restart_services_action_helper(all_services):
+    """Helper to run the restart-services action.
+
+    NOTE: all_services is all services that could be restarted but
+          depending on the action arguments it may be a subset of
+          these that are actually restarted.
+
+    :param all_services: All services that could be restarted
+    :type all_services: List[str]
+    """
+    deferred_only = action_get("deferred-only")
+    services = action_get("services")
+    if services:
+        services = services.split()
+    else:
+        services = all_services
+    if deferred_only:
+        restart_services_action(deferred_only=True)
+    else:
+        restart_services_action(services=services)
+
+
+def show_deferred_events_action_helper():
+    """Helper to run the show-deferred-restarts action."""
+    restarts = []
+    for event in deferred_events.get_deferred_events():
+        restarts.append('{} {} {}'.format(
+            str(event.timestamp),
+            event.service.ljust(40),
+            event.reason))
+    restarts.sort()
+    output = {
+        'restarts': restarts,
+        'hooks': deferred_events.get_deferred_hooks()}
+    action_set({'output': "{}".format(
+        yaml.dump(output, default_flow_style=False))})

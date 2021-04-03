@@ -96,12 +96,14 @@ def cmp_pkgrevno(package, revno, pkgcache=None):
     the pkgcache argument is None. Be sure to add charmhelpers.fetch if
     you call this function, or pass an apt_pkg.Cache() instance.
     """
-    from charmhelpers.fetch import apt_pkg
+    from charmhelpers.fetch import apt_pkg, get_installed_version
     if not pkgcache:
-        from charmhelpers.fetch import apt_cache
-        pkgcache = apt_cache()
-    pkg = pkgcache[package]
-    return apt_pkg.version_compare(pkg.current_ver.ver_str, revno)
+        current_ver = get_installed_version(package)
+    else:
+        pkg = pkgcache[package]
+        current_ver = pkg.current_ver
+
+    return apt_pkg.version_compare(current_ver.ver_str, revno)
 
 
 @cached

@@ -1622,3 +1622,12 @@ def _contains_range(addresses):
         addresses.startswith(".") or
         ",." in addresses or
         " ." in addresses)
+
+
+def is_subordinate():
+    """Check whether charm is subordinate in unit metadata.
+
+    :returns: True if unit is subordniate, False otherwise.
+    :rtype: bool
+    """
+    return metadata().get('subordinate') is True

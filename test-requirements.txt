@@ -42,8 +42,8 @@ oslo.utils<=3.41.0;python_version<'3.6'
 
 coverage>=4.5.2
 pyudev              # for ceph-* charm unit tests (need to fix the ceph-* charm unit tests/mocking)
-git+https://github.com/openstack-charmers/zaza.git#egg=zaza;python_version>='3.0'
-git+https://github.com/openstack-charmers/zaza-openstack-tests.git#egg=zaza.openstack
+git+https://github.com/openstack-charmers/zaza.git@stable/21.04#egg=zaza;python_version>='3.0'
+git+https://github.com/openstack-charmers/zaza-openstack-tests.git@stable/21.04#egg=zaza.openstack
 
 # Needed for charm-glance:
 git+https://opendev.org/openstack/tempest.git#egg=tempest;python_version>='3.6'

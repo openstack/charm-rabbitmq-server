@@ -200,6 +200,14 @@ CLOUD_ARCHIVE_POCKETS = {
     'victoria/proposed': 'focal-proposed/victoria',
     'focal-victoria/proposed': 'focal-proposed/victoria',
     'focal-proposed/victoria': 'focal-proposed/victoria',
+    # Wallaby
+    'wallaby': 'focal-updates/wallaby',
+    'focal-wallaby': 'focal-updates/wallaby',
+    'focal-wallaby/updates': 'focal-updates/wallaby',
+    'focal-updates/wallaby': 'focal-updates/wallaby',
+    'wallaby/proposed': 'focal-proposed/wallaby',
+    'focal-wallaby/proposed': 'focal-proposed/wallaby',
+    'focal-proposed/wallaby': 'focal-proposed/wallaby',
 }
 
 
@@ -829,6 +837,22 @@ def get_upstream_version(package):
         return None
 
     return ubuntu_apt_pkg.upstream_version(pkg.current_ver.ver_str)
+
+
+def get_installed_version(package):
+    """Determine installed version of a package
+
+    @returns None (if not installed) or the installed version as
+    Version object
+    """
+    cache = apt_cache()
+    dpkg_result = cache._dpkg_list([package]).get(package, {})
+    current_ver = None
+    installed_version = dpkg_result.get('version')
+
+    if installed_version:
+        current_ver = ubuntu_apt_pkg.Version({'ver_str': installed_version})
+    return current_ver
 
 
 def get_apt_dpkg_env():
