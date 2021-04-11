@@ -26,7 +26,8 @@ UBUNTU_RELEASES = (
     'disco',
     'eoan',
     'focal',
-    'groovy'
+    'groovy',
+    'hirsute',
 )
 
 
