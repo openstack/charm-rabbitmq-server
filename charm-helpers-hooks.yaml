@@ -1,5 +1,5 @@
 destination: charmhelpers
-repo: https://github.com/juju/charm-helpers@stable/21.04
+repo: https://github.com/juju/charm-helpers
 include:
     - fetch
     - core
