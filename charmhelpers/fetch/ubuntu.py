@@ -658,17 +658,11 @@ def _add_apt_repository(spec):
     :param spec: the parameter to pass to add_apt_repository
     :type spec: str
     """
-    series = get_distrib_codename()
     if '{series}' in spec:
+        series = get_distrib_codename()
         spec = spec.replace('{series}', series)
-    # software-properties package for bionic properly reacts to proxy settings
-    # set via apt.conf (see lp:1433761), however this is not the case for LTS
-    # and non-LTS releases before bionic.
-    if series in ('trusty', 'xenial'):
-        _run_with_retries(['add-apt-repository', '--yes', spec],
-                          cmd_env=env_proxy_settings(['https', 'http']))
-    else:
-        _run_with_retries(['add-apt-repository', '--yes', spec])
+    _run_with_retries(['add-apt-repository', '--yes', spec],
+                      cmd_env=env_proxy_settings(['https', 'http']))
 
 
 def _add_cloud_pocket(pocket):

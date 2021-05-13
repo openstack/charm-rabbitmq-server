@@ -14,8 +14,10 @@
 
 import os
 import json
-from inspect import getargspec
+import inspect
 from collections import Iterable, OrderedDict
+
+import six
 
 from charmhelpers.core import host
 from charmhelpers.core import hookenv
@@ -169,7 +171,10 @@ class ServiceManager(object):
                     if not units:
                         continue
                     remote_service = units[0].split('/')[0]
-                    argspec = getargspec(provider.provide_data)
+                    if six.PY2:
+                        argspec = inspect.getargspec(provider.provide_data)
+                    else:
+                        argspec = inspect.getfullargspec(provider.provide_data)
                     if len(argspec.args) > 1:
                         data = provider.provide_data(remote_service, service_ready)
                     else:

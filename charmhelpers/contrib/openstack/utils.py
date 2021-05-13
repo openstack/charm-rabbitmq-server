@@ -56,6 +56,7 @@ from charmhelpers.core.hookenv import (
     relation_id,
     relation_ids,
     relation_set,
+    service_name as ch_service_name,
     status_set,
     hook_name,
     application_version_set,
@@ -1089,8 +1090,12 @@ def _determine_os_workload_status(
     try:
         if config(POLICYD_CONFIG_NAME):
             message = "{} {}".format(policyd_status_message_prefix(), message)
+        # Get deferred restarts events that have been triggered by a policy
+        # written by this charm.
         deferred_restarts = list(set(
-            [e.service for e in deferred_events.get_deferred_restarts()]))
+            [e.service
+             for e in deferred_events.get_deferred_restarts()
+             if e.policy_requestor_name == ch_service_name()]))
         if deferred_restarts:
             svc_msg = "Services queued for restart: {}".format(
                 ', '.join(sorted(deferred_restarts)))

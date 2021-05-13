@@ -468,15 +468,20 @@ def config(scope=None):
 
 
 @cached
-def relation_get(attribute=None, unit=None, rid=None):
+def relation_get(attribute=None, unit=None, rid=None, app=None):
     """Get relation information"""
     _args = ['relation-get', '--format=json']
+    if app is not None:
+        if unit is not None:
+            raise ValueError("Cannot use both 'unit' and 'app'")
+        _args.append('--app')
     if rid:
         _args.append('-r')
         _args.append(rid)
     _args.append(attribute or '-')
-    if unit:
-        _args.append(unit)
+    # unit or application name
+    if unit or app:
+        _args.append(unit or app)
     try:
         return json.loads(subprocess.check_output(_args).decode('UTF-8'))
     except ValueError:
@@ -487,12 +492,14 @@ def relation_get(attribute=None, unit=None, rid=None):
         raise
 
 
-def relation_set(relation_id=None, relation_settings=None, **kwargs):
+def relation_set(relation_id=None, relation_settings=None, app=False, **kwargs):
     """Set relation information for the current unit"""
     relation_settings = relation_settings if relation_settings else {}
     relation_cmd_line = ['relation-set']
     accepts_file = "--file" in subprocess.check_output(
         relation_cmd_line + ["--help"], universal_newlines=True)
+    if app:
+        relation_cmd_line.append('--app')
     if relation_id is not None:
         relation_cmd_line.extend(('-r', relation_id))
     settings = relation_settings.copy()
