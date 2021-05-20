@@ -931,6 +931,20 @@ class UtilsTests(CharmTestCase):
             '-p', 'test'
         )
 
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
+    def test_configure_ttl(self, rabbitmqctl):
+        rabbit_utils.configure_ttl('test', ttlname='heat_expiry',
+                                   ttlreg='heat-engine-listener|engine_worker',
+                                   ttl=23000)
+        rabbitmqctl.assert_called_once_with(
+            'set_policy',
+            'heat_expiry', '"heat-engine-listener|engine_worker"',
+            '{"expires":23000}',
+            '--priority', '1',
+            '--apply-to', 'queues',
+            '-p', 'test'
+        )
+
     @mock.patch.object(rabbit_utils, 'is_partitioned')
     @mock.patch.object(rabbit_utils, 'wait_app')
     @mock.patch.object(rabbit_utils, 'check_cluster_memberships')

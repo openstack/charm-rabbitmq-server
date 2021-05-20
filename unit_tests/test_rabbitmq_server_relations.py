@@ -217,6 +217,8 @@ class RelationUtil(CharmTestCase):
                                              check_deferred_restarts=True)
 
     @patch.object(rabbitmq_server_relations.rabbit,
+                  'configure_ttl')
+    @patch.object(rabbitmq_server_relations.rabbit,
                   'configure_notification_ttl')
     @patch.object(rabbitmq_server_relations, 'is_leader')
     @patch.object(rabbitmq_server_relations.rabbit, 'set_ha_mode')
@@ -229,7 +231,8 @@ class RelationUtil(CharmTestCase):
                             mock_grant_permissions, mock_create_vhost,
                             mock_create_user, mock_get_rabbit_password,
                             mock_set_ha_mode, mock_is_leader,
-                            mock_configure_notification_ttl):
+                            mock_configure_notification_ttl,
+                            mock_configure_ttl):
         config_data = {
             'notification-ttl': 450000,
             'mirroring-queues': True,
@@ -248,7 +251,7 @@ class RelationUtil(CharmTestCase):
                                                              'vhost_blah', rid)
 
                     d = {rid: {"username": "user_foo", "vhost": "vhost_blah",
-                               "mirroring-queues": True}}
+                               "ttl": None, "mirroring-queues": True}}
                     mock_set.assert_has_calls([call(key='amqp_config_tracker',
                                                     value=d)])
 
@@ -280,7 +283,7 @@ class RelationUtil(CharmTestCase):
                                                              'vhost_blah', rid)
 
                     d.update({rid: {"username": user, "vhost": "vhost_blah",
-                                    "mirroring-queues": True}})
+                                    "ttl": None, "mirroring-queues": True}})
                     self.assertEqual(store.get('amqp_config_tracker'), d)
 
                 @rabbitmq_server_relations.validate_amqp_config_tracker
@@ -294,6 +297,7 @@ class RelationUtil(CharmTestCase):
                 for rid, user in [('amqp:1', 'userA'), ('amqp:3', 'userC')]:
                     fake_configure_amqp(user, 'vhost_blah', rid)
                     d[rid] = {"username": user, "vhost": "vhost_blah",
+                              "ttl": None,
                               "mirroring-queues": True, 'stale': True}
                     # Since this is a dummy case we need to toggle the stale
                     # values.
@@ -302,14 +306,21 @@ class RelationUtil(CharmTestCase):
                     d[rid]['stale'] = True
 
                 mock_configure_notification_ttl.assert_not_called()
+                mock_configure_ttl.assert_not_called()
 
                 # Test openstack notification workaround
                 d = {}
                 for rid, user in [('amqp:1', 'userA')]:
-                    rabbitmq_server_relations.configure_amqp(user,
-                                                             'openstack', rid)
+                    rabbitmq_server_relations.configure_amqp(
+                        user, 'openstack', rid, admin=False,
+                        ttlname='heat_expiry',
+                        ttlreg='heat-engine-listener|engine_worker', ttl=45000)
                 (mock_configure_notification_ttl.
                     assert_called_once_with('openstack', 450000))
+                (mock_configure_ttl.
+                    assert_called_once_with(
+                        'openstack', 'heat_expiry',
+                        'heat-engine-listener|engine_worker', 45000))
 
         finally:
             if os.path.exists(tmpdir):

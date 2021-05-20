@@ -154,7 +154,8 @@ def validate_amqp_config_tracker(f):
     return _validate_amqp_config_tracker
 
 
-def configure_amqp(username, vhost, relation_id, admin=False):
+def configure_amqp(username, vhost, relation_id, admin=False,
+                   ttlname=None, ttlreg=None, ttl=None):
     """Configure rabbitmq server.
 
     This function creates user/password, vhost and sets user permissions. It
@@ -176,6 +177,9 @@ def configure_amqp(username, vhost, relation_id, admin=False):
                         this operation. This should always be provided
                         so that we can track what has been set.
     :param admin: boolean value defining whether the new user is admin.
+    :param ttlname: the name of ttl
+    :param ttlreg: the regular expression of ttl
+    :param ttl: the vaule of ttl
     :returns: user password
     """
     log("Configuring rabbitmq for user '{}' vhost '{}' (rid={})".
@@ -188,7 +192,7 @@ def configure_amqp(username, vhost, relation_id, admin=False):
     # get and update service password
     password = rabbit.get_rabbit_password(username)
 
-    expected = {'username': username, 'vhost': vhost,
+    expected = {'username': username, 'vhost': vhost, 'ttl': ttl,
                 'mirroring-queues': config('mirroring-queues')}
     kvstore = kv()
     tracker = kvstore.get('amqp_config_tracker') or {}
@@ -208,6 +212,7 @@ def configure_amqp(username, vhost, relation_id, admin=False):
     if vhost == 'openstack':
         rabbit.configure_notification_ttl(vhost,
                                           config('notification-ttl'))
+        rabbit.configure_ttl(vhost, ttlname, ttlreg, ttl)
 
     if admin:
         rabbit.create_user(username, password, ['administrator'])
@@ -293,8 +298,12 @@ def amqp_changed(relation_id=None, remote_unit=None,
             username = current['username']
             vhost = current['vhost']
             admin = current.get('admin', False)
+            ttlname = current.get('ttlname')
+            ttlreg = current.get('ttlreg')
+            ttl = current.get('ttl')
             amqp_rid = relation_id or get_relation_id()
-            password = configure_amqp(username, vhost, amqp_rid, admin=admin)
+            password = configure_amqp(username, vhost, amqp_rid, admin=admin,
+                                      ttlname=ttlname, ttlreg=ttlreg, ttl=ttl)
             relation_settings['password'] = password
         else:
             # NOTE(hopem): we should look at removing this code since i don't
@@ -315,8 +324,12 @@ def amqp_changed(relation_id=None, remote_unit=None,
                 if singleset.issubset(queues[amqp_rid]):
                     username = queues[amqp_rid]['username']
                     vhost = queues[amqp_rid]['vhost']
+                    ttlname = queues[amqp_rid].get('ttlname')
+                    ttlreg = queues[amqp_rid].get('ttlreg')
+                    ttl = queues[amqp_rid].get('ttl')
                     password = configure_amqp(username, vhost, amqp_rid,
-                                              admin=admin)
+                                              admin=admin, ttlname=ttlname,
+                                              ttlreg=ttlreg, ttl=ttl)
                     key = '_'.join([amqp_rid, 'password'])
                     relation_settings[key] = password
 

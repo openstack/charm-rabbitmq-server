@@ -432,6 +432,24 @@ def configure_notification_ttl(vhost, ttl=3600000):
                 '-p', vhost)
 
 
+def configure_ttl(vhost, ttlname, ttlreg, ttl):
+    ''' Some topic queues like in heat also need to set TTL, see lp:1925436
+        Configure TTL for heat topics in the provided vhost, this is a
+        workaround for filling heat queues and for future other queues
+    '''
+    log('configure_ttl: ttlname={} ttlreg={} ttl={}'.format(
+        ttlname, ttlreg, ttl), INFO)
+    if not all([ttlname, ttlreg, ttl]):
+        return
+    rabbitmqctl('set_policy',
+                '{ttlname}'.format(ttlname=ttlname),
+                '"{ttlreg}"'.format(ttlreg=ttlreg),
+                '{{"expires":{ttl}}}'.format(ttl=ttl),
+                '--priority', '1',
+                '--apply-to', 'queues',
+                '-p', vhost)
+
+
 def rabbitmqctl_normalized_output(*args):
     ''' Run rabbitmqctl with args. Normalize output by removing
         whitespace and return it to caller for further processing.
