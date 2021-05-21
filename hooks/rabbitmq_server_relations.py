@@ -641,9 +641,13 @@ def upgrade_charm():
     # for the check_rabbitmq.py script, python3-amqplib needs to be installed;
     # if previous version was a python2 version of the charm this won't happen
     # unless the source is changed.  Ensure it is installed here if needed.
+    # LP:#1928802 - also include python3-croniter as its needed for
+    # check_rabbitmq_queues.py as of change ab79c3ee
     apt_update(fatal=True)
-    if filter_installed_packages(['python3-amqplib']):
-        apt_install(['python3-amqplib'], fatal=True)
+    missing_packages = filter_installed_packages(['python3-amqplib',
+                                                  'python3-croniter'])
+    if missing_packages:
+        apt_install(missing_packages, fatal=True)
 
 
 MAN_PLUGIN = 'rabbitmq_management'
