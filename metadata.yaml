@@ -15,6 +15,7 @@ series:
 - focal
 - groovy
 - hirsute
+- impish
 provides:
   amqp:
     interface: rabbitmq
