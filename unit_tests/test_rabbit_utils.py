@@ -278,6 +278,33 @@ class UtilsTests(CharmTestCase):
 
     @mock.patch('rabbit_utils.caching_cmp_pkgrevno')
     @mock.patch('rabbit_utils.subprocess')
+    def test_get_cluster_status(self, mock_subprocess, mock_cmp_pkgrevno):
+        mock_subprocess.check_output.return_value = b'{"status": "tip top"}'
+        mock_cmp_pkgrevno.return_value = -1
+        with self.assertRaises(NotImplementedError):
+            rabbit_utils.get_cluster_status()
+        mock_cmp_pkgrevno.return_value = 1
+        self.assertEqual(
+            rabbit_utils.get_cluster_status(),
+            {'status': 'tip top'})
+        mock_subprocess.check_output.reset_mock()
+        self.assertEqual(
+            rabbit_utils.get_cluster_status(cmd_timeout=42),
+            {'status': 'tip top'})
+        mock_subprocess.check_output.assert_called_once_with(
+            ['/usr/sbin/rabbitmqctl', 'cluster_status', '--formatter=json'],
+            timeout=42)
+
+    @mock.patch('rabbit_utils.get_cluster_status')
+    def test_is_partitioned(self, get_cluster_status):
+        get_cluster_status.return_value = {'partitions': {}}
+        self.assertFalse(rabbit_utils.is_partitioned())
+        get_cluster_status.return_value = {
+            'partitions': {'node1': ['node2', 'node3']}}
+        self.assertTrue(rabbit_utils.is_partitioned())
+
+    @mock.patch('rabbit_utils.caching_cmp_pkgrevno')
+    @mock.patch('rabbit_utils.subprocess')
     def test_list_vhosts(self, mock_subprocess, mock_cmp_pkgrevno):
         '''Ensure list_vhosts parses output into the proper list'''
         mock_subprocess.check_output.return_value = \
@@ -904,6 +931,7 @@ class UtilsTests(CharmTestCase):
             '-p', 'test'
         )
 
+    @mock.patch.object(rabbit_utils, 'is_partitioned')
     @mock.patch.object(rabbit_utils, 'wait_app')
     @mock.patch.object(rabbit_utils, 'check_cluster_memberships')
     @mock.patch.object(rabbit_utils, 'clustered')
@@ -913,8 +941,8 @@ class UtilsTests(CharmTestCase):
     def test_assess_cluster_status(
             self, rabbitmq_is_installed, is_unit_paused_set,
             is_sufficient_peers, clustered, check_cluster_memberships,
-            wait_app):
-
+            wait_app, is_partitioned):
+        is_partitioned.return_value = False
         self.relation_ids.return_value = ["cluster:1"]
         self.related_units.return_value = ["rabbitmq-server/1"]
         _min = 3
@@ -966,8 +994,16 @@ class UtilsTests(CharmTestCase):
             "Unable to determine if the rabbitmq service is up")
         self.assertEqual(_expected, rabbit_utils.assess_cluster_status())
 
+        wait_app.return_value = True
+        is_partitioned.return_value = True
+        _expected = (
+            "blocked",
+            "RabbitMQ is partitioned")
+        self.assertEqual(_expected, rabbit_utils.assess_cluster_status())
+
         # All OK
         wait_app.return_value = True
+        is_partitioned.return_value = False
         _expected = (
             "active",
             "message is ignored")

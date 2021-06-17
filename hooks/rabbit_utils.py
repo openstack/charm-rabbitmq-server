@@ -793,31 +793,61 @@ def services():
     return list(set(_services))
 
 
+def get_cluster_status(cmd_timeout=None):
+    """Raturn rabbit cluster status
+
+    :param cmd_timeout: How long to give the command to complete.
+    :type cmd_timeout: int
+    :returns: Rabbitmq cluster status
+    :rtype: dict
+    :raises: NotImplementedError, subprocess.TimeoutExpired,
+    """
+    if caching_cmp_pkgrevno('rabbitmq-server', '3.8.2') >= 0:
+        cmd = [RABBITMQ_CTL, 'cluster_status', '--formatter=json']
+        output = subprocess.check_output(
+            cmd,
+            timeout=cmd_timeout).decode('utf-8')
+        return json.loads(output)
+    else:
+        # rabbitmqctl has not implemented the formatter option.
+        raise NotImplementedError
+
+
 @cached
 def nodes(get_running=False):
     ''' Get list of nodes registered in the RabbitMQ cluster '''
     # NOTE(ajkavanagh): In focal and above, rabbitmq-server now has a
     # --formatter option.
-    if caching_cmp_pkgrevno('rabbitmq-server', '3.8.2') >= 0:
-        cmd = [RABBITMQ_CTL, 'cluster_status', '--formatter=json']
-        output = subprocess.check_output(cmd).decode('utf-8')
-        decoded = json.loads(output)
+    try:
+        status = get_cluster_status()
         if get_running:
-            return decoded['running_nodes']
-        return decoded['disk_nodes'] + decoded['ram_nodes']
+            return status['running_nodes']
+        return status['disk_nodes'] + status['ram_nodes']
+    except NotImplementedError:
+        out = rabbitmqctl_normalized_output('cluster_status')
+        cluster_status = {}
+        for m in re.finditer(r"{([^,]+),(?!\[{)\[([^\]]*)", out):
+            state = m.group(1)
+            items = m.group(2).split(',')
+            items = [x.replace("'", '').strip() for x in items]
+            cluster_status.update({state: items})
 
-    out = rabbitmqctl_normalized_output('cluster_status')
-    cluster_status = {}
-    for m in re.finditer(r"{([^,]+),(?!\[{)\[([^\]]*)", out):
-        state = m.group(1)
-        items = m.group(2).split(',')
-        items = [x.replace("'", '').strip() for x in items]
-        cluster_status.update({state: items})
+        if get_running:
+            return cluster_status.get('running_nodes', [])
 
-    if get_running:
-        return cluster_status.get('running_nodes', [])
+        return cluster_status.get('disc', []) + cluster_status.get('ram', [])
 
-    return cluster_status.get('disc', []) + cluster_status.get('ram', [])
+
+@cached
+def is_partitioned():
+    """Check whether rabbitmq cluster is partitioned.
+
+    :returns: Whether cluster is partitioned
+    :rtype: bool
+    :raises: NotImplementedError, subprocess.TimeoutExpired,
+    """
+    status = get_cluster_status(cmd_timeout=60)
+    return status.get('partitions') != {}
 
 
 @cached
@@ -901,6 +931,13 @@ def assess_cluster_status(*args):
             'Node {} in the cluster but not running. If it is a departed '
             'node, remove with `forget-cluster-node` action'
             .format(departed_node))
+
+    # Check if cluster is partitioned
+    try:
+        if peer_ids and len(related_units(peer_ids[0])) and is_partitioned():
+            return ('blocked', 'RabbitMQ is partitioned')
+    except (subprocess.TimeoutExpired, NotImplementedError):
+        pass
 
     # General status check
     if not wait_app():
