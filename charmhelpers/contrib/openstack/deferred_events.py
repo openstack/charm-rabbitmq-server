@@ -46,9 +46,13 @@ class ServiceEvent():
         self.service = service
         self.reason = reason
         self.action = action
-        if not policy_requestor_name:
+        if policy_requestor_name:
+            self.policy_requestor_name = policy_requestor_name
+        else:
             self.policy_requestor_name = hookenv.service_name()
-        if not policy_requestor_type:
+        if policy_requestor_type:
+            self.policy_requestor_type = policy_requestor_type
+        else:
             self.policy_requestor_type = 'charm'
 
     def __eq__(self, other):
@@ -99,7 +103,9 @@ def read_event_file(file_name):
         contents['timestamp'],
         contents['service'],
         contents['reason'],
-        contents['action'])
+        contents['action'],
+        policy_requestor_name=contents.get('policy_requestor_name'),
+        policy_requestor_type=contents.get('policy_requestor_type'))
     return event
 
 

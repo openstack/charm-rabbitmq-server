@@ -1,4 +1,15 @@
 - project:
     templates:
       - charm-unit-jobs
-      - charm-functional-jobs
+    check:
+      # NOTE(lourot): overriding zOSCI's default list because Wallaby+ bundles
+      # don't exist yet in this branch of the charm.
+      jobs:
+        - xenial-mitaka
+        - bionic-queens
+        - bionic-stein
+        - bionic-train
+        - bionic-ussuri
+        - focal-ussuri
+        - focal-victoria
+        - groovy-victoria
