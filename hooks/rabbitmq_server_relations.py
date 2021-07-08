@@ -80,6 +80,7 @@ from charmhelpers.core.hookenv import (
     DEBUG,
     ERROR,
     INFO,
+    WARNING,
     leader_set,
     leader_get,
     relation_get,
@@ -325,6 +326,58 @@ def update_clients(check_deferred_restarts=True):
                     relation_id=rid,
                     remote_unit=unit,
                     check_deferred_restarts=check_deferred_restarts)
+
+
+@hooks.hook('dashboards-relation-joined')
+def dashboards_relation_joined(relation_id=None, remote_unit=None):
+    """
+    dashboards relation joined
+    send the dashboard json data via relation
+    """
+    with open(os.path.join("files", "grafana-dashboard.json")) as f:
+        dashboard_str = f.read()
+    relation_set(relation_id, relation_settings={"dashboard": dashboard_str,
+                                                 "name": "RabbitMQ-Overview"})
+
+
+@hooks.hook('prometheus-rules-relation-joined',
+            'prometheus-rules-relation-created')
+def prometheus_rules_joined(relation_id=None, remote_unit=None):
+    """
+    prometheus rules relation joined
+    send the prometheus rules via relation
+    """
+    with open(os.path.join("files", "prom_rule_rmq_splitbrain.yaml")) as f:
+        rule = f.read()
+    relation_set(relation_id, relation_settings={"groups": rule})
+
+
+@hooks.hook('scrape-relation-joined', 'scrape-relation-created')
+def prometheus_scrape_joined(relation_id=None, remote_unit=None):
+    """
+    scrape relation joined
+    enable prometheus plugin and open port
+    """
+    err_msg = "rabbitmq-server needs to be >= 3.8 to support Prometheus plugin"
+    if cmp_pkgrevno('rabbitmq-server', '3.8.0') < 0:
+        log(err_msg, level=WARNING)
+        status_set("blocked", err_msg)
+        raise Exception(err_msg)
+    rabbit.enable_plugin(PROM_PLUGIN)
+    open_port(RMQ_MON_PORT)
+    relation_set(relation_id, relation_settings={"port": RMQ_MON_PORT})
+
+
+@hooks.hook('scrape-relation-broken')
+def prometheus_scape_broken():
+    """
+    scrape relation broken
+    the relation has been completely removed
+    disable prometheus plugin and close port
+    """
+    rabbit.disable_plugin(PROM_PLUGIN)
+    close_port(RMQ_MON_PORT)
+    log("scrape relation broken, disabled plugin and close port", level=INFO)
 
 
 @validate_amqp_config_tracker
@@ -737,6 +790,8 @@ def upgrade_charm():
 
 
 MAN_PLUGIN = 'rabbitmq_management'
+PROM_PLUGIN = 'rabbitmq_prometheus'
+RMQ_MON_PORT = 15692
 
 
 @hooks.hook('config-changed')
