@@ -763,9 +763,12 @@ def get_plugin_manager():
     :returns: Path to rabbitmq-plugins executable
     :rtype: str
     """
-    manager = glob.glob(
-        '/usr/lib/rabbitmq/lib/rabbitmq_server-*/sbin/rabbitmq-plugins')[0]
-    return manager
+    # At version 3.8.2, only /sbin/rabbitmq-plugins can enable plugin correctly
+    if os.path.exists("/sbin/rabbitmq-plugins"):
+        return '/sbin/rabbitmq-plugins'
+    else:
+        return glob.glob(
+            '/usr/lib/rabbitmq/lib/rabbitmq_server-*/sbin/rabbitmq-plugins')[0]
 
 
 def _manage_plugin(plugin, action):

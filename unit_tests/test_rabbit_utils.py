@@ -894,6 +894,25 @@ class UtilsTests(CharmTestCase):
         mock_new_rabbitmq.return_value = True
         self.assertEqual(rabbit_utils.get_managment_port(), 15672)
 
+    @mock.patch('glob.glob')
+    @mock.patch('rabbit_utils.subprocess.check_call')
+    @mock.patch('os.path.exists')
+    def test_enable_management_plugin(self, mock_os_path,
+                                      mock_subprocess,
+                                      mock_glob):
+        mock_os_path.return_value = True
+        rabbitmq_plugins = '/sbin/rabbitmq-plugins'
+        rabbit_utils._manage_plugin("rabbitmq_prometheus", "enable")
+        mock_subprocess.assert_called_with([rabbitmq_plugins,
+                                            "enable", "rabbitmq_prometheus"])
+        mock_os_path.return_value = False
+        rabbitmq_plugins = '/usr/lib/rabbitmq/lib/'\
+                           'rabbitmq_server-3.8.2/sbin/rabbitmq-plugins'
+        mock_glob.return_value = [rabbitmq_plugins]
+        rabbit_utils._manage_plugin("rabbitmq_prometheus", "enable")
+        mock_subprocess.assert_called_with([rabbitmq_plugins,
+                                            "enable", "rabbitmq_prometheus"])
+
     @mock.patch('rabbit_utils.caching_cmp_pkgrevno')
     @mock.patch('rabbit_utils.relations_for_id')
     @mock.patch('rabbit_utils.subprocess')
