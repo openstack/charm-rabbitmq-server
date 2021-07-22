@@ -7,7 +7,7 @@
 #       requirements.  They are intertwined.  Also, Zaza itself should specify
 #       all of its own requirements and if it doesn't, fix it there.
 #
-pbr>=1.8.0,<1.9.0
+pbr==5.6.0
 simplejson>=2.2.0
 netifaces>=0.10.4
 
