@@ -8,11 +8,6 @@
 #       all of its own requirements and if it doesn't, fix it there.
 #
 setuptools<50.0.0  # https://github.com/pypa/setuptools/commit/04e3df22df840c6bb244e9b27bc56750c44b7c85
-charm-tools>=2.4.4
-
-# Workaround until https://github.com/juju/charm-tools/pull/589 gets
-# published
-keyring<21
 
 requests>=2.18.4
 
@@ -21,7 +16,6 @@ requests>=2.18.4
 mock>=1.2,<4.0.0; python_version < '3.6'
 mock>=1.2; python_version >= '3.6'
 
-flake8>=2.2.4
 stestr>=2.2.0
 
 # Dependency of stestr. Workaround for
@@ -42,7 +36,7 @@ oslo.utils<=3.41.0;python_version<'3.6'
 
 coverage>=4.5.2
 pyudev              # for ceph-* charm unit tests (need to fix the ceph-* charm unit tests/mocking)
-git+https://github.com/openstack-charmers/zaza.git#egg=zaza;python_version>='3.0'
+git+https://github.com/openstack-charmers/zaza.git#egg=zaza
 git+https://github.com/openstack-charmers/zaza-openstack-tests.git#egg=zaza.openstack
 
 # Needed for charm-glance:
