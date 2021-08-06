@@ -1531,6 +1531,9 @@ def nrpe_update_queues_check(nrpe_compat, rabbit_dir):
             cmd += ' -c "{}" "{}" {} {}'.format(*item)
         for item in yaml.safe_load(config('exclude_queues')):
             cmd += ' -e "{}" "{}"'.format(*item)
+        busiest_queues = config('busiest_queues')
+        if busiest_queues is not None and int(busiest_queues) > 0:
+            cmd += ' -d "{}"'.format(busiest_queues)
 
         max_age = get_max_stats_file_age()
         if max_age > 0:

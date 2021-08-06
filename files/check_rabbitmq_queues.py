@@ -38,7 +38,7 @@ def gen_stats(data_lines):
         yield vhost, queue, int(m_all)
 
 
-def collate_stats(stats, limits, exclude):
+def collate_stats(stats, limits, exclude, busiest_queues):
     # Create a dict with stats collated according to the definitions in the
     # limits file. If none of the definitions in the limits file is matched,
     # store the stat without collating.
@@ -57,6 +57,9 @@ def collate_stats(stats, limits, exclude):
         for l_vhost, l_queue, _, _ in limits:
             if fnmatchcase(vhost, l_vhost) and fnmatchcase(queue, l_queue):
                 collated[l_vhost, l_queue] += m_all
+                # Save vhost and queue names when using wildcards as arguments.
+                if busiest_queues > 0:
+                    collated[vhost, queue] += m_all
                 break
         else:
             collated[vhost, queue] += m_all
@@ -104,6 +107,20 @@ def check_stats_file_freshness(stats_file, oldest_timestamp):
     return ("OK", "")
 
 
+def top_n_queues(stats, busiest_queues):
+    if busiest_queues <= 0:
+        return []
+    tqueues = [" - Top Queues"]
+    sorted_messages_stats = sorted(stats.items(),
+                                   key=lambda y: y[1],
+                                   reverse=True)
+    for stat in sorted_messages_stats[:busiest_queues]:
+        tqueues.append("{0}:{1} -> {2}".format(stat[0][0],  # vhost
+                                               stat[0][1],  # queue
+                                               stat[1]))    # messages
+    return tqueues
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='RabbitMQ queue size nagios check.')
@@ -140,6 +157,14 @@ if __name__ == "__main__":
         )
     )
     parser.add_argument(
+        '-d',
+        type=int,
+        required=False,
+        default=0,
+        metavar=('n'),
+        help='Display the n busiest queues'
+    )
+    parser.add_argument(
         'stats_file',
         nargs='*',
         type=str,
@@ -151,7 +176,7 @@ if __name__ == "__main__":
         chain.from_iterable(
             gen_data_lines(filename) for filename in args.stats_file))
     # Collate stats according to limit definitions and check.
-    stats_collated = collate_stats(stats, args.c, args.e)
+    stats_collated = collate_stats(stats, args.c, args.e, args.d)
     stats_checked = check_stats(stats_collated, args.c)
     criticals, warnings = [], []
     for queue, vhost, message_no, status in stats_checked:
@@ -170,12 +195,16 @@ if __name__ == "__main__":
             msg for status, msg in freshness_results if status == "CRIT"
         )
 
+    tqueues = top_n_queues(stats_collated, args.d)
+
     if len(criticals) > 0:
-        print("CRITICAL: {}".format(", ".join(criticals)))
+        print("CRITICAL: {0} {1}".format(", ".join(criticals),
+                                         " | ".join(tqueues)))
         sys.exit(2)
         # XXX: No warnings if there are criticals?
     elif len(warnings) > 0:
-        print("WARNING: {}".format(", ".join(warnings)))
+        print("WARNING: {0} {1}".format(", ".join(warnings),
+                                        " | ".join(tqueues)))
         sys.exit(1)
     else:
         print("OK")

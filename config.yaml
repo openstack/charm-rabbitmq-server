@@ -137,6 +137,13 @@ options:
       Wildcards '*' are accepted to exclude, for example, single queue on all
       hosts. Note that the wildcard asterisk must be double-escaped. Example:
       [['\\*', 'queue1']]
+  busiest_queues:
+    type: int
+    default: 0
+    description: |
+      Number of the busiest RabbitMQ queues to display when warning and
+      critical checking thresholds are exceeded. Queues are displayed in
+      decreasing message count order.
   connection-backlog:
     type: int
     default:

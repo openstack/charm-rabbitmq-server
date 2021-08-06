@@ -1303,6 +1303,23 @@ class UtilsTests(CharmTestCase):
 
         self.nrpe_compat.reset_mock()
 
+        # call with set busiest_queues > 0
+        queues_number = 3
+        self.test_config.set('busiest_queues', str(queues_number))
+        self.test_config.set('exclude_queues', "[]")
+        rabbit_utils.nrpe_update_queues_check(self.nrpe_compat, self.tmp_dir)
+        busiest_queues = '-d "{}" '.format(queues_number)
+        self.nrpe_compat.add_check.assert_called_with(
+            shortname='rabbitmq_queue',
+            description='Check RabbitMQ Queues',
+            check_cmd='{0}/check_rabbitmq_queues.py -c "\\*" "\\*" 100 200 {1}'
+                      '-m 600 '
+                      '{0}/data/test_queue_stats.dat'.format(self.tmp_dir,
+                                                             busiest_queues))
+        self.nrpe_compat.remove_check.assert_not_called()
+
+        self.nrpe_compat.reset_mock()
+
         # call with unset stats_cron_schedule
         self.test_config.unset('stats_cron_schedule')
         rabbit_utils.nrpe_update_queues_check(self.nrpe_compat, self.tmp_dir)
