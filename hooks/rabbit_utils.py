@@ -93,7 +93,8 @@ from charmhelpers.fetch import (
 from charmhelpers.fetch import get_upstream_version
 
 
-PACKAGES = ['rabbitmq-server', 'python3-amqplib', 'lockfile-progs']
+PACKAGES = ['rabbitmq-server', 'python3-amqplib', 'lockfile-progs',
+            'python3-croniter']
 
 VERSION_PACKAGE = 'rabbitmq-server'
 
