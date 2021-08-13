@@ -85,12 +85,11 @@ from charmhelpers.contrib.peerstorage import (
 )
 
 from charmhelpers.fetch import (
+    apt_pkg,
     apt_update,
     apt_install,
+    get_upstream_version,
 )
-
-
-from charmhelpers.fetch import get_upstream_version
 
 
 PACKAGES = ['rabbitmq-server', 'python3-amqplib', 'lockfile-progs',
@@ -408,13 +407,24 @@ def rabbitmqctl(action, *args):
         use a direct subprocess call or rabbitmqctl_normalized_output
         function.
      '''
+    # NOTE(lourot): before rabbitmq-server 3.8 (focal),
+    # `rabbitmqctl wait <pidfile>` doesn't have a `--timeout` option and thus
+    # may hang forever and needs to be wrapped in
+    # `timeout 180 rabbitmqctl wait <pidfile>`.
+    # Since 3.8 there is a `--timeout` option, whose default is 10 seconds. [1]
+    #
+    # [1]: https://github.com/rabbitmq/rabbitmq-server/commit/3dd58ae1
+    WAIT_TIMEOUT_SECONDS = 180
+    focal_or_newer = _rabbitmq_version_newer_or_equal('3.8')
+
     cmd = []
-    # wait will run for ever. Timeout in a reasonable amount of time
-    if 'wait' in action:
-        cmd.extend(["timeout", "180"])
+    if 'wait' in action and not focal_or_newer:
+        cmd.extend(['timeout', str(WAIT_TIMEOUT_SECONDS)])
     cmd.extend([RABBITMQ_CTL, action])
     for arg in args:
         cmd.append(arg)
+    if 'wait' in action and focal_or_newer:
+        cmd.extend(['--timeout', str(WAIT_TIMEOUT_SECONDS)])
     log("Running {}".format(cmd), 'DEBUG')
     subprocess.check_call(cmd)
 
@@ -651,7 +661,7 @@ def disable_plugin(plugin):
 
 
 def get_managment_port():
-    if get_upstream_version(VERSION_PACKAGE) >= '3':
+    if _rabbitmq_version_newer_or_equal('3'):
         return 15672
     else:
         return 55672
@@ -1501,3 +1511,15 @@ def nrpe_update_cluster_check(nrpe_compat, user, password):
             shortname=RABBIT_USER + '_cluster',
             description='Remove check RabbitMQ Cluster',
             check_cmd='{}/check_rabbitmq_cluster.py'.format(NAGIOS_PLUGINS))
+
+
+def _rabbitmq_version_newer_or_equal(version):
+    """Compare the installed RabbitMQ version
+
+    :param version: Version to compare with
+    :type: str
+    :returns: True if the installed RabbitMQ version is newer or equal.
+    :rtype: bool
+    """
+    rmq_version = get_upstream_version(VERSION_PACKAGE)
+    return apt_pkg.version_compare(rmq_version, version) >= 0
