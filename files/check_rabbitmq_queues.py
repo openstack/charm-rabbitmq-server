@@ -103,9 +103,23 @@ def get_cron_interval(cronspec, base):
 
 
 def get_stats_cron_schedule():
+    """Returns the cron schedule from the stats CRONJOB spec file.
+
+    :return: a string containing the cron schedule
+    :rtype: str
+    """
+    # TODO(wolsen) in general, the layout of this code makes a lot of
+    #  assumptions about the files that are written, etc and is somewhat
+    #  brittle for anything not specifically laid out by the charm. This
+    #  should be revisited in the future.
     with open(CRONJOB) as f:
         cronjob = f.read()
-        return cronjob.split("root")[0].strip()
+        # The first 5 columns make up the cron spec, but the output of this
+        # function should be a string. Split the line on whitespace and reform
+        # the spec string from the necessary columns
+        # See LP#1939702
+        cron_spec = ' '.join(cronjob.split()[:5])
+        return cron_spec
 
 
 def check_stats_file_freshness(stats_file, asof=None):
