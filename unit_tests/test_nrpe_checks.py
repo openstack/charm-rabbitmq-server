@@ -27,7 +27,7 @@ class CheckRabbitTest(unittest.TestCase):
         cls.tmpdir = TemporaryDirectory()
         cronjob = Path(cls.tmpdir.name) / "rabbitmq-stats"
         with cronjob.open('w') as f:
-            f.write("*/5 * * * * root timeout -k 10s -s SIGINT 300 "
+            f.write("*/5 * * * * rabbitmq timeout -k 10s -s SIGINT 300 "
                     "/usr/local/bin/collect_rabbitmq_stats.sh 2>&1 | "
                     "logger -p local0.notice")
         cls.old_cron = check_rabbitmq_queues.CRONJOB
