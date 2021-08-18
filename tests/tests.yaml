@@ -9,6 +9,7 @@ gate_bundles:
   - focal-ussuri
   - focal-wallaby
   - groovy-victoria
+  - hirsute-wallaby
 
 dev_bundles:
   - trusty-mitaka
@@ -20,7 +21,6 @@ dev_bundles:
   - bionic-train
   - bionic-ussuri
   - focal-victoria
-  - hirsute-wallaby
 
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RabbitMQDeferredRestartTest

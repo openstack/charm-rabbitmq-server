@@ -7,6 +7,7 @@
       - rabbit-bionic
       - rabbit-focal
       - rabbit-groovy
+      - rabbit-hirsute
     vars:
       needs_charm_build: false
 
@@ -40,3 +41,9 @@
     dependencies: *smoke-jobs
     vars:
       tox_extra_args: groovy-victoria
+- job:
+    name: rabbit-hirsute
+    parent: func-target
+    dependencies: *smoke-jobs
+    vars:
+      tox_extra_args: hirsute-wallaby
