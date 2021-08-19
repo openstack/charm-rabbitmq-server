@@ -26,6 +26,17 @@ import yaml
 
 from collections import OrderedDict, defaultdict
 
+try:
+    from croniter import CroniterBadCronError
+except ImportError:
+    # NOTE(lourot): CroniterBadCronError doesn't exist in croniter
+    # 0.3.12 and older, i.e. it doesn't exist in Bionic and older.
+    # croniter used to raise a ValueError on these older versions:
+    CroniterBadCronError = ValueError
+from croniter import croniter
+
+from datetime import datetime
+
 from rabbitmq_context import (
     RabbitMQSSLContext,
     RabbitMQClusterContext,
@@ -1045,14 +1056,22 @@ def assess_status_func(configs):
         # If the cluster has completed the series upgrade, run the
         # complete-cluster-series-upgrade action to clear this setting.
         if leader_get('cluster_series_upgrading'):
-            message += (", Run complete-cluster-series-upgrade when the "
-                        "cluster has completed its upgrade.")
+            message += (", run complete-cluster-series-upgrade when the "
+                        "cluster has completed its upgrade")
             # Edge case when the first rabbitmq unit is upgraded it will show
             # waiting for peers. Force "active" workload state for various
             # testing suites like zaza to recognize a successful series upgrade
             # of the first unit.
             if state == "waiting":
                 state = "active"
+
+        # Validate that the cron schedule for nrpe status checks is correct. An
+        # invalid cron schedule will not prevent the rabbitmq service from
+        # running but may cause problems with nrpe checks.
+        schedule = config('stats_cron_schedule')
+        if schedule and not is_cron_schedule_valid(schedule):
+            message += ". stats_cron_schedule is invalid"
+
         # Deferred restarts should be managed by _determine_os_workload_status
         # but rabbits wlm code needs refactoring to make it consistent with
         # other charms as any message returned by _determine_os_workload_status
@@ -1446,6 +1465,48 @@ def nrpe_update_vhost_ssl_check(nrpe_compat, unit, user, password, vhost):
             check_cmd='{}/check_rabbitmq.py'.format(NAGIOS_PLUGINS))
 
 
+def is_cron_schedule_valid(cron_schedule):
+    """Returns whether or not the stats_cron_schedule can be properly parsed.
+
+    :param cron_schedule: the cron schedule to validate
+    :return: True if the cron schedule defined can be parsed by the croniter
+             library, False otherwise
+    """
+    try:
+        croniter(cron_schedule).get_next(datetime)
+        return True
+    except CroniterBadCronError:
+        return False
+
+
+def get_max_stats_file_age():
+    """Returns the max stats file age for NRPE checks.
+
+    Max stats file age is determined by a heuristic of 2x the configured
+    interval in the stats_cron_schedule config value.
+
+    :return: the maximum age (in seconds) the queues check should consider
+             a stats file as aged. If a cron schedule is not defined,
+             then return 0.
+    :rtype: int
+    """
+    cron_schedule = config('stats_cron_schedule')
+    if not cron_schedule:
+        return 0
+
+    try:
+        it = croniter(cron_schedule)
+        interval = it.get_next(datetime) - it.get_prev(datetime)
+        return int(interval.total_seconds() * 2)
+    except CroniterBadCronError as err:
+        # The config value is being passed straight into croniter and it may
+        # not be valid which will cause croniter to raise an error. Catch any
+        # of the errors raised.
+        log('Specified cron schedule is invalid: %s' % err,
+            level=ERROR)
+        return 0
+
+
 def nrpe_update_queues_check(nrpe_compat, rabbit_dir):
     """Add/Remove the RabbitMQ queues check
 
@@ -1470,6 +1531,10 @@ def nrpe_update_queues_check(nrpe_compat, rabbit_dir):
             cmd += ' -c "{}" "{}" {} {}'.format(*item)
         for item in yaml.safe_load(config('exclude_queues')):
             cmd += ' -e "{}" "{}"'.format(*item)
+
+        max_age = get_max_stats_file_age()
+        if max_age > 0:
+            cmd += ' -m {}'.format(max_age)
 
         nrpe_compat.add_check(
             shortname=RABBIT_USER + '_queue',

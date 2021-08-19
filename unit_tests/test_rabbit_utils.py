@@ -18,6 +18,7 @@ import mock
 import os
 import sys
 import tempfile
+from datetime import timedelta
 
 from unit_tests.test_utils import CharmTestCase
 
@@ -539,6 +540,7 @@ class UtilsTests(CharmTestCase):
             callee.assert_called_once_with()
             mock_application_version_set.assert_called_with('3.5.7')
 
+    @mock.patch.object(rabbit_utils, 'is_cron_schedule_valid')
     @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
     @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
     @mock.patch.object(rabbit_utils, 'clustered')
@@ -553,7 +555,9 @@ class UtilsTests(CharmTestCase):
                                 status_set,
                                 clustered,
                                 get_deferred_restarts,
-                                get_deferred_hooks):
+                                get_deferred_hooks,
+                                is_cron_schedule_valid):
+        is_cron_schedule_valid.return_value = True
         get_deferred_hooks.return_value = []
         get_deferred_restarts.return_value = []
         self.leader_get.return_value = None
@@ -568,6 +572,39 @@ class UtilsTests(CharmTestCase):
         status_set.assert_called_once_with('active',
                                            'Unit is ready and clustered')
 
+    @mock.patch.object(rabbit_utils, 'is_cron_schedule_valid')
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
+    @mock.patch.object(rabbit_utils, 'clustered')
+    @mock.patch.object(rabbit_utils, 'status_set')
+    @mock.patch.object(rabbit_utils, 'assess_cluster_status')
+    @mock.patch.object(rabbit_utils, 'services')
+    @mock.patch.object(rabbit_utils, '_determine_os_workload_status')
+    def test_assess_status_func_invalid_cron(self,
+                                             _determine_os_workload_status,
+                                             services,
+                                             assess_cluster_status,
+                                             status_set,
+                                             clustered,
+                                             get_deferred_restarts,
+                                             get_deferred_hooks,
+                                             is_cron_schedule_valid):
+        is_cron_schedule_valid.return_value = False
+        get_deferred_hooks.return_value = []
+        get_deferred_restarts.return_value = []
+        self.leader_get.return_value = None
+        services.return_value = 's1'
+        _determine_os_workload_status.return_value = ('active', '')
+        clustered.return_value = True
+        rabbit_utils.assess_status_func('test-config')()
+        # ports=None whilst port checks are disabled.
+        _determine_os_workload_status.assert_called_once_with(
+            'test-config', {}, charm_func=assess_cluster_status, services='s1',
+            ports=None)
+        msg = 'Unit is ready and clustered. stats_cron_schedule is invalid'
+        status_set.assert_called_once_with('active', msg)
+
+    @mock.patch.object(rabbit_utils, 'is_cron_schedule_valid')
     @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
     @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
     @mock.patch.object(rabbit_utils, 'clustered')
@@ -578,7 +615,8 @@ class UtilsTests(CharmTestCase):
     def test_assess_status_func_cluster_upgrading(
             self, _determine_os_workload_status, services,
             assess_cluster_status, status_set, clustered,
-            get_deferred_restarts, get_deferred_hooks):
+            get_deferred_restarts, get_deferred_hooks, is_cron_schedule_valid):
+        is_cron_schedule_valid.return_value = True
         get_deferred_hooks.return_value = []
         get_deferred_restarts.return_value = []
         self.leader_get.return_value = True
@@ -591,10 +629,11 @@ class UtilsTests(CharmTestCase):
             'test-config', {}, charm_func=assess_cluster_status, services='s1',
             ports=None)
         status_set.assert_called_once_with(
-            'active', 'Unit is ready and clustered, Run '
+            'active', 'Unit is ready and clustered, run '
             'complete-cluster-series-upgrade when the cluster has completed '
-            'its upgrade.')
+            'its upgrade')
 
+    @mock.patch.object(rabbit_utils, 'is_cron_schedule_valid')
     @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
     @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
     @mock.patch.object(rabbit_utils, 'clustered')
@@ -605,7 +644,8 @@ class UtilsTests(CharmTestCase):
     def test_assess_status_func_cluster_upgrading_first_unit(
             self, _determine_os_workload_status, services,
             assess_cluster_status, status_set, clustered,
-            get_deferred_restarts, get_deferred_hooks):
+            get_deferred_restarts, get_deferred_hooks, is_cron_schedule_valid):
+        is_cron_schedule_valid.return_value = True
         get_deferred_hooks.return_value = []
         get_deferred_restarts.return_value = []
         self.leader_get.return_value = True
@@ -618,9 +658,9 @@ class UtilsTests(CharmTestCase):
             'test-config', {}, charm_func=assess_cluster_status, services='s1',
             ports=None)
         status_set.assert_called_once_with(
-            'active', 'No peers, Run '
+            'active', 'No peers, run '
             'complete-cluster-series-upgrade when the cluster has completed '
-            'its upgrade.')
+            'its upgrade')
 
     def test_pause_unit_helper(self):
         with mock.patch.object(rabbit_utils, '_pause_resume_helper') as prh:
@@ -1256,6 +1296,7 @@ class UtilsTests(CharmTestCase):
             shortname='rabbitmq_queue',
             description='Check RabbitMQ Queues',
             check_cmd='{0}/check_rabbitmq_queues.py -c "\\*" "\\*" 100 200 {1}'
+                      '-m 600 '
                       '{0}/data/test_queue_stats.dat'.format(self.tmp_dir,
                                                              exclude_queues))
         self.nrpe_compat.remove_check.assert_not_called()
@@ -1311,3 +1352,36 @@ class UtilsTests(CharmTestCase):
             shortname='rabbitmq_cluster',
             description='Remove check RabbitMQ Cluster',
             check_cmd='{}/check_rabbitmq_cluster.py'.format(self.tmp_dir))
+
+    @mock.patch('rabbit_utils.config')
+    def test_get_max_stats_file_age(self, mock_config):
+        """Testing the max stats file age"""
+        mock_config.side_effect = self.test_config
+
+        # default config value should show 10 minutes
+        max_age = rabbit_utils.get_max_stats_file_age()
+        self.assertEqual(600, max_age)
+
+        # changing to run every 15 minutes shows 30 minutes
+        self.test_config.set('stats_cron_schedule', '*/15 * * * *')
+        max_age = rabbit_utils.get_max_stats_file_age()
+        expected = timedelta(minutes=30).total_seconds()
+        self.assertEqual(expected, max_age)
+
+        # oddball cron schedule, just to validate. This runs every Saturday
+        # at 23:30, which means the max age would be 14 days since it calcs
+        # to twice the cron schedule
+        self.test_config.set('stats_cron_schedule', '30 23 * * SAT')
+        max_age = rabbit_utils.get_max_stats_file_age()
+        expected = timedelta(days=14).total_seconds()
+        self.assertEqual(expected, max_age)
+
+        # empty cron schedule will return 0 for the max_age
+        self.test_config.set('stats_cron_schedule', '')
+        max_age = rabbit_utils.get_max_stats_file_age()
+        self.assertEqual(0, max_age)
+
+        # poorly formatted cron schedule will return 0 for the max_age
+        self.test_config.set('stats_cron_schedule', 'poorly formatted')
+        max_age = rabbit_utils.get_max_stats_file_age()
+        self.assertEqual(0, max_age)

@@ -12,7 +12,6 @@ gate_bundles:
   - hirsute-wallaby
 
 dev_bundles:
-  - trusty-mitaka
   - xenial-ocata
   - xenial-pike
   - xenial-queens

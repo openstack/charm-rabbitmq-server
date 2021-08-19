@@ -5,7 +5,7 @@
 # Author: Liam Young, Jacek Nykis
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from fnmatch import fnmatchcase
 from itertools import chain
 import argparse
@@ -17,13 +17,6 @@ lsb_dict = {}
 with open("/etc/lsb-release") as f:
     lsb = [s.split("=") for s in f.readlines()]
     lsb_dict = dict([(k, v.strip()) for k, v in lsb])
-
-if lsb_dict.get("DISTRIB_CODENAME") != "trusty":
-    # Trusty doesn't have croniter
-    from croniter import croniter
-
-
-CRONJOB = "/etc/cron.d/rabbitmq-stats"
 
 
 def gen_data_lines(filename):
@@ -91,54 +84,17 @@ def check_stats(stats_collated, limits):
                 yield l_queue, l_vhost, m_all, "WARN"
 
 
-def get_cron_interval(cronspec, base):
-    """Estimate cron interval by subtracting last from next job runtime
-
-    :param cronspec: Cronjob schedule string
-    :param base: datetime from when to check cron schedule
-    :return: timedelta
-    """
-    it = croniter(cronspec, base)
-    return it.get_next(datetime) - it.get_prev(datetime)
-
-
-def get_stats_cron_schedule():
-    """Returns the cron schedule from the stats CRONJOB spec file.
-
-    :return: a string containing the cron schedule
-    :rtype: str
-    """
-    # TODO(wolsen) in general, the layout of this code makes a lot of
-    #  assumptions about the files that are written, etc and is somewhat
-    #  brittle for anything not specifically laid out by the charm. This
-    #  should be revisited in the future.
-    with open(CRONJOB) as f:
-        cronjob = f.read()
-        # The first 5 columns make up the cron spec, but the output of this
-        # function should be a string. Split the line on whitespace and reform
-        # the spec string from the necessary columns
-        # See LP#1939702
-        cron_spec = ' '.join(cronjob.split()[:5])
-        return cron_spec
-
-
-def check_stats_file_freshness(stats_file, asof=None):
+def check_stats_file_freshness(stats_file, oldest_timestamp):
     """Check if a rabbitmq stats file is fresh
 
     Fresh here is defined as modified within the last 2* cron job intervals
 
     :param stats_file: file name to check
-    :param asof: datetime from when to check, defaults to datetime.now()
+    :param oldest_timestamp: oldest timestamp the file can be last modified
     :return: tuple (status, message)
     """
-    if asof is None:
-        asof = datetime.now()
     file_mtime = datetime.fromtimestamp(os.path.getmtime(stats_file))
-    cronspec = get_stats_cron_schedule()
-    interval = get_cron_interval(cronspec, asof)
-    # We expect the file to be modified in the last 2 cron intervals
-    cutoff_time = asof - (2 * interval)
-    if file_mtime < cutoff_time:
+    if file_mtime < oldest_timestamp:
         return (
             "CRIT",
             "Rabbit stats file not updated since {}".format(
@@ -166,8 +122,22 @@ if __name__ == "__main__":
         required=False,
         default=[],
         metavar=('vhost', 'queue'),
-        help='Vhost and queue to exclude from checks. Can be used multiple \
-        times'
+        help=(
+            'Vhost and queue to exclude from checks. Can be used multiple '
+            'times'
+        )
+    )
+    parser.add_argument(
+        '-m',
+        nargs='?',
+        action='store',
+        required=False,
+        default=0,
+        type=int,
+        help=(
+            'Maximum age (in seconds) the stats files can be before a crit is '
+            'raised'
+        )
     )
     parser.add_argument(
         'stats_file',
@@ -192,8 +162,9 @@ if __name__ == "__main__":
             warnings.append(
                 "%s in %s has %s messages" % (queue, vhost, message_no))
 
-    if "croniter" in sys.modules.keys():  # not on trusty and imported croniter
-        freshness_results = [check_stats_file_freshness(f)
+    if args.m:
+        oldest = datetime.now() - timedelta(seconds=args.m)
+        freshness_results = [check_stats_file_freshness(f, oldest)
                              for f in args.stats_file]
         criticals.extend(
             msg for status, msg in freshness_results if status == "CRIT"

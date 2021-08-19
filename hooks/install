@@ -2,7 +2,7 @@
 # Wrapper to deal with newer Ubuntu versions that don't have py2 installed
 # by default.
 
-declare -a DEPS=('apt' 'netaddr' 'netifaces' 'pip' 'yaml' 'dnspython' 'requests')
+declare -a DEPS=('apt' 'netaddr' 'netifaces' 'pip' 'yaml' 'dnspython' 'requests' 'croniter')
 
 check_and_install() {
     pkg="${1}-${2}"
@@ -13,11 +13,9 @@ check_and_install() {
 
 PYTHON="python3"
 
+apt-get update
 for dep in ${DEPS[@]}; do
     check_and_install ${PYTHON} ${dep}
 done
-
-# python3-croniter not available on trusty
-[ "$( lsb_release -sc )" != "trusty" ] && check_and_install ${PYTHON} croniter
 
 exec ./hooks/install.real

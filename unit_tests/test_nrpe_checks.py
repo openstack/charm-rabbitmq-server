@@ -30,30 +30,25 @@ class CheckRabbitTest(unittest.TestCase):
             f.write("*/5 * * * * rabbitmq timeout -k 10s -s SIGINT 300 "
                     "/usr/local/bin/collect_rabbitmq_stats.sh 2>&1 | "
                     "logger -p local0.notice")
-        cls.old_cron = check_rabbitmq_queues.CRONJOB
-        check_rabbitmq_queues.CRONJOB = str(cronjob)
 
     @classmethod
     def tearDownClass(cls):
         """Tear down class fixture."""
         cls.tmpdir.cleanup()
-        check_rabbitmq_queues.CRONJOB = cls.old_cron
 
     def test_check_stats_file_freshness_fresh(self):
+        oldest = datetime.now() - timedelta(minutes=15)
         with NamedTemporaryFile() as stats_file:
             results = check_rabbitmq_queues.check_stats_file_freshness(
-                stats_file.name
+                stats_file.name,
+                oldest
             )
             self.assertEqual(results[0], "OK")
 
     def test_check_stats_file_freshness_nonfresh(self):
         with NamedTemporaryFile() as stats_file:
-            next_hour = datetime.now() + timedelta(hours=1)
+            oldest_timestamp = datetime.now() + timedelta(minutes=1)
             results = check_rabbitmq_queues.check_stats_file_freshness(
-                stats_file.name, asof=next_hour
+                stats_file.name, oldest_timestamp
             )
             self.assertEqual(results[0], "CRIT")
-
-    def test_get_stats_cron_schedule(self):
-        schedule = check_rabbitmq_queues.get_stats_cron_schedule()
-        self.assertEqual(schedule, "*/5 * * * *")
