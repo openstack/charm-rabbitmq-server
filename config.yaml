@@ -59,6 +59,23 @@ options:
       cluster.
       .
       For more information see http://www.rabbitmq.com/partitions.html
+  mnesia-table-loading-retry-timeout:
+    type: int
+    default: 30000
+    description: |
+      Timeout in milliseconds used when waiting for Mnesia tables in a
+      cluster to become available.
+      .
+      https://www.rabbitmq.com/configure.html#config-items
+  mnesia-table-loading-retry-limit:
+    type: int
+    default: 10
+    description: |
+      Retries when waiting for Mnesia tables during cluster startup.
+      Note that this setting is not applied to Mnesia upgrades or node
+      deletions.
+      .
+      https://www.rabbitmq.com/configure.html#config-items
   use-syslog:
     type: boolean
     default: False

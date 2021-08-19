@@ -181,7 +181,11 @@ class RabbitMQClusterContext(object):
 
     def __call__(self):
         ctxt = {'cluster_partition_handling':
-                config('cluster-partition-handling')}
+                config('cluster-partition-handling'),
+                'mnesia_table_loading_retry_timeout':
+                config('mnesia-table-loading-retry-timeout'),
+                'mnesia_table_loading_retry_limit':
+                config('mnesia-table-loading-retry-limit')}
 
         if config('connection-backlog'):
             ctxt['connection_backlog'] = config('connection-backlog')
