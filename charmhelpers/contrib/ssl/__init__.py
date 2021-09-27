@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ from charmhelpers.core import hookenv
 
 
 def generate_selfsigned(keyfile, certfile, keysize="1024", config=None, subject=None, cn=None):
-    """Generate selfsigned SSL keypair
+    """Generate selfsigned SSL key pair
 
     You must provide one of the 3 optional arguments:
     config, subject or cn

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""This script is an implemenation of policy-rc.d
+"""This script is an implementation of policy-rc.d
 
 For further information on policy-rc.d see *1
 

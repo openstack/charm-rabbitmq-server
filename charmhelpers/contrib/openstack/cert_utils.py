@@ -1,4 +1,4 @@
-# Copyright 2014-2018 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Common python helper functions used for OpenStack charm certificats.
+# Common python helper functions used for OpenStack charm certificates.
 
 import os
 import json
@@ -71,7 +71,7 @@ class CertRequest(object):
     def add_entry(self, net_type, cn, addresses):
         """Add a request to the batch
 
-        :param net_type: str netwrok space name request is for
+        :param net_type: str network space name request is for
         :param cn: str Canonical Name for certificate
         :param addresses: [] List of addresses to be used as SANs
         """
@@ -85,7 +85,7 @@ class CertRequest(object):
         addresses = [ip]
         # If a vip is being used without os-hostname config or
         # network spaces then we need to ensure the local units
-        # cert has the approriate vip in the SAN list
+        # cert has the appropriate vip in the SAN list
         vip = get_vip_in_network(resolve_network_cidr(ip))
         if vip:
             addresses.append(vip)
@@ -178,7 +178,7 @@ def get_certificate_request(json_encode=True, bindings=None):
         except NoNetworkBinding:
             log("Skipping request for certificate for ip in {} space, no "
                 "local address found".format(binding), WARNING)
-    # Gurantee all SANs are covered
+    # Guarantee all SANs are covered
     # These are network addresses with no corresponding hostname.
     # Add the ips to the hostname cert to allow for this.
     req.add_hostname_cn_ip(_sans)
@@ -357,7 +357,7 @@ def process_certificates(service_name, relation_id, unit,
                          bindings=None):
     """Process the certificates supplied down the relation
 
-    :param service_name: str Name of service the certifcates are for.
+    :param service_name: str Name of service the certificates are for.
     :param relation_id: str Relation id providing the certs
     :param unit: str Unit providing the certs
     :param custom_hostname_link: str Name of custom link to create

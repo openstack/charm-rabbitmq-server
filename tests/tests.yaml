@@ -8,7 +8,6 @@ gate_bundles:
   - bionic-queens
   - focal-ussuri
   - focal-wallaby
-  - groovy-victoria
   - hirsute-wallaby
 
 dev_bundles:
@@ -20,6 +19,9 @@ dev_bundles:
   - bionic-train
   - bionic-ussuri
   - focal-victoria
+  - groovy-victoria
+  - focal-xena
+  - impish-xena
 
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RabbitMQDeferredRestartTest
@@ -27,7 +29,8 @@ tests:
 
 tests_options:
   force_deploy:
-    - hirsute-wallaby
     # the nrpe charm doesn't support groovy and is in the bundle; it needs to
     # be force installed.
     - groovy-victoria
+    - hirsute-wallaby
+    - impish-xena

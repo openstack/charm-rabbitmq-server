@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2012-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Compatibility with the nrpe-external-master charm"""
-# Copyright 2012 Canonical Ltd.
 #
 # Authors:
 #  Matthew Wedgwood <matthew.wedgwood@canonical.com>
@@ -511,7 +510,7 @@ def add_haproxy_checks(nrpe, unit_name):
 
 def remove_deprecated_check(nrpe, deprecated_services):
     """
-    Remove checks fro deprecated services in list
+    Remove checks for deprecated services in list
 
     :param nrpe: NRPE object to remove check from
     :type nrpe: NRPE

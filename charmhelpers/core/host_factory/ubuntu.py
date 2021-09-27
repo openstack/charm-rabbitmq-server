@@ -28,6 +28,7 @@ UBUNTU_RELEASES = (
     'focal',
     'groovy',
     'hirsute',
+    'impish',
 )
 
 

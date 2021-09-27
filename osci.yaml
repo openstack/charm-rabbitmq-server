@@ -8,6 +8,8 @@
       - rabbit-focal
       - rabbit-groovy
       - rabbit-hirsute
+      - rabbit-impish:
+          voting: false
     vars:
       needs_charm_build: false
 
@@ -47,3 +49,9 @@
     dependencies: *smoke-jobs
     vars:
       tox_extra_args: hirsute-wallaby
+- job:
+    name: rabbit-impish
+    parent: func-target
+    dependencies: *smoke-jobs
+    vars:
+      tox_extra_args: impish-xena

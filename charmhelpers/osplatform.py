@@ -28,6 +28,9 @@ def get_platform():
     elif "elementary" in current_platform:
         # ElementaryOS fails to run tests locally without this.
         return "ubuntu"
+    elif "Pop!_OS" in current_platform:
+        # Pop!_OS also fails to run tests locally without this.
+        return "ubuntu"
     else:
         raise RuntimeError("This module is not supported on {}."
                            .format(current_platform))

@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -217,7 +217,7 @@ def service_resume(service_name, init_dir="/etc/init",
                    initd_dir="/etc/init.d", **kwargs):
     """Resume a system service.
 
-    Reenable starting again at boot. Start the service.
+    Re-enable starting again at boot. Start the service.
 
     :param service_name: the name of the service to resume
     :param init_dir: the path to the init dir
@@ -727,7 +727,7 @@ class restart_on_change(object):
         :param post_svc_restart_f: A function run after a service has
                                    restarted.
         :type post_svc_restart_f: Callable[[str], None]
-        :param pre_restarts_wait_f: A function callled before any restarts.
+        :param pre_restarts_wait_f: A function called before any restarts.
         :type pre_restarts_wait_f: Callable[None, None]
         """
         self.restart_map = restart_map
@@ -828,7 +828,7 @@ def restart_on_change_helper(lambda_f, restart_map, stopstart=False,
     :param post_svc_restart_f: A function run after a service has
                                restarted.
     :type post_svc_restart_f: Callable[[str], None]
-    :param pre_restarts_wait_f: A function callled before any restarts.
+    :param pre_restarts_wait_f: A function called before any restarts.
     :type pre_restarts_wait_f: Callable[None, None]
     :returns: result of lambda_f()
     :rtype: ANY
@@ -880,7 +880,7 @@ def _post_restart_on_change_helper(checksums,
     :param post_svc_restart_f: A function run after a service has
                                restarted.
     :type post_svc_restart_f: Callable[[str], None]
-    :param pre_restarts_wait_f: A function callled before any restarts.
+    :param pre_restarts_wait_f: A function called before any restarts.
     :type pre_restarts_wait_f: Callable[None, None]
     """
     if restart_functions is None:
@@ -914,7 +914,7 @@ def _post_restart_on_change_helper(checksums,
 
 
 def pwgen(length=None):
-    """Generate a random pasword."""
+    """Generate a random password."""
     if length is None:
         # A random length is ok to use a weak PRNG
         length = random.choice(range(35, 45))

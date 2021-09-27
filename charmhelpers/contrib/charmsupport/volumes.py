@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ Configuration stanzas::
     type: boolean
     default: true
     description: >
-      If false, a volume is mounted as sepecified in "volume-map"
+      If false, a volume is mounted as specified in "volume-map"
       If true, ephemeral storage will be used, meaning that log data
          will only exist as long as the machine. YOU HAVE BEEN WARNED.
   volume-map:

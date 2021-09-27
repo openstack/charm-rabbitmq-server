@@ -1,4 +1,4 @@
-# Copyright 2019 Canonical Ltd
+# Copyright 2019-2021 Canonical Ltd
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -209,7 +209,7 @@ sys.modules[__name__].config = Config()
 
 
 def init():
-    """Compability shim that does nothing."""
+    """Compatibility shim that does nothing."""
     pass
 
 
@@ -264,7 +264,7 @@ def version_compare(a, b):
     else:
         raise RuntimeError('Unable to compare "{}" and "{}", according to '
                            'our logic they are neither greater, equal nor '
-                           'less than each other.')
+                           'less than each other.'.format(a, b))
 
 
 class PkgVersion():

@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2013-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 
 "Interactions with the Juju environment"
-# Copyright 2013 Canonical Ltd.
 #
 # Authors:
 #  Charm Helpers Developers <juju@lists.ubuntu.com>
@@ -610,7 +609,7 @@ def expected_related_units(reltype=None):
                 relation_type()))
 
     :param reltype: Relation type to list data for, default is to list data for
-                    the realtion type we are currently executing a hook for.
+                    the relation type we are currently executing a hook for.
     :type reltype: str
     :returns: iterator
     :rtype: types.GeneratorType
@@ -627,7 +626,7 @@ def expected_related_units(reltype=None):
 
 @cached
 def relation_for_unit(unit=None, rid=None):
-    """Get the json represenation of a unit's relation"""
+    """Get the json representation of a unit's relation"""
     unit = unit or remote_unit()
     relation = relation_get(unit=unit, rid=rid)
     for key in relation:
@@ -1614,11 +1613,11 @@ def env_proxy_settings(selected_settings=None):
 def _contains_range(addresses):
     """Check for cidr or wildcard domain in a string.
 
-    Given a string comprising a comma seperated list of ip addresses
+    Given a string comprising a comma separated list of ip addresses
     and domain names, determine whether the string contains IP ranges
     or wildcard domains.
 
-    :param addresses: comma seperated list of domains and ip addresses.
+    :param addresses: comma separated list of domains and ip addresses.
     :type addresses: str
     """
     return (

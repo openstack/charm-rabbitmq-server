@@ -244,7 +244,7 @@ def get_deferred_restarts():
 
 
 def clear_deferred_restarts(services):
-    """Clear deferred restart events targetted at `services`.
+    """Clear deferred restart events targeted at `services`.
 
     :param services: Services with deferred actions to clear.
     :type services: List[str]
@@ -253,7 +253,7 @@ def clear_deferred_restarts(services):
 
 
 def process_svc_restart(service):
-    """Respond to a service restart having occured.
+    """Respond to a service restart having occurred.
 
     :param service: Services that the action was performed against.
     :type service: str

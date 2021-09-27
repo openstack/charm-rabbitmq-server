@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ __author__ = "Jorge Niedbalski <jorge.niedbalski@canonical.com>"
 
 
 def pip_execute(*args, **kwargs):
-    """Overriden pip_execute() to stop sys.path being changed.
+    """Overridden pip_execute() to stop sys.path being changed.
 
     The act of importing main from the pip module seems to cause add wheels
     from the /usr/share/python-wheels which are installed by various tools.
@@ -142,8 +142,10 @@ def pip_create_virtualenv(path=None):
     """Create an isolated Python environment."""
     if six.PY2:
         apt_install('python-virtualenv')
+        extra_flags = []
     else:
-        apt_install('python3-virtualenv')
+        apt_install(['python3-virtualenv', 'virtualenv'])
+        extra_flags = ['--python=python3']
 
     if path:
         venv_path = path
@@ -151,4 +153,4 @@ def pip_create_virtualenv(path=None):
         venv_path = os.path.join(charm_dir(), 'venv')
 
     if not os.path.exists(venv_path):
-        subprocess.check_call(['virtualenv', venv_path])
+        subprocess.check_call(['virtualenv', venv_path] + extra_flags)

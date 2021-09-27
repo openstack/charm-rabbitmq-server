@@ -18,8 +18,11 @@
 import six
 import re
 
+TRUTHY_STRINGS = {'y', 'yes', 'true', 't', 'on'}
+FALSEY_STRINGS = {'n', 'no', 'false', 'f', 'off'}
 
-def bool_from_string(value):
+
+def bool_from_string(value, truthy_strings=TRUTHY_STRINGS, falsey_strings=FALSEY_STRINGS, assume_false=False):
     """Interpret string value as boolean.
 
     Returns True if value translates to True otherwise False.
@@ -32,9 +35,9 @@ def bool_from_string(value):
 
     value = value.strip().lower()
 
-    if value in ['y', 'yes', 'true', 't', 'on']:
+    if value in truthy_strings:
         return True
-    elif value in ['n', 'no', 'false', 'f', 'off']:
+    elif value in falsey_strings or assume_false:
         return False
 
     msg = "Unable to interpret string value '%s' as boolean" % (value)

@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ def is_elected_leader(resource):
         2. If the charm is part of a corosync cluster, call corosync to
         determine leadership.
         3. If the charm is not part of a corosync cluster, the leader is
-        determined as being "the alive unit with the lowest unit numer". In
+        determined as being "the alive unit with the lowest unit number". In
         other words, the oldest surviving unit.
     """
     try:
@@ -418,7 +418,7 @@ def get_managed_services_and_ports(services, external_ports,
 
     Return only the services and corresponding ports that are managed by this
     charm. This excludes haproxy when there is a relation with hacluster. This
-    is because this charm passes responsability for stopping and starting
+    is because this charm passes responsibility for stopping and starting
     haproxy to hacluster.
 
     Similarly, if a relation with hacluster exists then the ports returned by

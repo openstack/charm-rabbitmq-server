@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,10 @@ import socket
 import time
 
 from base64 import b64decode
-from subprocess import check_call, CalledProcessError
+from subprocess import (
+    check_call,
+    check_output,
+    CalledProcessError)
 
 import six
 
@@ -453,18 +456,24 @@ class IdentityServiceContext(OSContextGenerator):
                 serv_host = format_ipv6_addr(serv_host) or serv_host
                 auth_host = rdata.get('auth_host')
                 auth_host = format_ipv6_addr(auth_host) or auth_host
+                int_host = rdata.get('internal_host')
+                int_host = format_ipv6_addr(int_host) or int_host
                 svc_protocol = rdata.get('service_protocol') or 'http'
                 auth_protocol = rdata.get('auth_protocol') or 'http'
+                int_protocol = rdata.get('internal_protocol') or 'http'
                 api_version = rdata.get('api_version') or '2.0'
                 ctxt.update({'service_port': rdata.get('service_port'),
                              'service_host': serv_host,
                              'auth_host': auth_host,
                              'auth_port': rdata.get('auth_port'),
+                             'internal_host': int_host,
+                             'internal_port': rdata.get('internal_port'),
                              'admin_tenant_name': rdata.get('service_tenant'),
                              'admin_user': rdata.get('service_username'),
                              'admin_password': rdata.get('service_password'),
                              'service_protocol': svc_protocol,
                              'auth_protocol': auth_protocol,
+                             'internal_protocol': int_protocol,
                              'api_version': api_version})
 
                 if float(api_version) > 2:
@@ -1358,7 +1367,7 @@ class NeutronPortContext(OSContextGenerator):
         mac_regex = re.compile(r'([0-9A-F]{2}[:-]){5}([0-9A-F]{2})', re.I)
         for entry in ports:
             if re.match(mac_regex, entry):
-                # NIC is in known NICs and does NOT hace an IP address
+                # NIC is in known NICs and does NOT have an IP address
                 if entry in hwaddr_to_nic and not hwaddr_to_ip[entry]:
                     # If the nic is part of a bridge then don't use it
                     if is_bridge_member(hwaddr_to_nic[entry]):
@@ -1781,6 +1790,10 @@ class NeutronAPIContext(OSContextGenerator):
                 'rel_key': 'enable-port-forwarding',
                 'default': False,
             },
+            'enable_fwaas': {
+                'rel_key': 'enable-fwaas',
+                'default': False,
+            },
             'global_physnet_mtu': {
                 'rel_key': 'global-physnet-mtu',
                 'default': 1500,
@@ -1814,6 +1827,11 @@ class NeutronAPIContext(OSContextGenerator):
 
         if ctxt['enable_port_forwarding']:
             l3_extension_plugins.append('port_forwarding')
+
+        if ctxt['enable_fwaas']:
+            l3_extension_plugins.append('fwaas_v2')
+            if ctxt['enable_nfg_logging']:
+                l3_extension_plugins.append('fwaas_v2_log')
 
         ctxt['l3_extension_plugins'] = l3_extension_plugins
 
@@ -2379,6 +2397,12 @@ class DHCPAgentContext(OSContextGenerator):
             ctxt['enable_metadata_network'] = True
             ctxt['enable_isolated_metadata'] = True
 
+        ctxt['append_ovs_config'] = False
+        cmp_release = CompareOpenStackReleases(
+            os_release('neutron-common', base='icehouse'))
+        if cmp_release >= 'queens' and config('enable-dpdk'):
+            ctxt['append_ovs_config'] = True
+
         return ctxt
 
     @staticmethod
@@ -2570,22 +2594,48 @@ class OVSDPDKDeviceContext(OSContextGenerator):
         :returns: hex formatted CPU mask
         :rtype: str
         """
-        num_cores = config('dpdk-socket-cores')
-        mask = 0
+        return self.cpu_masks()['dpdk_lcore_mask']
+
+    def cpu_masks(self):
+        """Get hex formatted CPU masks
+
+        The mask is based on using the first config:dpdk-socket-cores
+        cores of each NUMA node in the unit, followed by the
+        next config:pmd-socket-cores
+
+        :returns: Dict of hex formatted CPU masks
+        :rtype: Dict[str, str]
+        """
+        num_lcores = config('dpdk-socket-cores')
+        pmd_cores = config('pmd-socket-cores')
+        lcore_mask = 0
+        pmd_mask = 0
         for cores in self._numa_node_cores().values():
-            for core in cores[:num_cores]:
-                mask = mask | 1 << core
-        return format(mask, '#04x')
+            for core in cores[:num_lcores]:
+                lcore_mask = lcore_mask | 1 << core
+            for core in cores[num_lcores:][:pmd_cores]:
+                pmd_mask = pmd_mask | 1 << core
+        return {
+            'pmd_cpu_mask': format(pmd_mask, '#04x'),
+            'dpdk_lcore_mask': format(lcore_mask, '#04x')}
 
     def socket_memory(self):
-        """Formatted list of socket memory configuration per NUMA node
+        """Formatted list of socket memory configuration per socket.
 
-        :returns: socket memory configuration per NUMA node
+        :returns: socket memory configuration per socket.
         :rtype: str
         """
+        lscpu_out = check_output(
+            ['lscpu', '-p=socket']).decode('UTF-8').strip()
+        sockets = set()
+        for line in lscpu_out.split('\n'):
+            try:
+                sockets.add(int(line))
+            except ValueError:
+                # lscpu output is headed by comments so ignore them.
+                pass
         sm_size = config('dpdk-socket-memory')
-        node_regex = '/sys/devices/system/node/node*'
-        mem_list = [str(sm_size) for _ in glob.glob(node_regex)]
+        mem_list = [str(sm_size) for _ in sockets]
         if mem_list:
             return ','.join(mem_list)
         else:
@@ -2650,7 +2700,7 @@ class OVSDPDKDeviceContext(OSContextGenerator):
 
 
 class BridgePortInterfaceMap(object):
-    """Build a map of bridge ports and interaces from charm configuration.
+    """Build a map of bridge ports and interfaces from charm configuration.
 
     NOTE: the handling of this detail in the charm is pre-deprecated.
 
@@ -3099,7 +3149,7 @@ class SRIOVContext(OSContextGenerator):
             actual = min(int(requested), int(device.sriov_totalvfs))
             if actual < int(requested):
                 log('Requested VFs ({}) too high for device {}. Falling back '
-                    'to value supprted by device: {}'
+                    'to value supported by device: {}'
                     .format(requested, device.interface_name,
                             device.sriov_totalvfs),
                     level=WARNING)

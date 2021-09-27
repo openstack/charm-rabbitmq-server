@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Various utilies for dealing with Neutron and the renaming from Quantum.
+# Various utilities for dealing with Neutron and the renaming from Quantum.
 
 import six
 from subprocess import check_output
@@ -251,7 +251,7 @@ def neutron_plugin_attribute(plugin, attr, net_manager=None):
 def network_manager():
     '''
     Deals with the renaming of Quantum to Neutron in H and any situations
-    that require compatability (eg, deploying H with network-manager=quantum,
+    that require compatibility (eg, deploying H with network-manager=quantum,
     upgrading from G).
     '''
     release = os_release('nova-common')

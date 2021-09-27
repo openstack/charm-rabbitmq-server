@@ -1,4 +1,4 @@
-# Copyright 2014-2017 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ def _snap_exec(commands):
             retry_count += + 1
             if retry_count > SNAP_NO_LOCK_RETRY_COUNT:
                 raise CouldNotAcquireLockException(
-                    'Could not aquire lock after {} attempts'
+                    'Could not acquire lock after {} attempts'
                     .format(SNAP_NO_LOCK_RETRY_COUNT))
             return_code = e.returncode
             log('Snap failed to acquire lock, trying again in {} seconds.'

@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ from subprocess import (
 ##################################################
 def deactivate_lvm_volume_group(block_device):
     '''
-    Deactivate any volume gruop associated with an LVM physical volume.
+    Deactivate any volume group associated with an LVM physical volume.
 
     :param block_device: str: Full path to LVM physical volume
     '''

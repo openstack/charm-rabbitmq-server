@@ -1,4 +1,4 @@
-# Copyright 2019 Canonical Ltd
+# Copyright 2019-2021 Canonical Ltd
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ provided:
 The functions should be called from the install and upgrade hooks in the charm.
 The `maybe_do_policyd_overrides_on_config_changed` function is designed to be
 called on the config-changed hook, in that it does an additional check to
-ensure that an already overriden policy.d in an upgrade or install hooks isn't
+ensure that an already overridden policy.d in an upgrade or install hooks isn't
 repeated.
 
 In order the *enable* this functionality, the charm's install, config_changed,
@@ -334,7 +334,7 @@ def maybe_do_policyd_overrides(openstack_release,
         restart_handler()
 
 
-@charmhelpers.deprecate("Use maybe_do_poliyd_overrrides instead")
+@charmhelpers.deprecate("Use maybe_do_policyd_overrides instead")
 def maybe_do_policyd_overrides_on_config_changed(*args, **kwargs):
     """This function is designed to be called from the config changed hook.
 

@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#
-# Copyright 2012 Canonical Ltd.
-#
 # This file is sourced from lp:openstack-charm-helpers
 #
 # Authors:
@@ -605,7 +602,7 @@ class BasePool(object):
 
 
 class Pool(BasePool):
-    """Compability shim for any descendents external to this library."""
+    """Compatibility shim for any descendents external to this library."""
 
     @deprecate(
         'The ``Pool`` baseclass has been replaced by ``BasePool`` class.')
@@ -1535,7 +1532,7 @@ def map_block_storage(service, pool, image):
 
 
 def filesystem_mounted(fs):
-    """Determine whether a filesytems is already mounted."""
+    """Determine whether a filesystem is already mounted."""
     return fs in [f for f, m in mounts()]
 
 
@@ -1904,7 +1901,7 @@ class CephBrokerRq(object):
                                 set the ceph-mon unit handling the broker
                                 request will set its default value.
         :type erasure_profile: str
-        :param allow_ec_overwrites: allow EC pools to be overriden
+        :param allow_ec_overwrites: allow EC pools to be overridden
         :type allow_ec_overwrites: bool
         :raises: AssertionError if provided data is of invalid type/range
         """
@@ -1949,7 +1946,7 @@ class CephBrokerRq(object):
         :param lrc_locality: Group the coding and data chunks into sets of size locality
                              (lrc plugin)
         :type lrc_locality: int
-        :param durability_estimator: The number of parity chuncks each of which includes
+        :param durability_estimator: The number of parity chunks each of which includes
                                      a data chunk in its calculation range (shec plugin)
         :type durability_estimator: int
         :param helper_chunks: The number of helper chunks to use for recovery operations
@@ -2327,7 +2324,7 @@ class CephOSDConfContext(CephConfContext):
     settings are in conf['osd_from_client'] and finally settings which do
     clash are in conf['osd_from_client_conflict']. Rather than silently drop
     the conflicting settings they are provided in the context so they can be
-    rendered commented out to give some visability to the admin.
+    rendered commented out to give some visibility to the admin.
     """
 
     def __init__(self, permitted_sections=None):

@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -578,7 +578,7 @@ def get_relation_ip(interface, cidr_network=None):
     @returns IPv6 or IPv4 address
     """
     # Select the interface address first
-    # For possible use as a fallback bellow with get_address_in_network
+    # For possible use as a fallback below with get_address_in_network
     try:
         # Get the interface specific IP
         address = network_get_primary_address(interface)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ Here's a fully worked integration example using hookenv.Hooks::
                      'previous value', prev,
                      'current value',  cur)
 
-           # Get some unit specific bookeeping
+           # Get some unit specific bookkeeping
            if not db.get('pkg_key'):
                key = urllib.urlopen('https://example.com/pkg_key').read()
                db.set('pkg_key', key)
@@ -449,7 +449,7 @@ class HookData(object):
                      'previous value', prev,
                      'current value',  cur)
 
-           # Get some unit specific bookeeping
+           # Get some unit specific bookkeeping
            if not db.get('pkg_key'):
                key = urllib.urlopen('https://example.com/pkg_key').read()
                db.set('pkg_key', key)

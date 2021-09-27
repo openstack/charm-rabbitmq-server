@@ -1,4 +1,4 @@
-# Copyright 2018 Canonical Limited.
+# Copyright 2018-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ class VaultKVContext(context.OSContextGenerator):
                         "but it's not available.  Is secrets-stroage relation "
                         "made, but encrypt option not set?",
                         level=hookenv.WARNING)
-            # return an emptry context on hvac import error
+            # return an empty context on hvac import error
             return {}
         ctxt = {}
         # NOTE(hopem): see https://bugs.launchpad.net/charm-helpers/+bug/1849323

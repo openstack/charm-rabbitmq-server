@@ -1,4 +1,4 @@
-# Copyright 2014-2015 Canonical Limited.
+# Copyright 2014-2021 Canonical Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -208,12 +208,79 @@ CLOUD_ARCHIVE_POCKETS = {
     'wallaby/proposed': 'focal-proposed/wallaby',
     'focal-wallaby/proposed': 'focal-proposed/wallaby',
     'focal-proposed/wallaby': 'focal-proposed/wallaby',
+    # Xena
+    'xena': 'focal-updates/xena',
+    'focal-xena': 'focal-updates/xena',
+    'focal-xena/updates': 'focal-updates/xena',
+    'focal-updates/xena': 'focal-updates/xena',
+    'xena/proposed': 'focal-proposed/xena',
+    'focal-xena/proposed': 'focal-proposed/xena',
+    'focal-proposed/xena': 'focal-proposed/xena',
+    # Yoga
+    'yoga': 'focal-updates/yoga',
+    'focal-yoga': 'focal-updates/yoga',
+    'focal-yoga/updates': 'focal-updates/yoga',
+    'focal-updates/yoga': 'focal-updates/yoga',
+    'yoga/proposed': 'focal-proposed/yoga',
+    'focal-yoga/proposed': 'focal-proposed/yoga',
+    'focal-proposed/yoga': 'focal-proposed/yoga',
 }
+
+
+OPENSTACK_RELEASES = (
+    'diablo',
+    'essex',
+    'folsom',
+    'grizzly',
+    'havana',
+    'icehouse',
+    'juno',
+    'kilo',
+    'liberty',
+    'mitaka',
+    'newton',
+    'ocata',
+    'pike',
+    'queens',
+    'rocky',
+    'stein',
+    'train',
+    'ussuri',
+    'victoria',
+    'wallaby',
+    'xena',
+    'yoga',
+)
+
+
+UBUNTU_OPENSTACK_RELEASE = OrderedDict([
+    ('oneiric', 'diablo'),
+    ('precise', 'essex'),
+    ('quantal', 'folsom'),
+    ('raring', 'grizzly'),
+    ('saucy', 'havana'),
+    ('trusty', 'icehouse'),
+    ('utopic', 'juno'),
+    ('vivid', 'kilo'),
+    ('wily', 'liberty'),
+    ('xenial', 'mitaka'),
+    ('yakkety', 'newton'),
+    ('zesty', 'ocata'),
+    ('artful', 'pike'),
+    ('bionic', 'queens'),
+    ('cosmic', 'rocky'),
+    ('disco', 'stein'),
+    ('eoan', 'train'),
+    ('focal', 'ussuri'),
+    ('groovy', 'victoria'),
+    ('hirsute', 'wallaby'),
+    ('impish', 'xena'),
+])
 
 
 APT_NO_LOCK = 100  # The return code for "couldn't acquire lock" in APT.
 CMD_RETRY_DELAY = 10  # Wait 10 seconds between command retries.
-CMD_RETRY_COUNT = 3  # Retry a failing fatal command X times.
+CMD_RETRY_COUNT = 10  # Retry a failing fatal command X times.
 
 
 def filter_installed_packages(packages):
@@ -246,9 +313,9 @@ def filter_missing_packages(packages):
 def apt_cache(*_, **__):
     """Shim returning an object simulating the apt_pkg Cache.
 
-    :param _: Accept arguments for compability, not used.
+    :param _: Accept arguments for compatibility, not used.
     :type _: any
-    :param __: Accept keyword arguments for compability, not used.
+    :param __: Accept keyword arguments for compatibility, not used.
     :type __: any
     :returns:Object used to interrogate the system apt and dpkg databases.
     :rtype:ubuntu_apt_pkg.Cache
@@ -283,7 +350,7 @@ def apt_install(packages, options=None, fatal=False, quiet=False):
     :param fatal: Whether the command's output should be checked and
                   retried.
     :type fatal: bool
-    :param quiet: if True (default), supress log message to stdout/stderr
+    :param quiet: if True (default), suppress log message to stdout/stderr
     :type quiet: bool
     :raises: subprocess.CalledProcessError
     """
@@ -397,7 +464,7 @@ def import_key(key):
     A Radix64 format keyid is also supported for backwards
     compatibility. In this case Ubuntu keyserver will be
     queried for a key via HTTPS by its keyid. This method
-    is less preferrable because https proxy servers may
+    is less preferable because https proxy servers may
     require traffic decryption which is equivalent to a
     man-in-the-middle attack (a proxy server impersonates
     keyserver TLS certificates and has to be explicitly
@@ -574,6 +641,10 @@ def add_source(source, key=None, fail_invalid=False):
       with be used.  If staging is NOT used then the cloud archive [3] will be
       added, and the 'ubuntu-cloud-keyring' package will be added for the
       current distro.
+    '<openstack-version>': translate to cloud:<release> based on the current
+      distro version (i.e. for 'ussuri' this will either be 'bionic-ussuri' or
+      'distro'.
+    '<openstack-version>/proposed': as above, but for proposed.
 
     Otherwise the source is not recognised and this is logged to the juju log.
     However, no error is raised, unless sys_error_on_exit is True.
@@ -592,7 +663,7 @@ def add_source(source, key=None, fail_invalid=False):
     id may also be used, but be aware that only insecure protocols are
     available to retrieve the actual public key from a public keyserver
     placing your Juju environment at risk. ppa and cloud archive keys
-    are securely added automtically, so sould not be provided.
+    are securely added automatically, so should not be provided.
 
     @param fail_invalid: (boolean) if True, then the function raises a
     SourceConfigError is there is no matching installation source.
@@ -600,6 +671,12 @@ def add_source(source, key=None, fail_invalid=False):
     @raises SourceConfigError() if for cloud:<pocket>, the <pocket> is not a
     valid pocket in CLOUD_ARCHIVE_POCKETS
     """
+    # extract the OpenStack versions from the CLOUD_ARCHIVE_POCKETS; can't use
+    # the list in contrib.openstack.utils as it might not be included in
+    # classic charms and would break everything.  Having OpenStack specific
+    # code in this file is a bit of an antipattern, anyway.
+    os_versions_regex = "({})".format("|".join(OPENSTACK_RELEASES))
+
     _mapping = OrderedDict([
         (r"^distro$", lambda: None),  # This is a NOP
         (r"^(?:proposed|distro-proposed)$", _add_proposed),
@@ -609,6 +686,9 @@ def add_source(source, key=None, fail_invalid=False):
         (r"^cloud:(.*)-(.*)$", _add_cloud_distro_check),
         (r"^cloud:(.*)$", _add_cloud_pocket),
         (r"^snap:.*-(.*)-(.*)$", _add_cloud_distro_check),
+        (r"^{}\/proposed$".format(os_versions_regex),
+         _add_bare_openstack_proposed),
+        (r"^{}$".format(os_versions_regex), _add_bare_openstack),
     ])
     if source is None:
         source = ''
@@ -640,7 +720,7 @@ def _add_proposed():
     Uses get_distrib_codename to determine the correct stanza for
     the deb line.
 
-    For intel architecutres PROPOSED_POCKET is used for the release, but for
+    For Intel architectures PROPOSED_POCKET is used for the release, but for
     other architectures PROPOSED_PORTS_POCKET is used for the release.
     """
     release = get_distrib_codename()
@@ -662,7 +742,8 @@ def _add_apt_repository(spec):
         series = get_distrib_codename()
         spec = spec.replace('{series}', series)
     _run_with_retries(['add-apt-repository', '--yes', spec],
-                      cmd_env=env_proxy_settings(['https', 'http']))
+                      cmd_env=env_proxy_settings(['https', 'http', 'no_proxy'])
+                      )
 
 
 def _add_cloud_pocket(pocket):
@@ -736,6 +817,73 @@ def _verify_is_ubuntu_rel(release, os_release):
         raise SourceConfigError(
             'Invalid Cloud Archive release specified: {}-{} on this Ubuntu'
             'version ({})'.format(release, os_release, ubuntu_rel))
+
+
+def _add_bare_openstack(openstack_release):
+    """Add cloud or distro based on the release given.
+
+    The spec given is, say, 'ussuri', but this could apply cloud:bionic-ussuri
+    or 'distro' depending on whether the ubuntu release is bionic or focal.
+
+    :param openstack_release: the OpenStack codename to determine the release
+        for.
+    :type openstack_release: str
+    :raises: SourceConfigError
+    """
+    # TODO(ajkavanagh) - surely this means we should be removing cloud archives
+    # if they exist?
+    __add_bare_helper(openstack_release, "{}-{}", lambda: None)
+
+
+def _add_bare_openstack_proposed(openstack_release):
+    """Add cloud of distro but with proposed.
+
+    The spec given is, say, 'ussuri' but this could apply
+    cloud:bionic-ussuri/proposed or 'distro/proposed' depending on whether the
+    ubuntu release is bionic or focal.
+
+    :param openstack_release: the OpenStack codename to determine the release
+        for.
+    :type openstack_release: str
+    :raises: SourceConfigError
+    """
+    __add_bare_helper(openstack_release, "{}-{}/proposed", _add_proposed)
+
+
+def __add_bare_helper(openstack_release, pocket_format, final_function):
+    """Helper for _add_bare_openstack[_proposed]
+
+    The bulk of the work between the two functions is exactly the same except
+    for the pocket format and the function that is run if it's the distro
+    version.
+
+    :param openstack_release: the OpenStack codename.  e.g. ussuri
+    :type openstack_release: str
+    :param pocket_format: the pocket formatter string to construct a pocket str
+        from the openstack_release and the current ubuntu version.
+    :type pocket_format: str
+    :param final_function: the function to call if it is the distro version.
+    :type final_function: Callable
+    :raises SourceConfigError on error
+    """
+    ubuntu_version = get_distrib_codename()
+    possible_pocket = pocket_format.format(ubuntu_version, openstack_release)
+    if possible_pocket in CLOUD_ARCHIVE_POCKETS:
+        _add_cloud_pocket(possible_pocket)
+        return
+    # Otherwise it's almost certainly the distro version; verify that it
+    # exists.
+    try:
+        assert UBUNTU_OPENSTACK_RELEASE[ubuntu_version] == openstack_release
+    except KeyError:
+        raise SourceConfigError(
+            "Invalid ubuntu version {} isn't known to this library"
+            .format(ubuntu_version))
+    except AssertionError:
+        raise SourceConfigError(
+            'Invalid OpenStack release specified: {} for Ubuntu version {}'
+            .format(openstack_release, ubuntu_version))
+    final_function()
 
 
 def _run_with_retries(cmd, max_retries=CMD_RETRY_COUNT, retry_exitcodes=(1,),
