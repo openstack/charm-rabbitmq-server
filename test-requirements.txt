@@ -7,6 +7,7 @@
 #       requirements.  They are intertwined.  Also, Zaza itself should specify
 #       all of its own requirements and if it doesn't, fix it there.
 #
+cffi==1.14.6; python_version < '3.6'  # cffi 1.15.0 drops support for py35.
 setuptools<50.0.0  # https://github.com/pypa/setuptools/commit/04e3df22df840c6bb244e9b27bc56750c44b7c85
 
 requests>=2.18.4
@@ -36,8 +37,8 @@ oslo.utils<=3.41.0;python_version<'3.6'
 
 coverage>=4.5.2
 pyudev              # for ceph-* charm unit tests (need to fix the ceph-* charm unit tests/mocking)
-git+https://github.com/openstack-charmers/zaza.git#egg=zaza
-git+https://github.com/openstack-charmers/zaza-openstack-tests.git#egg=zaza.openstack
+git+https://github.com/openstack-charmers/zaza.git@stable/21.10#egg=zaza
+git+https://github.com/openstack-charmers/zaza-openstack-tests.git@stable/21.10#egg=zaza.openstack
 
 # Needed for charm-glance:
 git+https://opendev.org/openstack/tempest.git#egg=tempest;python_version>='3.6'
