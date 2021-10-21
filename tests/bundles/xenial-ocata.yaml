@@ -34,21 +34,18 @@ applications:
     num_units: 1
     options:
       openstack-origin: *openstack-origin
-    channel: candidate
   percona-cluster:
     charm: cs:~openstack-charmers/percona-cluster
     num_units: 1
     options:
       source: *openstack-origin
       max-connections: 1000
-    channel: candidate
   keystone:
     charm: cs:~openstack-charmers/keystone
     num_units: 1
     options:
       openstack-origin: *openstack-origin
       admin-password: openstack
-    channel: candidate
   nagios:
     charm: cs:nagios
     num_units: 1
