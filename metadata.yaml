@@ -10,7 +10,6 @@ tags:
 - amqp
 - misc
 series:
-- xenial
 - bionic
 - focal
 - groovy
