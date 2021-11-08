@@ -33,7 +33,7 @@ class PauseTestCase(CharmTestCase):
 
     def setUp(self):
         super(PauseTestCase, self).setUp(
-            actions, ["pause_unit_helper", "ConfigRenderer"])
+            actions, ["pause_unit_helper", "ConfigRenderer", "CONFIG_FILES"])
         self.ConfigRenderer.return_value = 'test-config'
 
     def test_pauses_services(self):
@@ -45,7 +45,7 @@ class ResumeTestCase(CharmTestCase):
 
     def setUp(self):
         super(ResumeTestCase, self).setUp(
-            actions, ["resume_unit_helper", "ConfigRenderer"])
+            actions, ["resume_unit_helper", "ConfigRenderer", "CONFIG_FILES"])
         self.ConfigRenderer.return_value = 'test-config'
 
     def test_pauses_services(self):

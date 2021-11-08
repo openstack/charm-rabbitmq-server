@@ -535,7 +535,7 @@ def ha_joined():
             level=ERROR)
         sys.exit(1)
 
-    ctxt = {rabbit.ENV_CONF: rabbit.CONFIG_FILES[rabbit.ENV_CONF]}
+    ctxt = {rabbit.ENV_CONF: rabbit.CONFIG_FILES()[rabbit.ENV_CONF]}
     rabbit.ConfigRenderer(ctxt).write(rabbit.ENV_CONF)
 
     relation_settings = {}
@@ -733,8 +733,16 @@ def config_changed(check_deferred_restarts=True):
         #     is not open
         close_port(55672)
 
+    # NOTE(jamespage): If a newer RMQ version is
+    # installed and the old style configuration file
+    # is still on disk, remove before re-rendering
+    # any new configuration.
+    if (os.path.exists(rabbit.RABBITMQ_CONFIG) and
+            cmp_pkgrevno('rabbitmq-server', '3.7') >= 0):
+        os.remove(rabbit.RABBITMQ_CONFIG)
+
     rabbit.ConfigRenderer(
-        rabbit.CONFIG_FILES).write_all()
+        rabbit.CONFIG_FILES()).write_all()
 
     if is_relation_made("ha"):
         ha_is_active_active = config("ha-vip-only")
@@ -809,7 +817,7 @@ def series_upgrade_prepare():
     set_unit_upgrading()
     if not is_unit_paused_set():
         log("Pausing unit for series upgrade.")
-        rabbit.pause_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES))
+        rabbit.pause_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES()))
     if is_leader():
         if not leader_get('cluster_series_upgrading'):
             # Inform the entire cluster a series upgrade is occurring.
@@ -822,9 +830,18 @@ def series_upgrade_prepare():
 @hooks.hook('post-series-upgrade')
 def series_upgrade_complete():
     log("Running complete series upgrade hook", "INFO")
+    # NOTE(jamespage): If a newer RMQ version is
+    # installed and the old style configuration file
+    # is still on disk, remove before re-rendering
+    # any new configuration.
+    if (os.path.exists(rabbit.RABBITMQ_CONFIG) and
+            cmp_pkgrevno('rabbitmq-server', '3.7') >= 0):
+        os.remove(rabbit.RABBITMQ_CONFIG)
+        rabbit.ConfigRenderer(
+            rabbit.CONFIG_FILES()).write_all()
     clear_unit_paused()
     clear_unit_upgrading()
-    rabbit.resume_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES))
+    rabbit.resume_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES()))
 
 
 @hooks.hook('certificates-relation-joined')
@@ -844,7 +861,7 @@ def certs_changed(relation_id=None, unit=None):
     @rabbit.restart_on_change(rabbit.restart_map())
     def render_and_restart():
         rabbit.ConfigRenderer(
-            rabbit.CONFIG_FILES).write_all()
+            rabbit.CONFIG_FILES()).write_all()
     render_and_restart()
     update_clients()
 
@@ -872,4 +889,4 @@ if __name__ == '__main__':
             level=DEBUG)
         update_clients()
 
-    rabbit.assess_status(rabbit.ConfigRenderer(rabbit.CONFIG_FILES))
+    rabbit.assess_status(rabbit.ConfigRenderer(rabbit.CONFIG_FILES()))

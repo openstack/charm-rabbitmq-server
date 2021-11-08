@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import os
 import re
@@ -111,7 +112,8 @@ VERSION_PACKAGE = 'rabbitmq-server'
 RABBITMQ_CTL = '/usr/sbin/rabbitmqctl'
 COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
 ENV_CONF = '/etc/rabbitmq/rabbitmq-env.conf'
-RABBITMQ_CONF = '/etc/rabbitmq/rabbitmq.config'
+RABBITMQ_CONFIG = '/etc/rabbitmq/rabbitmq.config'
+RABBITMQ_CONF = '/etc/rabbitmq/rabbitmq.conf'
 ENABLED_PLUGINS = '/etc/rabbitmq/enabled_plugins'
 RABBIT_USER = 'rabbitmq'
 LIB_PATH = '/var/lib/rabbitmq/'
@@ -130,8 +132,15 @@ _local_named_passwd = '/var/lib/charm/{}/{}.local_passwd'
 # logically, consider building a hook_context for template rendering so
 # the charm doesn't concern itself with template specifics etc.
 
-CONFIG_FILES = OrderedDict([
+_CONFIG_FILES = OrderedDict([
     (RABBITMQ_CONF, {
+        'hook_contexts': [
+            RabbitMQSSLContext(),
+            RabbitMQClusterContext(),
+        ],
+        'services': ['rabbitmq-server']
+    }),
+    (RABBITMQ_CONFIG, {
         'hook_contexts': [
             RabbitMQSSLContext(),
             RabbitMQClusterContext(),
@@ -149,6 +158,15 @@ CONFIG_FILES = OrderedDict([
         'services': ['rabbitmq-server']
     }),
 ])
+
+
+def CONFIG_FILES():
+    _cfiles = copy.deepcopy(_CONFIG_FILES)
+    if cmp_pkgrevno('rabbitmq-server', '3.7') >= 0:
+        del _cfiles[RABBITMQ_CONFIG]
+    else:
+        del _cfiles[RABBITMQ_CONF]
+    return _cfiles
 
 
 class ConfigRenderer(object):
@@ -816,7 +834,7 @@ def restart_map():
                     that should be restarted when file changes.
     '''
     _map = []
-    for f, ctxt in CONFIG_FILES.items():
+    for f, ctxt in _CONFIG_FILES.items():
         svcs = []
         for svc in ctxt['services']:
             svcs.append(svc)

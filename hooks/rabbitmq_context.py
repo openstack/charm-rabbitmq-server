@@ -119,7 +119,7 @@ class RabbitMQSSLContext(object):
             "ssl_key_file": SSL_KEY_FILE,
             "ssl_client": ssl_client,
             "ssl_ca_file": "",
-            "ssl_only": ssl_only
+            "ssl_only": ssl_only,
         }
 
         if ssl_ca:
