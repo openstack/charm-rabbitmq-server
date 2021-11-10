@@ -120,6 +120,10 @@ class RabbitMQSSLContext(object):
             "ssl_client": ssl_client,
             "ssl_ca_file": "",
             "ssl_only": ssl_only,
+            "tls13": (
+                cmp_pkgrevno('erlang-base', '23.0') >= 0 and
+                cmp_pkgrevno('rabbitmq-server', '3.8.11') >= 0
+            ),
         }
 
         if ssl_ca:

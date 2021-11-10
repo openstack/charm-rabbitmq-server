@@ -35,6 +35,7 @@ class TestRabbitMQSSLContext(unittest.TestCase):
         self.assertTrue(close_port.called)
         self.assertTrue(reconfig_ssl.called)
 
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
     @mock.patch("rabbitmq_context.open_port")
     @mock.patch("rabbitmq_context.os.chmod")
     @mock.patch("rabbitmq_context.os.chown")
@@ -46,9 +47,12 @@ class TestRabbitMQSSLContext(unittest.TestCase):
     @mock.patch("rabbitmq_context.ssl_utils.reconfigure_client_ssl")
     @mock.patch("rabbitmq_context.ssl_utils.get_ssl_mode")
     def test_context_ssl_on(self, get_ssl_mode, reconfig_ssl, close_port,
-                            config, gr, pw, exists, chown, chmod, open_port):
+                            config, gr, pw, exists, chown, chmod, open_port,
+                            cmp_pkgrevno):
+
         exists.return_value = True
         get_ssl_mode.return_value = ("on", "on")
+        cmp_pkgrevno.return_value = 1
 
         def config_get(n):
             return None
@@ -75,10 +79,33 @@ class TestRabbitMQSSLContext(unittest.TestCase):
                     "ssl_ca_file": "",
                     "ssl_only": False,
                     "ssl_mode": "on",
+                    "tls13": True,
                 })
 
         self.assertTrue(reconfig_ssl.called)
         self.assertTrue(open_port.called)
+        cmp_pkgrevno.assert_has_calls([
+            mock.call("erlang-base", "23.0"),
+            mock.call("rabbitmq-server", "3.8.11")
+        ])
+
+        # Check older erlang toggles tls13 flag off.
+        cmp_pkgrevno.return_value = -1
+        m = mock.mock_open()
+        with mock.patch('rabbitmq_context.open', m, create=True):
+            self.assertEqual(
+                rabbitmq_context.RabbitMQSSLContext().__call__(), {
+                    "ssl_port": None,
+                    "ssl_cert_file": "/etc/rabbitmq/rabbit-server-cert.pem",
+                    "ssl_key_file": '/etc/rabbitmq/rabbit-server-privkey.pem',
+                    "ssl_client": False,
+                    "ssl_ca_file": "",
+                    "ssl_only": False,
+                    "ssl_mode": "on",
+                    "tls13": False,
+                })
+
+        cmp_pkgrevno.assert_called_with("erlang-base", "23.0")
 
 
 class TestRabbitMQClusterContext(unittest.TestCase):
