@@ -4,16 +4,12 @@ smoke_bundles:
   - focal-ussuri
 
 gate_bundles:
-  - xenial-mitaka
   - bionic-queens
   - focal-ussuri
   - focal-wallaby
   - hirsute-wallaby
 
 dev_bundles:
-  - xenial-ocata
-  - xenial-pike
-  - xenial-queens
   - bionic-rocky
   - bionic-stein
   - bionic-train

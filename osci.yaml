@@ -3,7 +3,6 @@
       - charm-unit-jobs
     check:
       jobs:
-      - rabbit-xenial
       - rabbit-bionic
       - rabbit-focal
       - rabbit-groovy
@@ -14,16 +13,10 @@
       needs_charm_build: false
 
 - job:
-    name: rabbit-xenial
+    name: rabbit-bionic
     parent: func-target
     dependencies: &smoke-jobs
       - rabbit-focal
-    vars:
-      tox_extra_args: xenial-mitaka
-- job:
-    name: rabbit-bionic
-    parent: func-target
-    dependencies: *smoke-jobs
     vars:
       tox_extra_args: bionic-queens
 - job:
