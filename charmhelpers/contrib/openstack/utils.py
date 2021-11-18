@@ -1413,7 +1413,8 @@ def incomplete_relation_data(configs, required_interfaces):
         for i in incomplete_relations}
 
 
-def do_action_openstack_upgrade(package, upgrade_callback, configs):
+def do_action_openstack_upgrade(package, upgrade_callback, configs,
+                                force_upgrade=False):
     """Perform action-managed OpenStack upgrade.
 
     Upgrades packages to the configured openstack-origin version and sets
@@ -1427,12 +1428,13 @@ def do_action_openstack_upgrade(package, upgrade_callback, configs):
     @param package: package name for determining if upgrade available
     @param upgrade_callback: function callback to charm's upgrade function
     @param configs: templating object derived from OSConfigRenderer class
+    @param force_upgrade: perform dist-upgrade regardless of new openstack
 
     @return: True if upgrade successful; False if upgrade failed or skipped
     """
     ret = False
 
-    if openstack_upgrade_available(package):
+    if openstack_upgrade_available(package) or force_upgrade:
         if config('action-managed-upgrade'):
             juju_log('Upgrading OpenStack release')
 
@@ -2597,6 +2599,23 @@ def get_subordinate_release_packages(os_release, package_type='deb'):
                         container.add(pkg)
                 break
     return SubordinatePackages(install, purge)
+
+
+def get_subordinate_services():
+    """Iterate over subordinate relations and get service information.
+
+    In a similar fashion as with get_subordinate_release_packages(),
+    principle charms can retrieve a list of services advertised by their
+    subordinate charms. This is useful to know about subordinate services when
+    pausing, resuming or upgrading a principle unit.
+
+    :returns: Name of all services advertised by all subordinates
+    :rtype: Set[str]
+    """
+    services = set()
+    for rdata in container_scoped_relation_get('services'):
+        services |= set(json.loads(rdata or '[]'))
+    return services
 
 
 os_restart_on_change = partial(

@@ -1,29 +1,23 @@
 - project:
     templates:
-      - charm-unit-jobs
+      - charm-yoga-unit-jobs
     check:
       jobs:
-      - rabbit-xenial
       - rabbit-bionic
       - rabbit-focal
-      - rabbit-groovy
       - rabbit-hirsute
       - rabbit-impish:
+          voting: false
+      - rabbit-jammy:
           voting: false
     vars:
       needs_charm_build: false
 
 - job:
-    name: rabbit-xenial
+    name: rabbit-bionic
     parent: func-target
     dependencies: &smoke-jobs
       - rabbit-focal
-    vars:
-      tox_extra_args: xenial-mitaka
-- job:
-    name: rabbit-bionic
-    parent: func-target
-    dependencies: *smoke-jobs
     vars:
       tox_extra_args: bionic-queens
 - job:
@@ -31,18 +25,11 @@
     parent: func-target
     dependencies: &lint-jobs
         - osci-lint
-        - tox-py35
         - tox-py36
-        - tox-py37
         - tox-py38
+        - tox-py39
     vars:
       tox_extra_args: focal-ussuri
-- job:
-    name: rabbit-groovy
-    parent: func-target
-    dependencies: *smoke-jobs
-    vars:
-      tox_extra_args: groovy-victoria
 - job:
     name: rabbit-hirsute
     parent: func-target
@@ -55,3 +42,9 @@
     dependencies: *smoke-jobs
     vars:
       tox_extra_args: impish-xena
+- job:
+    name: rabbit-jammy
+    parent: func-target
+    dependencies: *smoke-jobs
+    vars:
+      tox_extra_args: jammy-yoga
