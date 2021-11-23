@@ -915,15 +915,18 @@ class UtilsTests(CharmTestCase):
             "rabbit@juju-devel3-machine-42",
             rabbit_utils.check_cluster_memberships())
 
+    @mock.patch.object(rabbit_utils, 'cmp_pkgrevno')
     @mock.patch('rabbitmq_context.psutil.NUM_CPUS', 2)
     @mock.patch('rabbitmq_context.relation_ids')
     @mock.patch('rabbitmq_context.config')
-    def test_render_rabbitmq_env(self, mock_config, mock_relation_ids):
+    def test_render_rabbitmq_env(self, mock_config, mock_relation_ids,
+                                 mock_cmp_pkgrevno):
+        mock_cmp_pkgrevno.return_value = 0
         mock_relation_ids.return_value = []
         mock_config.return_value = 3
         with mock.patch('rabbit_utils.render') as mock_render:
             ctxt = {rabbit_utils.ENV_CONF:
-                    rabbit_utils.CONFIG_FILES[rabbit_utils.ENV_CONF]}
+                    rabbit_utils.CONFIG_FILES()[rabbit_utils.ENV_CONF]}
             rabbit_utils.ConfigRenderer(ctxt).write(
                 rabbit_utils.ENV_CONF)
 

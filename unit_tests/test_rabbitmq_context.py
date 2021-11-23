@@ -47,7 +47,6 @@ class TestRabbitMQSSLContext(unittest.TestCase):
     @mock.patch("rabbitmq_context.ssl_utils.get_ssl_mode")
     def test_context_ssl_on(self, get_ssl_mode, reconfig_ssl, close_port,
                             config, gr, pw, exists, chown, chmod, open_port):
-
         exists.return_value = True
         get_ssl_mode.return_value = ("on", "on")
 

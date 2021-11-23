@@ -74,13 +74,13 @@ def pause(args):
     """Pause the RabbitMQ services.
     @raises Exception should the service fail to stop.
     """
-    pause_unit_helper(ConfigRenderer(CONFIG_FILES))
+    pause_unit_helper(ConfigRenderer(CONFIG_FILES()))
 
 
 def resume(args):
     """Resume the RabbitMQ services.
     @raises Exception should the service fail to start."""
-    resume_unit_helper(ConfigRenderer(CONFIG_FILES))
+    resume_unit_helper(ConfigRenderer(CONFIG_FILES()))
 
 
 def cluster_status(args):
@@ -130,7 +130,7 @@ def complete_cluster_series_upgrade(args):
     if is_leader():
         # Unset cluster_series_upgrading
         leader_set(cluster_series_upgrading="")
-    assess_status(ConfigRenderer(CONFIG_FILES))
+    assess_status(ConfigRenderer(CONFIG_FILES()))
 
 
 def forget_cluster_node(args):
@@ -240,7 +240,7 @@ def restart(args):
         os_utils.restart_services_action(deferred_only=True)
     else:
         os_utils.restart_services_action(services=svcs)
-    assess_status(ConfigRenderer(CONFIG_FILES))
+    assess_status(ConfigRenderer(CONFIG_FILES()))
 
 
 def _run_deferred_hooks():
@@ -275,7 +275,7 @@ def run_deferred_hooks(args):
     """
     _run_deferred_hooks()
     os_utils.restart_services_action(deferred_only=True)
-    assess_status(ConfigRenderer(CONFIG_FILES))
+    assess_status(ConfigRenderer(CONFIG_FILES()))
 
 
 def show_deferred_events(args):
