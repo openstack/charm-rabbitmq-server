@@ -419,6 +419,7 @@ class RelationUtil(CharmTestCase):
         mock_add_check.reset_mock()
         mock_remove_check.reset_mock()
         self.test_config.unset('stats_cron_schedule')
+        self.test_config.set('management_plugin', False)
         rabbitmq_server_relations.update_nrpe_checks()
         mock_remove_file.assert_has_calls([
             call(stats_confile),

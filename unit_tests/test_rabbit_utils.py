@@ -47,6 +47,7 @@ TO_PATCH = [
     'config',
     'is_unit_paused_set',
     'local_unit',
+    'lsb_release',
 ]
 
 
@@ -158,6 +159,8 @@ class UtilsTests(CharmTestCase):
         self.nrpe_compat = mock.MagicMock()
         self.nrpe_compat.add_check = mock.MagicMock()
         self.nrpe_compat.remove_check = mock.MagicMock()
+        self.lsb_release.return_value = {
+            'DISTRIB_CODENAME': 'focal'}
 
     def tearDown(self):
         super(UtilsTests, self).tearDown()
@@ -1453,3 +1456,17 @@ class UtilsTests(CharmTestCase):
             self.assertEqual(generated_policy, policy)
 
             mock_set_policy.reset_mock()
+
+    @mock.patch('rabbit_utils.config')
+    def test_management_plugin_enabled(self, mock_config):
+        mock_config.side_effect = self.test_config
+        self.lsb_release.return_value = {
+            'DISTRIB_CODENAME': 'focal'}
+        self.test_config.set('management_plugin', True)
+        self.assertTrue(rabbit_utils.management_plugin_enabled())
+        self.test_config.set('management_plugin', False)
+        self.assertFalse(rabbit_utils.management_plugin_enabled())
+        self.lsb_release.return_value = {
+            'DISTRIB_CODENAME': 'xenial'}
+        self.test_config.set('management_plugin', True)
+        self.assertFalse(rabbit_utils.management_plugin_enabled())

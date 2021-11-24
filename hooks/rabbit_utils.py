@@ -89,6 +89,8 @@ from charmhelpers.core.host import (
     write_file,
     cmp_pkgrevno,
     rsync,
+    lsb_release,
+    CompareHostReleases,
 )
 
 from charmhelpers.contrib.peerstorage import (
@@ -1421,6 +1423,19 @@ def remove_file(path):
         log('{} file does not exist'.format(path), level='DEBUG')
 
 
+def management_plugin_enabled():
+    """Check if management plugin should be enabled.
+
+    :returns: Whether anagement plugin should be enabled
+    :rtype: bool
+    """
+    _release = lsb_release()['DISTRIB_CODENAME'].lower()
+    if CompareHostReleases(_release) < "bionic":
+        return False
+    else:
+        return config('management_plugin') is True
+
+
 def sync_nrpe_files():
     """Sync all NRPE-related files.
 
@@ -1436,7 +1451,7 @@ def sync_nrpe_files():
     if config('queue_thresholds') and config('stats_cron_schedule'):
         rsync(os.path.join(charm_dir(), 'files', 'check_rabbitmq_queues.py'),
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
-    if config('management_plugin'):
+    if management_plugin_enabled():
         rsync(os.path.join(charm_dir(), 'files', 'check_rabbitmq_cluster.py'),
               os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
 
@@ -1467,7 +1482,7 @@ def remove_nrpe_files():
         # `stats_cron_schedule` isn't in the config
         remove_file(os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_queues.py'))
 
-    if not config('management_plugin'):
+    if not management_plugin_enabled():
         # This script is redundant if the value `management_plugin` isn't
         # in the config
         remove_file(os.path.join(NAGIOS_PLUGINS, 'check_rabbitmq_cluster.py'))
@@ -1676,7 +1691,7 @@ def nrpe_update_cluster_check(nrpe_compat, user, password):
     :param password: password of NRPE user
     :type: str
     """
-    if config('management_plugin'):
+    if management_plugin_enabled():
         cmd = '{}/check_rabbitmq_cluster.py --port {} ' \
               '--user {} --password {}'.format(
                   NAGIOS_PLUGINS, get_managment_port(), user, password)

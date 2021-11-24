@@ -28,8 +28,10 @@ options:
       to run. Supported modules currently include os, ssh, apache and mysql.
   management_plugin:
     type: boolean
-    default: False
-    description: Enable the management plugin.
+    default: True
+    description: |
+      Enable the management plugin. This only applys to deployments using
+      Focal or later.
   mirroring-queues:
     type: boolean
     default: True
