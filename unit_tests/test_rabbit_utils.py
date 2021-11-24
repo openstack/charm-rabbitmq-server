@@ -14,6 +14,7 @@
 
 import collections
 from functools import wraps
+import json
 import mock
 import os
 import sys
@@ -1411,3 +1412,44 @@ class UtilsTests(CharmTestCase):
         self.assertTrue(rabbit_utils.rabbit_supports_json())
         mock_cmp_pkgrevno.return_value = -1
         self.assertFalse(rabbit_utils.rabbit_supports_json())
+
+    @mock.patch('rabbit_utils.caching_cmp_pkgrevno')
+    @mock.patch('rabbit_utils.set_policy')
+    @mock.patch('rabbit_utils.config')
+    def test_set_ha_mode(self,
+                         mock_config,
+                         mock_set_policy,
+                         mock_caching_cmp_pkgrevno):
+        """Testing set_ha_mode"""
+        mock_config.side_effect = self.test_config
+        mock_caching_cmp_pkgrevno.return_value = 1
+
+        expected_policy = {
+            'all': {
+                'ha-mode': 'all',
+                'ha-sync-mode': 'automatic',
+            },
+            'exactly': {
+                'ha-mode': 'exactly',
+                'ha-sync-mode': 'automatic',
+                'ha-params': 2,
+            },
+            'nodes': {
+                'ha-mode': 'nodes',
+                'ha-sync-mode': 'automatic',
+                'ha-params': ["rabbit@nodeA", "rabbit@nodeB"]
+            },
+        }
+        for mode, policy in expected_policy.items():
+            rabbit_utils.set_ha_mode('test_vhost', mode,
+                                     params=policy.get('ha-params'))
+
+            mock_set_policy.assert_called_once()
+
+            self.assertEqual(mock_set_policy.call_args.args[0:3],
+                             ('test_vhost', 'HA', r'^(?!amq\.).*',))
+
+            generated_policy = json.loads(mock_set_policy.call_args.args[3])
+            self.assertEqual(generated_policy, policy)
+
+            mock_set_policy.reset_mock()
