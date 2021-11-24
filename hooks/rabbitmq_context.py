@@ -19,6 +19,7 @@ import pwd
 import re
 import sys
 
+import rabbit_utils
 import ssl_utils
 
 from charmhelpers.contrib.ssl.service import ServiceCA
@@ -28,6 +29,7 @@ from charmhelpers.core.hookenv import (
     open_port,
     close_port,
     config,
+    leader_get,
     log,
     service_name,
     relation_ids,
@@ -185,7 +187,8 @@ class RabbitMQClusterContext(object):
 
     def __call__(self):
         ctxt = {'cluster_partition_handling':
-                config('cluster-partition-handling'),
+                (leader_get(rabbit_utils.CLUSTER_MODE_KEY) or
+                    rabbit_utils.CLUSTER_MODE_FOR_INSTALL),
                 'mnesia_table_loading_retry_timeout':
                 config('mnesia-table-loading-retry-timeout'),
                 'mnesia_table_loading_retry_limit':

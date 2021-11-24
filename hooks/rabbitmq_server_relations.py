@@ -132,6 +132,11 @@ INITIAL_CLIENT_UPDATE_KEY = 'initial_client_update_done'
 def install():
     pre_install_hooks()
     add_source(config('source'), config('key'))
+    if is_leader() and not leader_get(rabbit.CLUSTER_MODE_KEY):
+        log("Setting {} to {} for installation phase.".format(
+            rabbit.CLUSTER_MODE_KEY,
+            rabbit.CLUSTER_MODE_FOR_INSTALL))
+        leader_set({rabbit.CLUSTER_MODE_KEY: rabbit.CLUSTER_MODE_FOR_INSTALL})
     rabbit.install_or_upgrade_packages()
 
 
@@ -426,6 +431,7 @@ def cluster_joined(relation_id=None):
 
 
 @hooks.hook('cluster-relation-changed')
+@rabbit.restart_on_change(rabbit.restart_map())
 def cluster_changed(relation_id=None, remote_unit=None):
     # Future travelers beware ordering is significant
     rdata = relation_get(rid=relation_id, unit=remote_unit)
@@ -463,6 +469,17 @@ def cluster_changed(relation_id=None, remote_unit=None):
         # Local rabbit maybe clustered now so check and inform clients if
         # needed.
         update_clients()
+        if is_leader():
+            if (leader_get(rabbit.CLUSTER_MODE_KEY) !=
+                    config(rabbit.CLUSTER_MODE_KEY)):
+                log("Informing peers via leaderdb to change {} to {}".format(
+                    rabbit.CLUSTER_MODE_KEY,
+                    config(rabbit.CLUSTER_MODE_KEY)))
+                leader_set({
+                    rabbit.CLUSTER_MODE_KEY: config(
+                        rabbit.CLUSTER_MODE_KEY)})
+                rabbit.ConfigRenderer(
+                    rabbit.CONFIG_FILES).write_all()
 
     if not is_leader() and is_relation_made('nrpe-external-master'):
         update_nrpe_checks()
@@ -783,6 +800,7 @@ def leader_elected():
 
 
 @hooks.hook('leader-settings-changed')
+@rabbit.restart_on_change(rabbit.restart_map())
 def leader_settings_changed():
 
     if is_unit_paused_set():
@@ -804,6 +822,8 @@ def leader_settings_changed():
         for rid in relation_ids('cluster'):
             relation_set(relation_id=rid, relation_settings={'cookie': cookie})
     update_clients()
+    rabbit.ConfigRenderer(
+        rabbit.CONFIG_FILES()).write_all()
 
 
 def pre_install_hooks():
