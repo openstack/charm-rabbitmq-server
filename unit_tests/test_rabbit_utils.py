@@ -423,7 +423,7 @@ class UtilsTests(CharmTestCase):
     @mock.patch('rabbit_utils.leader_node')
     @mock.patch('rabbit_utils.clustered')
     @mock.patch('rabbit_utils.cmp_pkgrevno')
-    @mock.patch('rabbit_utils._rabbitmq_version_newer_or_equal')
+    @mock.patch('rabbit_utils.rabbitmq_version_newer_or_equal')
     def test_cluster_with_not_clustered(
             self, mock_new_rabbitmq, mock_cmp_pkgrevno, mock_clustered,
             mock_leader_node, mock_running_nodes, mock_time, mock_check_output,
@@ -687,7 +687,7 @@ class UtilsTests(CharmTestCase):
             f.assert_called_once_with('assessor', services='s1', ports=None)
 
     @mock.patch('rabbit_utils.subprocess.check_call')
-    @mock.patch('rabbit_utils._rabbitmq_version_newer_or_equal')
+    @mock.patch('rabbit_utils.rabbitmq_version_newer_or_equal')
     def test_rabbitmqctl_wait_before_focal(self, mock_new_rabbitmq,
                                            check_call):
         mock_new_rabbitmq.return_value = False
@@ -697,7 +697,7 @@ class UtilsTests(CharmTestCase):
             '/var/lib/rabbitmq.pid'])
 
     @mock.patch('rabbit_utils.subprocess.check_call')
-    @mock.patch('rabbit_utils._rabbitmq_version_newer_or_equal')
+    @mock.patch('rabbit_utils.rabbitmq_version_newer_or_equal')
     def test_rabbitmqctl_wait_focal_or_newer(self, mock_new_rabbitmq,
                                              check_call):
         mock_new_rabbitmq.return_value = True
@@ -712,7 +712,7 @@ class UtilsTests(CharmTestCase):
         check_call.assert_called_with(['/usr/sbin/rabbitmqctl', 'start_app'])
 
     @mock.patch('rabbit_utils.subprocess.check_call')
-    @mock.patch('rabbit_utils._rabbitmq_version_newer_or_equal')
+    @mock.patch('rabbit_utils.rabbitmq_version_newer_or_equal')
     def test_rabbitmqctl_wait_fail(self, mock_new_rabbitmq,
                                    check_call):
         mock_new_rabbitmq.return_value = True
@@ -884,12 +884,12 @@ class UtilsTests(CharmTestCase):
         mock_cluster_ready.return_value = True
         self.assertTrue(rabbit_utils.leader_node_is_ready())
 
-    @mock.patch('rabbit_utils._rabbitmq_version_newer_or_equal')
+    @mock.patch('rabbit_utils.rabbitmq_version_newer_or_equal')
     def test_get_managment_port_legacy(self, mock_new_rabbitmq):
         mock_new_rabbitmq.return_value = False
         self.assertEqual(rabbit_utils.get_managment_port(), 55672)
 
-    @mock.patch('rabbit_utils._rabbitmq_version_newer_or_equal')
+    @mock.patch('rabbit_utils.rabbitmq_version_newer_or_equal')
     def test_get_managment_port(self, mock_new_rabbitmq):
         mock_new_rabbitmq.return_value = True
         self.assertEqual(rabbit_utils.get_managment_port(), 15672)

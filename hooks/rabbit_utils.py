@@ -528,7 +528,7 @@ def rabbitmqctl(action, *args):
     #
     # [1]: https://github.com/rabbitmq/rabbitmq-server/commit/3dd58ae1
     WAIT_TIMEOUT_SECONDS = 180
-    focal_or_newer = _rabbitmq_version_newer_or_equal('3.8')
+    focal_or_newer = rabbitmq_version_newer_or_equal('3.8')
 
     cmd = []
     if 'wait' in action and not focal_or_newer:
@@ -783,7 +783,7 @@ def disable_plugin(plugin):
 
 
 def get_managment_port():
-    if _rabbitmq_version_newer_or_equal('3'):
+    if rabbitmq_version_newer_or_equal('3'):
         return 15672
     else:
         return 55672
@@ -1692,7 +1692,7 @@ def nrpe_update_cluster_check(nrpe_compat, user, password):
             check_cmd='{}/check_rabbitmq_cluster.py'.format(NAGIOS_PLUGINS))
 
 
-def _rabbitmq_version_newer_or_equal(version):
+def rabbitmq_version_newer_or_equal(version):
     """Compare the installed RabbitMQ version
 
     :param version: Version to compare with

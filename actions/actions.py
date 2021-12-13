@@ -67,6 +67,7 @@ from hooks.rabbit_utils import (
     assess_status,
     list_vhosts,
     vhost_queue_info,
+    rabbitmq_version_newer_or_equal,
 )
 
 
@@ -86,9 +87,17 @@ def resume(args):
 def cluster_status(args):
     """Return the output of 'rabbitmqctl cluster_status'."""
     try:
-        clusterstat = check_output(['rabbitmqctl', 'cluster_status'],
-                                   universal_newlines=True)
-        action_set({'output': clusterstat})
+        if rabbitmq_version_newer_or_equal('3.7'):
+            clusterstat = check_output(['rabbitmqctl', 'cluster_status',
+                                        '--formatter', 'json'],
+                                       universal_newlines=True)
+
+            clusterstat = json.loads(clusterstat)
+            action_set({'output': json.dumps(clusterstat, indent=4)})
+        else:
+            clusterstat = check_output(['rabbitmqctl', 'cluster_status'],
+                                       universal_newlines=True)
+            action_set({'output': clusterstat})
     except CalledProcessError as e:
         action_set({'output': e.output})
         action_fail('Failed to run rabbitmqctl cluster_status')

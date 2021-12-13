@@ -15,6 +15,8 @@
 import mock
 from functools import wraps
 
+import json
+
 from unit_tests.test_utils import CharmTestCase
 
 with mock.patch('charmhelpers.core.hookenv.cached') as cached:
@@ -57,9 +59,34 @@ class ClusterStatusTestCase(CharmTestCase):
 
     def setUp(self):
         super(ClusterStatusTestCase, self).setUp(
-            actions, ["check_output", "action_set", "action_fail"])
+            actions, ["check_output", "action_set", "action_fail",
+                      "rabbitmq_version_newer_or_equal"])
+
+    def test_cluster_status_json(self):
+        self.rabbitmq_version_newer_or_equal.return_value = True
+        self.check_output.return_value = json.dumps({"Status":
+                                                     "Cluster status OK"})
+        actions.cluster_status([])
+        self.check_output.assert_called_once_with(['rabbitmqctl',
+                                                   'cluster_status',
+                                                   '--formatter', 'json'],
+                                                  universal_newlines=True)
+        self.action_set.assert_called()
+
+    def test_cluster_status_exception_json(self):
+        self.rabbitmq_version_newer_or_equal.return_value = True
+        self.check_output.side_effect = actions.CalledProcessError(1,
+                                                                   "Failure")
+        actions.cluster_status([])
+        self.check_output.assert_called_once_with(['rabbitmqctl',
+                                                   'cluster_status',
+                                                   '--formatter', 'json'],
+                                                  universal_newlines=True)
+        self.action_set.assert_called()
+        self.action_fail.assert_called()
 
     def test_cluster_status(self):
+        self.rabbitmq_version_newer_or_equal.return_value = False
         self.check_output.return_value = b'Cluster status OK'
         actions.cluster_status([])
         self.check_output.assert_called_once_with(['rabbitmqctl',
@@ -68,6 +95,7 @@ class ClusterStatusTestCase(CharmTestCase):
         self.action_set.assert_called()
 
     def test_cluster_status_exception(self):
+        self.rabbitmq_version_newer_or_equal.return_value = False
         self.check_output.side_effect = actions.CalledProcessError(1,
                                                                    "Failure")
         actions.cluster_status([])
