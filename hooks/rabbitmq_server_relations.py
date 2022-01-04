@@ -739,7 +739,7 @@ def config_changed(check_deferred_restarts=True):
     chown(RABBIT_DIR, rabbit.RABBIT_USER, rabbit.RABBIT_USER)
     chmod(RABBIT_DIR, 0o775)
 
-    if config('management_plugin') is True:
+    if rabbit.management_plugin_enabled():
         rabbit.enable_plugin(MAN_PLUGIN)
         open_port(rabbit.get_managment_port())
     else:
