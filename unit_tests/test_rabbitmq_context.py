@@ -110,9 +110,11 @@ class TestRabbitMQSSLContext(unittest.TestCase):
 
 class TestRabbitMQClusterContext(unittest.TestCase):
 
+    @mock.patch.object(rabbitmq_context, 'leader_get')
     @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
     @mock.patch("rabbitmq_context.config")
-    def test_context_ssl_off(self, config, mock_cmp_pkgrevno):
+    def test_context_ssl_off(self, config, mock_cmp_pkgrevno, mock_leader_get):
+        mock_leader_get.return_value = 'ignore'
         config_data = {'cluster-partition-handling': 'ignore',
                        'connection-backlog': 200,
                        'mnesia-table-loading-retry-timeout': 25000,
@@ -131,15 +133,18 @@ class TestRabbitMQClusterContext(unittest.TestCase):
             })
 
         config.assert_has_calls(
-            [mock.call("cluster-partition-handling"),
-             mock.call("mnesia-table-loading-retry-timeout"),
+            [mock.call("mnesia-table-loading-retry-timeout"),
              mock.call("mnesia-table-loading-retry-limit"),
              mock.call("connection-backlog")],
             mock.call('queue-master-locator'))
+        mock_leader_get.assert_called_once_with("cluster-partition-handling")
 
+    @mock.patch.object(rabbitmq_context, 'leader_get')
     @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
     @mock.patch("rabbitmq_context.config")
-    def test_queue_master_locator_min_masters(self, config, mock_cmp_pkgrevno):
+    def test_queue_master_locator_min_masters(self, config, mock_cmp_pkgrevno,
+                                              mock_leader_get):
+        mock_leader_get.return_value = 'ignore'
         config_data = {'cluster-partition-handling': 'ignore',
                        'connection-backlog': 200,
                        'mnesia-table-loading-retry-timeout': 25000,
@@ -157,13 +162,16 @@ class TestRabbitMQClusterContext(unittest.TestCase):
                 'queue_master_locator': 'min-masters',
             })
 
-        config.assert_has_calls([mock.call("cluster-partition-handling"),
-                                 mock.call("connection-backlog")],
+        config.assert_has_calls([mock.call("connection-backlog")],
                                 mock.call('queue-master-locator'))
+        mock_leader_get.assert_called_once_with("cluster-partition-handling")
 
+    @mock.patch.object(rabbitmq_context, 'leader_get')
     @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
     @mock.patch("rabbitmq_context.config")
-    def test_rabbit_server_3pt6(self, config, mock_cmp_pkgrevno):
+    def test_rabbit_server_3pt6(self, config, mock_cmp_pkgrevno,
+                                mock_leader_get):
+        mock_leader_get.return_value = 'ignore'
         config_data = {'cluster-partition-handling': 'ignore',
                        'connection-backlog': 200,
                        'mnesia-table-loading-retry-timeout': 25000,
@@ -181,11 +189,41 @@ class TestRabbitMQClusterContext(unittest.TestCase):
             })
 
         config.assert_has_calls(
-            [mock.call("cluster-partition-handling"),
-             mock.call("mnesia-table-loading-retry-timeout"),
+            [mock.call("mnesia-table-loading-retry-timeout"),
              mock.call("mnesia-table-loading-retry-limit"),
              mock.call("connection-backlog")])
         assert mock.call('queue-master-locator') not in config.mock_calls
+        mock_leader_get.assert_called_once_with("cluster-partition-handling")
+
+    @mock.patch.object(rabbitmq_context, 'leader_get')
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
+    @mock.patch("rabbitmq_context.config")
+    def test_partition_handling(self, config, mock_cmp_pkgrevno,
+                                mock_leader_get):
+        mock_leader_get.return_value = 'ignore'
+        config_data = {'cluster-partition-handling': 'autoheal',
+                       'connection-backlog': 200,
+                       'mnesia-table-loading-retry-timeout': 25000,
+                       'mnesia-table-loading-retry-limit': 12,
+                       'queue-master-locator': 'min-masters'}
+        config.side_effect = config_data.get
+        mock_cmp_pkgrevno.return_value = -1
+
+        self.assertEqual(
+            rabbitmq_context.RabbitMQClusterContext().__call__(), {
+                'cluster_partition_handling': "ignore",
+                'connection_backlog': 200,
+                'mnesia_table_loading_retry_timeout': 25000,
+                'mnesia_table_loading_retry_limit': 12,
+            })
+        mock_leader_get.return_value = None
+        self.assertEqual(
+            rabbitmq_context.RabbitMQClusterContext().__call__(), {
+                'cluster_partition_handling': "ignore",
+                'connection_backlog': 200,
+                'mnesia_table_loading_retry_timeout': 25000,
+                'mnesia_table_loading_retry_limit': 12,
+            })
 
 
 class TestRabbitMQEnvContext(unittest.TestCase):

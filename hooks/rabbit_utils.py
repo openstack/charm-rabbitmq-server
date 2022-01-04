@@ -103,6 +103,8 @@ from charmhelpers.fetch import (
     get_upstream_version,
 )
 
+CLUSTER_MODE_KEY = 'cluster-partition-handling'
+CLUSTER_MODE_FOR_INSTALL = 'ignore'
 
 PACKAGES = ['rabbitmq-server', 'python3-amqplib', 'lockfile-progs',
             'python3-croniter']
@@ -1094,6 +1096,11 @@ def assess_cluster_status(*args):
     if not wait_app():
         return (
             'blocked', 'Unable to determine if the rabbitmq service is up')
+
+    if leader_get(CLUSTER_MODE_KEY) != config(CLUSTER_MODE_KEY):
+        return (
+            'waiting',
+            'Not reached target {} mode'.format(CLUSTER_MODE_KEY))
 
     # we're active - so just return the 'active' state, but if 'active'
     # is returned, then it is ignored by the assess_status system.

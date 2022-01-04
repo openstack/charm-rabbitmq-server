@@ -1005,6 +1005,7 @@ class UtilsTests(CharmTestCase):
             '-p', 'test'
         )
 
+    @mock.patch.object(rabbit_utils, 'leader_get')
     @mock.patch.object(rabbit_utils, 'is_partitioned')
     @mock.patch.object(rabbit_utils, 'wait_app')
     @mock.patch.object(rabbit_utils, 'check_cluster_memberships')
@@ -1015,12 +1016,15 @@ class UtilsTests(CharmTestCase):
     def test_assess_cluster_status(
             self, rabbitmq_is_installed, is_unit_paused_set,
             is_sufficient_peers, clustered, check_cluster_memberships,
-            wait_app, is_partitioned):
+            wait_app, is_partitioned, leader_get):
         is_partitioned.return_value = False
         self.relation_ids.return_value = ["cluster:1"]
         self.related_units.return_value = ["rabbitmq-server/1"]
         _min = 3
-        self.config.return_value = _min
+        _config = {
+            'min-cluster-size': _min,
+            'cluster-partition-handling': 'autoheal'}
+        self.config.side_effect = lambda key: _config.get(key)
 
         # Paused
         is_unit_paused_set.return_value = True
@@ -1075,7 +1079,16 @@ class UtilsTests(CharmTestCase):
             "RabbitMQ is partitioned")
         self.assertEqual(_expected, rabbit_utils.assess_cluster_status())
 
+        # CLUSTER_MODE_KEY not at target
+        is_partitioned.return_value = False
+        leader_get.return_value = 'ignore'
+        _expected = (
+            "waiting",
+            "Not reached target cluster-partition-handling mode")
+        self.assertEqual(_expected, rabbit_utils.assess_cluster_status())
+
         # All OK
+        leader_get.return_value = 'autoheal'
         wait_app.return_value = True
         is_partitioned.return_value = False
         _expected = (
