@@ -40,6 +40,9 @@ import os
 import subprocess
 import sys
 
+from charmhelpers import deprecate
+from charmhelpers.core.hookenv import log
+
 
 class _container(dict):
     """Simple container for attributes."""
@@ -79,7 +82,7 @@ class Cache(object):
         apt_result = self._apt_cache_show([package])[package]
         apt_result['name'] = apt_result.pop('package')
         pkg = Package(apt_result)
-        dpkg_result = self._dpkg_list([package]).get(package, {})
+        dpkg_result = self.dpkg_list([package]).get(package, {})
         current_ver = None
         installed_version = dpkg_result.get('version')
         if installed_version:
@@ -88,8 +91,28 @@ class Cache(object):
         pkg.architecture = dpkg_result.get('architecture')
         return pkg
 
+    @deprecate("use dpkg_list() instead.", "2022-05", log=log)
     def _dpkg_list(self, packages):
+        return self.dpkg_list(packages)
+
+    def dpkg_list(self, packages):
         """Get data from system dpkg database for package.
+
+        Note that this method is also useful for querying package names
+        containing wildcards, for example
+
+            apt_cache().dpkg_list(['nvidia-vgpu-ubuntu-*'])
+
+        may return
+
+            {
+                'nvidia-vgpu-ubuntu-470': {
+                    'name': 'nvidia-vgpu-ubuntu-470',
+                    'version': '470.68',
+                    'architecture': 'amd64',
+                    'description': 'NVIDIA vGPU driver - version 470.68'
+                }
+            }
 
         :param packages: Packages to get data from
         :type packages: List[str]

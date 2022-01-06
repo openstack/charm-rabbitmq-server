@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 # deprecated aliases for backwards compatibility
 from charmhelpers.fetch.python import debug  # noqa
 from charmhelpers.fetch.python import packages  # noqa

@@ -2,6 +2,7 @@ destination: charmhelpers
 repo: https://github.com/juju/charm-helpers
 include:
     - fetch
+    - coordinator
     - core
     - cli
     - osplatform

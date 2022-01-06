@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import six
-
 from collections import OrderedDict
 
 from charmhelpers.core.hookenv import (
@@ -53,18 +51,17 @@ def harden(overrides=None):
         overrides = []
 
     def _harden_inner1(f):
-        # As this has to be py2.7 compat, we can't use nonlocal.  Use a trick
-        # to capture the dictionary that can then be updated.
-        _logged = {'done': False}
+        _logged = False
 
         def _harden_inner2(*args, **kwargs):
             # knock out hardening via a config var; normally it won't get
             # disabled.
+            nonlocal _logged
             if _DISABLE_HARDENING_FOR_UNIT_TEST:
                 return f(*args, **kwargs)
-            if not _logged['done']:
+            if not _logged:
                 log("Hardening function '%s'" % (f.__name__), level=DEBUG)
-                _logged['done'] = True
+                _logged = True
             RUN_CATALOG = OrderedDict([('os', run_os_checks),
                                        ('ssh', run_ssh_checks),
                                        ('mysql', run_mysql_checks),
@@ -74,7 +71,7 @@ def harden(overrides=None):
             if enabled:
                 modules_to_run = []
                 # modules will always be performed in the following order
-                for module, func in six.iteritems(RUN_CATALOG):
+                for module, func in RUN_CATALOG.items():
                     if module in enabled:
                         enabled.remove(module)
                         modules_to_run.append(func)

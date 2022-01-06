@@ -23,7 +23,6 @@ from subprocess import (
     check_call,
 )
 from traceback import format_exc
-from six import string_types
 from stat import (
     S_ISGID,
     S_ISUID
@@ -63,7 +62,7 @@ class BaseFileAudit(BaseAudit):
         """
         super(BaseFileAudit, self).__init__(*args, **kwargs)
         self.always_comply = always_comply
-        if isinstance(paths, string_types) or not hasattr(paths, '__iter__'):
+        if isinstance(paths, str) or not hasattr(paths, '__iter__'):
             self.paths = [paths]
         else:
             self.paths = paths

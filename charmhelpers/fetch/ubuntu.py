@@ -13,10 +13,8 @@
 # limitations under the License.
 
 from collections import OrderedDict
-import os
 import platform
 import re
-import six
 import subprocess
 import sys
 import time
@@ -361,7 +359,7 @@ def apt_install(packages, options=None, fatal=False, quiet=False):
     cmd = ['apt-get', '--assume-yes']
     cmd.extend(options)
     cmd.append('install')
-    if isinstance(packages, six.string_types):
+    if isinstance(packages, str):
         cmd.append(packages)
     else:
         cmd.extend(packages)
@@ -413,7 +411,7 @@ def apt_purge(packages, fatal=False):
     :raises: subprocess.CalledProcessError
     """
     cmd = ['apt-get', '--assume-yes', 'purge']
-    if isinstance(packages, six.string_types):
+    if isinstance(packages, str):
         cmd.append(packages)
     else:
         cmd.extend(packages)
@@ -440,7 +438,7 @@ def apt_mark(packages, mark, fatal=False):
     """Flag one or more packages using apt-mark."""
     log("Marking {} as {}".format(packages, mark))
     cmd = ['apt-mark', mark]
-    if isinstance(packages, six.string_types):
+    if isinstance(packages, str):
         cmd.append(packages)
     else:
         cmd.extend(packages)
@@ -485,10 +483,7 @@ def import_key(key):
         if ('-----BEGIN PGP PUBLIC KEY BLOCK-----' in key and
                 '-----END PGP PUBLIC KEY BLOCK-----' in key):
             log("Writing provided PGP key in the binary format", level=DEBUG)
-            if six.PY3:
-                key_bytes = key.encode('utf-8')
-            else:
-                key_bytes = key
+            key_bytes = key.encode('utf-8')
             key_name = _get_keyid_by_gpg_key(key_bytes)
             key_gpg = _dearmor_gpg_key(key_bytes)
             _write_apt_gpg_keyfile(key_name=key_name, key_material=key_gpg)
@@ -528,9 +523,8 @@ def _get_keyid_by_gpg_key(key_material):
                           stderr=subprocess.PIPE,
                           stdin=subprocess.PIPE)
     out, err = ps.communicate(input=key_material)
-    if six.PY3:
-        out = out.decode('utf-8')
-        err = err.decode('utf-8')
+    out = out.decode('utf-8')
+    err = err.decode('utf-8')
     if 'gpg: no valid OpenPGP data found.' in err:
         raise GPGKeyError('Invalid GPG key material provided')
     # from gnupg2 docs: fpr :: Fingerprint (fingerprint is in field 10)
@@ -588,8 +582,7 @@ def _dearmor_gpg_key(key_asc):
                           stdin=subprocess.PIPE)
     out, err = ps.communicate(input=key_asc)
     # no need to decode output as it is binary (invalid utf-8), only error
-    if six.PY3:
-        err = err.decode('utf-8')
+    err = err.decode('utf-8')
     if 'gpg: no valid OpenPGP data found.' in err:
         raise GPGKeyError('Invalid GPG key material. Check your network setup'
                           ' (MTU, routing, DNS) and/or proxy server settings'
@@ -693,7 +686,7 @@ def add_source(source, key=None, fail_invalid=False):
     ])
     if source is None:
         source = ''
-    for r, fn in six.iteritems(_mapping):
+    for r, fn in _mapping.items():
         m = re.match(r, source)
         if m:
             if key:
@@ -726,7 +719,7 @@ def _add_proposed():
     """
     release = get_distrib_codename()
     arch = platform.machine()
-    if arch not in six.iterkeys(ARCH_TO_PROPOSED_POCKET):
+    if arch not in ARCH_TO_PROPOSED_POCKET.keys():
         raise SourceConfigError("Arch {} not supported for (distro-)proposed"
                                 .format(arch))
     with open('/etc/apt/sources.list.d/proposed.list', 'w') as apt:
@@ -913,9 +906,8 @@ def _run_with_retries(cmd, max_retries=CMD_RETRY_COUNT, retry_exitcodes=(1,),
 
     kwargs = {}
     if quiet:
-        devnull = os.devnull if six.PY2 else subprocess.DEVNULL
-        kwargs['stdout'] = devnull
-        kwargs['stderr'] = devnull
+        kwargs['stdout'] = subprocess.DEVNULL
+        kwargs['stderr'] = subprocess.DEVNULL
 
     if not retry_message:
         retry_message = "Failed executing '{}'".format(" ".join(cmd))
@@ -957,9 +949,8 @@ def _run_apt_command(cmd, fatal=False, quiet=False):
     else:
         kwargs = {}
         if quiet:
-            devnull = os.devnull if six.PY2 else subprocess.DEVNULL
-            kwargs['stdout'] = devnull
-            kwargs['stderr'] = devnull
+            kwargs['stdout'] = subprocess.DEVNULL
+            kwargs['stderr'] = subprocess.DEVNULL
         subprocess.call(cmd, env=get_apt_dpkg_env(), **kwargs)
 
 
@@ -989,7 +980,7 @@ def get_installed_version(package):
     Version object
     """
     cache = apt_cache()
-    dpkg_result = cache._dpkg_list([package]).get(package, {})
+    dpkg_result = cache.dpkg_list([package]).get(package, {})
     current_ver = None
     installed_version = dpkg_result.get('version')
 
