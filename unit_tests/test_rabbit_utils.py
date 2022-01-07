@@ -724,7 +724,8 @@ class UtilsTests(CharmTestCase):
             assess_cluster_status, status_set, clustered,
             get_deferred_restarts, get_deferred_hooks, is_cron_schedule_valid):
         self.coordinator.Serial().requested.side_effect = lambda x: {
-            'restart': True}[x]
+            'restart': True,
+            'pkg_upgrade': False}[x]
         is_cron_schedule_valid.return_value = True
         get_deferred_hooks.return_value = []
         get_deferred_restarts.return_value = []
@@ -739,6 +740,15 @@ class UtilsTests(CharmTestCase):
         status_set.assert_called_once_with(
             'waiting',
             'Unit is ready and clustered. Waiting for restart lock(s)')
+
+        status_set.reset_mock()
+        self.coordinator.Serial().requested.side_effect = lambda x: {
+            'restart': False,
+            'pkg_upgrade': True}[x]
+        rabbit_utils.assess_status_func('test-config')()
+        status_set.assert_called_once_with(
+            'waiting',
+            'Unit is ready and clustered. Waiting for pkg_upgrade lock(s)')
 
     def test_pause_unit_helper(self):
         with mock.patch.object(rabbit_utils, '_pause_resume_helper') as prh:

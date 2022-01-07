@@ -186,8 +186,20 @@ def manage_restart(coordinate_restart=True):
         log("Restart not run")
 
 
+def coordinated_upgrade():
+    """Upgrade packages if lock is granted."""
+    serial = coordinator.Serial()
+    if serial.granted(rabbit.COORD_KEY_PKG_UPGRADE):
+        log("Package upgrade lock granted")
+        rabbit.install_or_upgrade_packages()
+        configure_rabbit_install()
+    else:
+        log("Package upgrade lock not granted")
+
+
 def check_coordinated_functions():
     """Run any functions that require coordination locks."""
+    coordinated_upgrade()
     manage_restart()
 
 
@@ -827,12 +839,34 @@ def config_changed(check_deferred_restarts=True):
     # result in an upgrade if applicable only if we change the 'source'
     # config option
     if rabbit.archive_upgrade_available():
-        # Avoid packge upgrade collissions
-        # Stopping and attempting to start rabbitmqs at the same time leads to
-        # failed restarts
-        rabbit.cluster_wait()
-        rabbit.install_or_upgrade_packages()
+        if rabbit.in_run_deferred_hooks_action():
+            log("In deferred hook action, package lock not needed")
+            rabbit.install_or_upgrade_packages()
+            configure_rabbit_install()
+        else:
+            serial = coordinator.Serial()
+            log("Requesting package lock")
+            serial.acquire(rabbit.COORD_KEY_PKG_UPGRADE)
+            # If lock is granted immediatly then upgrade will happen
+            # here, otherwise it will happen in a subsequent hook
+            # managed by the coodinator module.
+            coordinated_upgrade()
+    else:
+        configure_rabbit_install()
+        # Update cluster in case min-cluster-size has changed
+        for rid in relation_ids('cluster'):
+            for unit in related_units(rid):
+                cluster_changed(relation_id=rid, remote_unit=unit)
+        check_coordinated_functions()
 
+
+@rabbit.coordinated_restart_on_change(rabbit.restart_map(),
+                                      manage_restart)
+def configure_rabbit_install():
+    """Configure the rabbit installation environment.
+
+    NOTE: For setting up access for a client (vhosts etc) use `configure_amqp`
+    """
     if config('ssl') == 'off':
         open_port(5672)
         close_port(int(config('ssl_port')))

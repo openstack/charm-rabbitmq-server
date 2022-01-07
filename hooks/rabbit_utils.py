@@ -133,7 +133,8 @@ CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
                "{command} 2>&1 | logger -p local0.notice\n")
 
 COORD_KEY_RESTART = "restart"
-COORD_KEYS = [COORD_KEY_RESTART]
+COORD_KEY_PKG_UPGRADE = "pkg_upgrade"
+COORD_KEYS = [COORD_KEY_RESTART, COORD_KEY_PKG_UPGRADE]
 
 _named_passwd = '/var/lib/charm/{}/{}.passwd'
 _local_named_passwd = '/var/lib/charm/{}/{}.local_passwd'
