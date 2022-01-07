@@ -36,6 +36,7 @@ _add_path(_hooks)
 
 import charmhelpers.contrib.openstack.deferred_events as deferred_events
 import charmhelpers.contrib.openstack.utils as os_utils
+from charmhelpers import coordinator
 
 from charmhelpers.core.host import (
     service_start,
@@ -51,6 +52,8 @@ from charmhelpers.core.hookenv import (
     log,
     INFO,
     ERROR,
+    _run_atstart,
+    _run_atexit,
 )
 
 from charmhelpers.core.host import (
@@ -314,6 +317,10 @@ ACTIONS = {
 
 
 def main(args):
+    _ = coordinator.Serial()
+    # Manually trigger any registered atstart events as these are not
+    # triggered by actions
+    _run_atstart()
     action_name = os.path.basename(args[0])
     try:
         action = ACTIONS[action_name]
@@ -326,6 +333,7 @@ def main(args):
             action(args)
         except Exception as e:
             action_fail("Action {} failed: {}".format(action_name, str(e)))
+    _run_atexit()
 
 
 if __name__ == "__main__":

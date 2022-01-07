@@ -31,11 +31,18 @@ with mock.patch('charmhelpers.core.hookenv.cached') as cached:
         import actions
 
 
-class PauseTestCase(CharmTestCase):
+class RabbitActionTestCase(CharmTestCase):
+
+    def setUp(self, patches):
+        rmq_patches = ["_run_atstart", "_run_atexit"]
+        rmq_patches.extend(patches)
+        super().setUp(actions, rmq_patches)
+
+
+class PauseTestCase(RabbitActionTestCase):
 
     def setUp(self):
-        super(PauseTestCase, self).setUp(
-            actions, ["pause_unit_helper", "ConfigRenderer", "CONFIG_FILES"])
+        super().setUp(["pause_unit_helper", "ConfigRenderer", "CONFIG_FILES"])
         self.ConfigRenderer.return_value = 'test-config'
 
     def test_pauses_services(self):
@@ -267,10 +274,11 @@ class ForceBootTestCase(CharmTestCase):
         self.action_set.assert_called_once_with({'output': output})
 
 
-class MainTestCase(CharmTestCase):
+class MainTestCase(RabbitActionTestCase):
 
     def setUp(self):
-        super(MainTestCase, self).setUp(actions, ["action_fail"])
+        super().setUp(["action_fail", "ConfigRenderer"])
+        self.ConfigRenderer.return_value = 'test-config'
 
     def test_invokes_action(self):
         dummy_calls = []

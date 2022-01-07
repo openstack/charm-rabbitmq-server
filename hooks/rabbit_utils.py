@@ -24,6 +24,7 @@ import time
 import shutil
 import socket
 import yaml
+import functools
 
 from collections import OrderedDict, defaultdict
 
@@ -55,7 +56,6 @@ from charmhelpers.contrib.openstack.utils import (
     pause_unit,
     resume_unit,
     is_unit_paused_set,
-    pausable_restart_on_change,
 )
 
 from charmhelpers.contrib.hahelpers.cluster import (
@@ -80,6 +80,7 @@ from charmhelpers.core.hookenv import (
     is_leader,
     leader_get,
     local_unit,
+    action_name,
     charm_dir
 )
 
@@ -91,6 +92,7 @@ from charmhelpers.core.host import (
     rsync,
     lsb_release,
     CompareHostReleases,
+    path_hash,
 )
 
 from charmhelpers.contrib.peerstorage import (
@@ -107,6 +109,8 @@ from charmhelpers.fetch import (
 
 CLUSTER_MODE_KEY = 'cluster-partition-handling'
 CLUSTER_MODE_FOR_INSTALL = 'ignore'
+import charmhelpers.coordinator as coordinator
+
 
 PACKAGES = ['rabbitmq-server', 'python3-amqplib', 'lockfile-progs',
             'python3-croniter']
@@ -127,6 +131,9 @@ SCRIPTS_DIR = '/usr/local/bin'
 STATS_CRONFILE = '/etc/cron.d/rabbitmq-stats'
 CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
                "{command} 2>&1 | logger -p local0.notice\n")
+
+COORD_KEY_RESTART = "restart"
+COORD_KEYS = [COORD_KEY_RESTART]
 
 _named_passwd = '/var/lib/charm/{}/{}.passwd'
 _local_named_passwd = '/var/lib/charm/{}/{}.local_passwd'
@@ -1462,29 +1469,56 @@ def assess_cluster_status(*args):
     return 'active', "message is ignored"
 
 
-def restart_on_change(restart_map, stopstart=False):
-    """Restart services based on configuration files changing
+def in_run_deferred_hooks_action():
+    """Check if current execution context is the run-deferred-hooks action
 
-    This function is used a decorator, for example::
-
-        @restart_on_change({
-            '/etc/apache/sites-enabled/*': [ 'apache2' ]
-            })
-        def config_changed():
-            pass  # your code here
-
-    In this example the apache2 service would be
-    restarted if any file matching the pattern got changed, created
-    or removed. Standard wildcards are supported, see documentation
-    for the 'glob' module for more information.
+    :returns: Whether currently in run-deferred-hooks hook
+    :rtype: bool
     """
-    return pausable_restart_on_change(
-        restart_map,
-        stopstart=stopstart,
-        pre_restarts_wait_f=cluster_wait,
-        can_restart_now_f=deferred_events.check_and_record_restart_request,
-        post_svc_restart_f=deferred_events.process_svc_restart
-    )
+    return action_name() == 'run-deferred-hooks'
+
+
+def coordinated_restart_on_change(restart_map, restart_function):
+    """Decorator to check for file changes.
+
+    Check for file changes after decorated function runs. If a change
+    is detected then a restart request is made using the coordinator
+    module.
+
+    :param restart_map: {file: [service, ...]}
+    :type restart_map: Dict[str, List[str,]]
+    :param restart_functions: Function to be used to perform restart if
+                              lock is immediatly granted.
+    :type restart_functions: Callable
+    """
+    def wrap(f):
+        @functools.wraps(f)
+        def wrapped_f(*args, **kwargs):
+            if is_unit_paused_set():
+                return f(*args, **kwargs)
+            pre = {path: path_hash(path) for path in restart_map}
+            f(*args, **kwargs)
+            post = {path: path_hash(path) for path in restart_map}
+            if pre == post:
+                log("No restart needed")
+            else:
+                changed = [
+                    path
+                    for path in restart_map.keys()
+                    if pre[path] != post[path]]
+                log("Requesting restart. File(s) {} have changed".format(
+                    ','.join(changed)))
+                if in_run_deferred_hooks_action():
+                    log("In action context, requesting immediate restart")
+                    restart_function(coordinate_restart=False)
+                else:
+                    serial = coordinator.Serial()
+                    serial.acquire(COORD_KEY_RESTART)
+                    # Run the restart function which will check if lock is
+                    # is immediatly available.
+                    restart_function(coordinate_restart=True)
+        return wrapped_f
+    return wrap
 
 
 def assess_status(configs):
@@ -1562,6 +1596,13 @@ def assess_status_func(configs):
                 ', '.join(sorted(deferred_hooks)))
             message = "{}. {}".format(message, svc_msg)
 
+        serial = coordinator.Serial()
+        requested_locks = [k for k in COORD_KEYS if serial.requested(k)]
+        if requested_locks:
+            message = "{}. {}".format(
+                message,
+                'Waiting for {} lock(s)'.format(','.join(requested_locks)))
+            state = "waiting"
         status_set(state, message)
 
     return _assess_status_func

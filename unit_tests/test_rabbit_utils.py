@@ -19,6 +19,7 @@ from unittest import mock
 import os
 import sys
 import tempfile
+import uuid
 from datetime import timedelta
 
 from unit_tests.test_utils import CharmTestCase
@@ -48,6 +49,8 @@ TO_PATCH = [
     'is_unit_paused_set',
     'local_unit',
     'lsb_release',
+    'coordinator',
+    'path_hash',
 ]
 
 
@@ -202,6 +205,7 @@ class UtilsTests(CharmTestCase):
         self.nrpe_compat.remove_check = mock.MagicMock()
         self.lsb_release.return_value = {
             'DISTRIB_CODENAME': 'focal'}
+        self.coordinator.Serial().requested.return_value = False
 
     def tearDown(self):
         super(UtilsTests, self).tearDown()
@@ -706,6 +710,35 @@ class UtilsTests(CharmTestCase):
             'active', 'No peers, run '
             'complete-cluster-series-upgrade when the cluster has completed '
             'its upgrade')
+
+    @mock.patch.object(rabbit_utils, 'is_cron_schedule_valid')
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_hooks')
+    @mock.patch.object(rabbit_utils.deferred_events, 'get_deferred_restarts')
+    @mock.patch.object(rabbit_utils, 'clustered')
+    @mock.patch.object(rabbit_utils, 'status_set')
+    @mock.patch.object(rabbit_utils, 'assess_cluster_status')
+    @mock.patch.object(rabbit_utils, 'services')
+    @mock.patch.object(rabbit_utils, '_determine_os_workload_status')
+    def test_assess_status_func_coord_restart(
+            self, _determine_os_workload_status, services,
+            assess_cluster_status, status_set, clustered,
+            get_deferred_restarts, get_deferred_hooks, is_cron_schedule_valid):
+        self.coordinator.Serial().requested.side_effect = lambda x: {
+            'restart': True}[x]
+        is_cron_schedule_valid.return_value = True
+        get_deferred_hooks.return_value = []
+        get_deferred_restarts.return_value = []
+        self.leader_get.return_value = False
+        services.return_value = 's1'
+        _determine_os_workload_status.return_value = ('active', '')
+        clustered.return_value = True
+        rabbit_utils.assess_status_func('test-config')()
+        _determine_os_workload_status.assert_called_once_with(
+            'test-config', {}, charm_func=assess_cluster_status, services='s1',
+            ports=None)
+        status_set.assert_called_once_with(
+            'waiting',
+            'Unit is ready and clustered. Waiting for restart lock(s)')
 
     def test_pause_unit_helper(self):
         with mock.patch.object(rabbit_utils, '_pause_resume_helper') as prh:
@@ -1808,3 +1841,27 @@ class UtilsTests(CharmTestCase):
             '-p',
             'nagios-rabbitmq-server-0',
             'HA')
+
+    def test_coordinated_restart_on_change(self):
+        self.is_unit_paused_set.return_value = False
+        test_map = {'/etc/a-file.conf': ['svc1']}
+        self.path_hash.side_effect = lambda x: str(uuid.uuid4())
+        self.restarter_calls = 0
+
+        def _restarter(coordinate_restart=True):
+            self.restarter_calls = self.restarter_calls + 1
+            return
+
+        @rabbit_utils.coordinated_restart_on_change(test_map, _restarter)
+        def test_function():
+            return
+
+        # Check restarter called when file hashes have changed
+        test_function()
+        self.assertEqual(self.restarter_calls, 1)
+
+        # Check restarter not called when file hashes have not changed
+        self.path_hash.side_effect = lambda x: 'hash'
+        self.restarter_calls = 0
+        test_function()
+        self.assertEqual(self.restarter_calls, 0)

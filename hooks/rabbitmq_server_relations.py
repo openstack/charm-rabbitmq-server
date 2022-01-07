@@ -118,6 +118,10 @@ import charmhelpers.contrib.openstack.cert_utils as ch_cert_utils
 
 import charmhelpers.contrib.network.ip as ch_ip
 
+import charmhelpers.coordinator as coordinator
+
+import charmhelpers.contrib.openstack.deferred_events as deferred_events
+
 hooks = Hooks()
 
 SERVICE_NAME = os.getenv('JUJU_UNIT_NAME').split('/')[0]
@@ -141,6 +145,52 @@ def install():
     rabbit.install_or_upgrade_packages()
 
 
+def manage_restart(coordinate_restart=True):
+    """Restart service if lock is granted and update clients.
+
+    Restart services and update clients. Clients are updated in case the
+    restart has altered how clients need to connect to rabbit (port change
+    etc).
+
+    :param coordinate_restart: Whether to coordinate restarts with other
+                               nodes in cluster.
+    :type coordinate_restart: bool
+    """
+    run_restart = False
+    if coordinate_restart:
+        serial = coordinator.Serial()
+        if serial.granted(rabbit.COORD_KEY_RESTART):
+            run_restart = True
+            log("Restart lock granted")
+        else:
+            run_restart = False
+            log("Restart lock not granted")
+    else:
+        log("Forcing restart without coordination")
+        run_restart = True
+    if run_restart:
+        msg = 'Restarting {}'.format(','.join(rabbit.services()))
+        log(msg)
+        status_set('maintenance', msg)
+        for svc in rabbit.services():
+            deferred_events.deferrable_svc_restart(svc)
+        if 'rabbitmq-server' in rabbit.services():
+            rabbit.wait_app()
+        if deferred_events.is_restart_permitted():
+            # Restart may have picked up a change in how clients need to
+            # connect (TLS v Plain for example), so need to ensure
+            # clients have the latest connection information.
+            log("update_clients called from manage_restart", DEBUG)
+            update_clients()
+    else:
+        log("Restart not run")
+
+
+def check_coordinated_functions():
+    """Run any functions that require coordination locks."""
+    manage_restart()
+
+
 def validate_amqp_config_tracker(f):
     """Decorator to mark all existing tracked amqp configs as stale so that
     they are refreshed the next time the current unit leader.
@@ -162,7 +212,7 @@ def validate_amqp_config_tracker(f):
 
 def configure_amqp(username, vhost, relation_id, admin=False,
                    ttlname=None, ttlreg=None, ttl=None):
-    """Configure rabbitmq server.
+    """Configure rabbitmq server for a given client access request.
 
     This function creates user/password, vhost and sets user permissions. It
     also enabales mirroring queues if requested.
@@ -484,7 +534,7 @@ def cluster_joined(relation_id=None):
 
 
 @hooks.hook('cluster-relation-changed')
-@rabbit.restart_on_change(rabbit.restart_map())
+@rabbit.coordinated_restart_on_change(rabbit.restart_map(), manage_restart)
 def cluster_changed(relation_id=None, remote_unit=None):
     # Future travelers beware ordering is significant
     rdata = relation_get(rid=relation_id, unit=remote_unit)
@@ -521,6 +571,7 @@ def cluster_changed(relation_id=None, remote_unit=None):
         rabbit.cluster_with()
         # Local rabbit maybe clustered now so check and inform clients if
         # needed.
+        log("update_clients called from cluster_changed", DEBUG)
         update_clients()
         if is_leader():
             if (leader_get(rabbit.CLUSTER_MODE_KEY) !=
@@ -536,6 +587,7 @@ def cluster_changed(relation_id=None, remote_unit=None):
 
     if not is_leader() and is_relation_made('nrpe-external-master'):
         update_nrpe_checks()
+    check_coordinated_functions()
 
 
 @hooks.hook('stop')
@@ -589,8 +641,9 @@ def update_cookie(leaders_cookie=None):
 
 
 @hooks.hook('ha-relation-joined')
-@rabbit.restart_on_change({rabbit.ENV_CONF:
-                           rabbit.restart_map()[rabbit.ENV_CONF]})
+@rabbit.coordinated_restart_on_change({rabbit.ENV_CONF:
+                                      rabbit.restart_map()[rabbit.ENV_CONF]},
+                                      manage_restart)
 def ha_joined():
     corosync_bindiface = config('ha-bindiface')
     corosync_mcastport = config('ha-mcastport')
@@ -718,6 +771,7 @@ def upgrade_charm():
     rabbit.cluster_with()
 
     # Ensure all client connections are up to date on upgrade
+    log("update_clients called from upgrade_charm", DEBUG)
     update_clients()
 
     # BUG:#1804348
@@ -739,7 +793,7 @@ RMQ_MON_PORT = 15692
 
 
 @hooks.hook('config-changed')
-@rabbit.restart_on_change(rabbit.restart_map())
+@rabbit.coordinated_restart_on_change(rabbit.restart_map(), manage_restart)
 @harden()
 def config_changed(check_deferred_restarts=True):
     """Run config-chaged hook.
@@ -855,7 +909,7 @@ def leader_elected():
 
 
 @hooks.hook('leader-settings-changed')
-@rabbit.restart_on_change(rabbit.restart_map())
+@rabbit.coordinated_restart_on_change(rabbit.restart_map(), manage_restart)
 def leader_settings_changed():
 
     if is_unit_paused_set():
@@ -876,9 +930,11 @@ def leader_settings_changed():
         # using LE and peerstorage
         for rid in relation_ids('cluster'):
             relation_set(relation_id=rid, relation_settings={'cookie': cookie})
+    log("update_clients called from leader_settings_changed", DEBUG)
     update_clients()
     rabbit.ConfigRenderer(
         rabbit.CONFIG_FILES()).write_all()
+    check_coordinated_functions()
 
 
 def pre_install_hooks():
@@ -930,15 +986,13 @@ def certs_joined(relation_id=None):
 
 
 @hooks.hook('certificates-relation-changed')
+@rabbit.coordinated_restart_on_change(rabbit.restart_map(),
+                                      manage_restart)
 def certs_changed(relation_id=None, unit=None):
-    # Ensure Rabbit has restart before telling the clients as rabbit may
-    # take time to restart.
-    @rabbit.restart_on_change(rabbit.restart_map())
-    def render_and_restart():
-        rabbit.ConfigRenderer(
-            rabbit.CONFIG_FILES()).write_all()
-    render_and_restart()
-    update_clients()
+    # manage_restart will handle the client update if
+    # certificates have changed.
+    rabbit.ConfigRenderer(
+        rabbit.CONFIG_FILES()).write_all()
 
 
 @hooks.hook('update-status')
@@ -949,6 +1003,7 @@ def update_status():
 
 if __name__ == '__main__':
     try:
+        _ = coordinator.Serial()
         hooks.execute(sys.argv)
     except UnregisteredHookError as e:
         log('Unknown hook {} - skipping.'.format(e))
