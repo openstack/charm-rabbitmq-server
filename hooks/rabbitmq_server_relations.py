@@ -197,9 +197,24 @@ def coordinated_upgrade():
         log("Package upgrade lock not granted")
 
 
+def coordinated_cluster():
+    """Join cluster if lock is granted."""
+    serial = coordinator.Serial()
+    if serial.granted(rabbit.COORD_KEY_CLUSTER):
+        log("Cluster lock granted")
+        rabbit.join_leader()
+        log("update_clients called from coordinated_cluster", DEBUG)
+        update_clients()
+        if not is_leader() and is_relation_made('nrpe-external-master'):
+            update_nrpe_checks()
+    else:
+        log("Cluster lock not granted")
+
+
 def check_coordinated_functions():
     """Run any functions that require coordination locks."""
     coordinated_upgrade()
+    coordinated_cluster()
     manage_restart()
 
 
@@ -578,9 +593,12 @@ def cluster_changed(relation_id=None, remote_unit=None):
         return
 
     if rabbit.is_sufficient_peers():
-        # NOTE(freyes): all the nodes need to marked as 'clustered'
-        # (LP: #1691510)
-        rabbit.cluster_with()
+        rabbit.update_peer_cluster_status()
+        if not rabbit.clustered_with_leader():
+            serial = coordinator.Serial()
+            log("Requesting cluster join lock")
+            serial.acquire(rabbit.COORD_KEY_CLUSTER)
+            coordinated_cluster()
         # Local rabbit maybe clustered now so check and inform clients if
         # needed.
         log("update_clients called from cluster_changed", DEBUG)
@@ -778,9 +796,12 @@ def upgrade_charm():
         new = os.path.join('var/lib/rabbitmq', 'nagios.passwd')
         shutil.move(old, new)
 
-    # NOTE(freyes): cluster_with() will take care of marking the node as
-    # 'clustered' for existing deployments (LP: #1691510).
-    rabbit.cluster_with()
+    rabbit.update_peer_cluster_status()
+    if not rabbit.clustered_with_leader():
+        serial = coordinator.Serial()
+        log("Requesting cluster join lock")
+        serial.acquire(rabbit.COORD_KEY_CLUSTER)
+        coordinated_cluster()
 
     # Ensure all client connections are up to date on upgrade
     log("update_clients called from upgrade_charm", DEBUG)

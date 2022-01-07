@@ -460,108 +460,85 @@ class UtilsTests(CharmTestCase):
         self.assertEqual(rabbit_utils.leader_node(),
                          'rabbit@juju-devel3-machine-15')
 
-    @mock.patch('rabbit_utils.is_unit_paused_set')
-    @mock.patch('rabbit_utils.cluster_wait')
-    @mock.patch('rabbit_utils.relation_set')
-    @mock.patch('rabbit_utils.wait_app')
-    @mock.patch('rabbit_utils.subprocess.check_call')
-    @mock.patch('rabbit_utils.subprocess.check_output')
-    @mock.patch('rabbit_utils.time')
-    @mock.patch('rabbit_utils.running_nodes')
-    @mock.patch('rabbit_utils.leader_node')
-    @mock.patch('rabbit_utils.clustered')
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
     @mock.patch('rabbit_utils.cmp_pkgrevno')
-    @mock.patch('rabbit_utils.rabbitmq_version_newer_or_equal')
-    def test_cluster_with_not_clustered(
-            self, mock_new_rabbitmq, mock_cmp_pkgrevno, mock_clustered,
-            mock_leader_node, mock_running_nodes, mock_time, mock_check_output,
-            mock_check_call, mock_wait_app, mock_relation_set,
-            mock_cluster_wait, mock_is_unit_paused_set):
-        mock_new_rabbitmq.return_value = True
-        mock_is_unit_paused_set.return_value = False
-        mock_cmp_pkgrevno.return_value = True
-        mock_clustered.return_value = False
-        mock_leader_node.return_value = 'rabbit@juju-devel7-machine-11'
-        mock_running_nodes.return_value = ['rabbit@juju-devel5-machine-19']
-        rabbit_utils.cluster_with()
-        mock_cluster_wait.assert_called_once_with()
-        mock_check_output.assert_called_with([rabbit_utils.RABBITMQ_CTL,
-                                              'join_cluster',
-                                              'rabbit@juju-devel7-machine-11'],
-                                             stderr=-2)
-
-    @mock.patch('rabbit_utils.is_unit_paused_set')
-    @mock.patch('rabbit_utils.relation_get')
-    @mock.patch('rabbit_utils.relation_id')
-    @mock.patch('rabbit_utils.peer_retrieve')
-    @mock.patch('rabbit_utils.subprocess.check_call')
     @mock.patch('rabbit_utils.subprocess.check_output')
-    @mock.patch('rabbit_utils.time')
-    @mock.patch('rabbit_utils.running_nodes')
-    @mock.patch('rabbit_utils.leader_node')
-    @mock.patch('rabbit_utils.clustered')
-    @mock.patch('rabbit_utils.cmp_pkgrevno')
-    def test_cluster_with_clustered(self, mock_cmp_pkgrevno, mock_clustered,
-                                    mock_leader_node, mock_running_nodes,
-                                    mock_time, mock_check_output,
-                                    mock_check_call, mock_peer_retrieve,
-                                    mock_relation_id, mock_relation_get,
-                                    mock_is_unit_paused_set):
-        mock_is_unit_paused_set.return_value = False
-        mock_clustered.return_value = True
-        mock_peer_retrieve.return_value = 'juju-devel7-machine-11'
-        mock_leader_node.return_value = 'rabbit@juju-devel7-machine-11'
-        mock_running_nodes.return_value = ['rabbit@juju-devel5-machine-19',
-                                           'rabbit@juju-devel7-machine-11']
-        mock_relation_id.return_value = 'cluster:1'
-        rabbit_utils.cluster_with()
-        self.assertEqual(0, mock_check_output.call_count)
+    def test_join_cluster(self, mock_check_output, mock_cmp_pkgrevno,
+                          mock_rabbitmqctl):
+        mock_cmp_pkgrevno.return_value = 1
+        rabbit_utils.join_cluster('node42')
+        mock_check_output.assert_called_once_with(
+            ['/usr/sbin/rabbitmqctl', 'join_cluster', 'node42'], stderr=-2)
 
-    @mock.patch('rabbit_utils.wait_app')
-    @mock.patch('rabbit_utils.subprocess.check_call')
-    @mock.patch('rabbit_utils.subprocess.check_output')
-    @mock.patch('rabbit_utils.time')
-    @mock.patch('rabbit_utils.running_nodes')
     @mock.patch('rabbit_utils.leader_node')
-    @mock.patch('rabbit_utils.clustered')
-    @mock.patch('rabbit_utils.cmp_pkgrevno')
-    def test_cluster_with_no_leader(self, mock_cmp_pkgrevno, mock_clustered,
-                                    mock_leader_node, mock_running_nodes,
-                                    mock_time, mock_check_output,
-                                    mock_check_call, mock_wait_app):
-        mock_clustered.return_value = False
-        mock_leader_node.return_value = None
-        mock_running_nodes.return_value = ['rabbit@juju-devel5-machine-19']
-        rabbit_utils.cluster_with()
-        self.assertEqual(0, mock_check_output.call_count)
+    @mock.patch('rabbit_utils.running_nodes')
+    def test_clustered_with_leader(self, mock_running_nodes,
+                                   mock_leader_node):
+        mock_leader_node.return_value = 'node42'
+        mock_running_nodes.return_value = ['node12', 'node27']
+        self.assertFalse(rabbit_utils.clustered_with_leader())
+        mock_running_nodes.return_value = ['node12', 'node42', 'node27']
+        self.assertTrue(rabbit_utils.clustered_with_leader())
 
-    @mock.patch('rabbit_utils.is_unit_paused_set')
-    @mock.patch('time.time')
-    @mock.patch('rabbit_utils.relation_set')
     @mock.patch('rabbit_utils.get_unit_hostname')
+    @mock.patch('rabbit_utils.time.time')
+    @mock.patch.object(rabbit_utils, 'clustered_with_leader')
     @mock.patch('rabbit_utils.relation_get')
     @mock.patch('rabbit_utils.relation_id')
-    @mock.patch('rabbit_utils.running_nodes')
-    @mock.patch('rabbit_utils.peer_retrieve')
-    def test_cluster_with_single_node(self, mock_peer_retrieve,
-                                      mock_running_nodes, mock_relation_id,
-                                      mock_relation_get,
-                                      mock_get_unit_hostname,
-                                      mock_relation_set, mock_time,
-                                      mock_is_unit_paused_set):
+    @mock.patch('rabbit_utils.relation_set')
+    @mock.patch('rabbit_utils.leader_node')
+    def test_update_peer_cluster_status_clustered(self, mock_leader_node,
+                                                  mock_relation_set,
+                                                  mock_relation_id,
+                                                  mock_relation_get,
+                                                  mock_clustered_with_leader,
+                                                  mock_time,
+                                                  mock_get_unit_hostname):
+        mock_get_unit_hostname.return_value = 'host1'
+        mock_time.return_value = '12:30'
+        mock_leader_node.return_value = 'node42'
+        mock_clustered_with_leader.return_value = False
+        self.assertFalse(mock_relation_set.called)
+
+        mock_clustered_with_leader.return_value = True
+        mock_relation_id.return_value = 'rid1'
+        mock_relation_get.return_value = 'True'
+        rabbit_utils.update_peer_cluster_status()
+        self.assertFalse(mock_relation_set.called)
+
+        mock_clustered_with_leader.return_value = True
+        mock_relation_id.return_value = 'rid1'
+        mock_relation_get.return_value = None
+        rabbit_utils.update_peer_cluster_status()
+        mock_relation_set.assert_called_once_with(
+            relation_id='rid1', clustered='host1', timestamp='12:30')
+
+    @mock.patch.object(rabbit_utils, 'clustered_with_leader')
+    @mock.patch.object(rabbit_utils, 'join_cluster')
+    @mock.patch.object(rabbit_utils, 'update_peer_cluster_status')
+    @mock.patch('rabbit_utils.leader_node')
+    @mock.patch('rabbit_utils.is_unit_paused_set')
+    def test_join_leader(self, mock_is_unit_paused_set, mock_leader_node,
+                         mock_update_peer_cluster_status,
+                         mock_join_cluster,
+                         mock_clustered_with_leader):
+        mock_leader_node.return_value = 'node42'
+        mock_is_unit_paused_set.return_value = True
+        rabbit_utils.join_leader()
+        self.assertFalse(mock_join_cluster.called)
+        self.assertFalse(mock_update_peer_cluster_status.called)
+
         mock_is_unit_paused_set.return_value = False
-        mock_peer_retrieve.return_value = 'localhost'
-        mock_running_nodes.return_value = ['rabbit@localhost']
-        mock_relation_id.return_value = 'cluster:1'
-        mock_relation_get.return_value = False
-        mock_get_unit_hostname.return_value = 'localhost'
-        mock_time.return_value = 1234.1
+        mock_clustered_with_leader.return_value = True
+        rabbit_utils.join_leader()
+        self.assertFalse(mock_join_cluster.called)
+        self.assertFalse(mock_update_peer_cluster_status.called)
 
-        self.assertFalse(rabbit_utils.cluster_with())
-
-        mock_relation_set.assert_called_with(relation_id='cluster:1',
-                                             clustered='localhost',
-                                             timestamp=1234.1)
+        mock_is_unit_paused_set.return_value = False
+        mock_clustered_with_leader.return_value = False
+        rabbit_utils.join_leader()
+        mock_join_cluster.assert_called_once_with('node42')
+        mock_update_peer_cluster_status.assert_called_once_with()
 
     @mock.patch('rabbit_utils.application_version_set')
     @mock.patch('rabbit_utils.get_upstream_version')
@@ -725,6 +702,7 @@ class UtilsTests(CharmTestCase):
             get_deferred_restarts, get_deferred_hooks, is_cron_schedule_valid):
         self.coordinator.Serial().requested.side_effect = lambda x: {
             'restart': True,
+            'cluster': False,
             'pkg_upgrade': False}[x]
         is_cron_schedule_valid.return_value = True
         get_deferred_hooks.return_value = []
@@ -744,6 +722,7 @@ class UtilsTests(CharmTestCase):
         status_set.reset_mock()
         self.coordinator.Serial().requested.side_effect = lambda x: {
             'restart': False,
+            'cluster': False,
             'pkg_upgrade': True}[x]
         rabbit_utils.assess_status_func('test-config')()
         status_set.assert_called_once_with(
@@ -1055,34 +1034,6 @@ class UtilsTests(CharmTestCase):
         self.test_config.set("source", "same")
         self.test_config.set_previous("source", "same")
         self.assertFalse(rabbit_utils.archive_upgrade_available())
-
-    @mock.patch.object(rabbit_utils, 'distributed_wait')
-    def test_cluster_wait(self, mock_distributed_wait):
-        self.relation_ids.return_value = ['amqp:27']
-        self.related_units.return_value = ['unit/1', 'unit/2', 'unit/3']
-        # Default check peer relation
-        _config = {'known-wait': 30}
-        self.config.side_effect = lambda key: _config.get(key)
-        rabbit_utils.cluster_wait()
-        mock_distributed_wait.assert_called_with(modulo=4, wait=30)
-
-        # Use Min Cluster Size
-        _config = {'min-cluster-size': 5, 'known-wait': 30}
-        self.config.side_effect = lambda key: _config.get(key)
-        rabbit_utils.cluster_wait()
-        mock_distributed_wait.assert_called_with(modulo=5, wait=30)
-
-        # Override with modulo-nodes
-        _config = {'min-cluster-size': 5, 'modulo-nodes': 10, 'known-wait': 60}
-        self.config.side_effect = lambda key: _config.get(key)
-        rabbit_utils.cluster_wait()
-        mock_distributed_wait.assert_called_with(modulo=10, wait=60)
-
-        # Just modulo-nodes
-        _config = {'modulo-nodes': 10, 'known-wait': 60}
-        self.config.side_effect = lambda key: _config.get(key)
-        rabbit_utils.cluster_wait()
-        mock_distributed_wait.assert_called_with(modulo=10, wait=60)
 
     @mock.patch.object(rabbit_utils, 'get_vhost_policy')
     @mock.patch.object(rabbit_utils, 'rabbitmqctl')

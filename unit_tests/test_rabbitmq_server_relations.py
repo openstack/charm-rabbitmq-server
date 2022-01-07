@@ -42,6 +42,8 @@ TO_PATCH = [
     'is_leader',
     'relation_ids',
     'related_units',
+    'coordinator',
+    'deferred_events',
 ]
 
 
@@ -445,3 +447,35 @@ class RelationUtil(CharmTestCase):
                  description='Remove check RabbitMQ Cluster',
                  check_cmd='{}/check_rabbitmq_cluster.py'.format(
                      nagios_plugins))])
+
+    @patch.object(rabbitmq_server_relations, 'update_clients')
+    @patch.object(rabbitmq_server_relations.rabbit, 'wait_app')
+    def test_manage_restart(self, wait_app, update_clients):
+        self.coordinator.Serial().granted.return_value = True
+        rabbitmq_server_relations.manage_restart()
+        self.deferred_events.deferrable_svc_restart.assert_called_once_with(
+            'rabbitmq-server')
+        update_clients.assert_called_once_with()
+        wait_app.assert_called_once_with()
+
+        self.deferred_events.deferrable_svc_restart.reset_mock()
+        update_clients.reset_mock()
+        wait_app.reset_mock()
+
+        self.coordinator.Serial().granted.return_value = False
+        rabbitmq_server_relations.manage_restart()
+        self.assertFalse(self.deferred_events.called)
+        self.assertFalse(update_clients.called)
+        self.assertFalse(wait_app.called)
+
+        self.deferred_events.deferrable_svc_restart.reset_mock()
+        update_clients.reset_mock()
+        wait_app.reset_mock()
+
+        self.coordinator.Serial().granted.return_value = True
+        self.deferred_events.is_restart_permitted.return_value = False
+        rabbitmq_server_relations.manage_restart()
+        self.deferred_events.deferrable_svc_restart.assert_called_once_with(
+            'rabbitmq-server')
+        wait_app.assert_called_once_with()
+        self.assertFalse(update_clients.called)

@@ -58,10 +58,6 @@ from charmhelpers.contrib.openstack.utils import (
     is_unit_paused_set,
 )
 
-from charmhelpers.contrib.hahelpers.cluster import (
-    distributed_wait,
-)
-
 from charmhelpers.core.hookenv import (
     relation_id,
     relation_ids,
@@ -134,7 +130,8 @@ CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
 
 COORD_KEY_RESTART = "restart"
 COORD_KEY_PKG_UPGRADE = "pkg_upgrade"
-COORD_KEYS = [COORD_KEY_RESTART, COORD_KEY_PKG_UPGRADE]
+COORD_KEY_CLUSTER = "cluster"
+COORD_KEYS = [COORD_KEY_RESTART, COORD_KEY_PKG_UPGRADE, COORD_KEY_CLUSTER]
 
 _named_passwd = '/var/lib/charm/{}/{}.passwd'
 _local_named_passwd = '/var/lib/charm/{}/{}.local_passwd'
@@ -958,37 +955,6 @@ def wait_app():
         raise ex
 
 
-def cluster_wait():
-    ''' Wait for operations based on modulo distribution
-
-    Use the distributed_wait function to determine how long to wait before
-    running an operation like restart or cluster join. By setting modulo to
-    the exact number of nodes in the cluster we get serial operations.
-
-    Check for explicit configuration parameters for modulo distribution.
-    The config setting modulo-nodes has first priority. If modulo-nodes is not
-    set, check min-cluster-size. Finally, if neither value is set, determine
-    how many peers there are from the cluster relation.
-
-    @side_effect: distributed_wait is called which calls time.sleep()
-    @return: None
-    '''
-    wait = config('known-wait')
-    if config('modulo-nodes') is not None:
-        # modulo-nodes has first priority
-        num_nodes = config('modulo-nodes')
-    elif config('min-cluster-size'):
-        # min-cluster-size is consulted next
-        num_nodes = config('min-cluster-size')
-    else:
-        # If nothing explicit is configured, determine cluster size based on
-        # peer relations
-        num_nodes = 1
-        for rid in relation_ids('cluster'):
-            num_nodes += len(related_units(rid))
-    distributed_wait(modulo=num_nodes, wait=wait)
-
-
 def start_app():
     ''' Start the rabbitmq app and wait until it is fully started '''
     status_set('maintenance', 'Starting rabbitmq application')
@@ -1013,54 +979,61 @@ def join_cluster(node):
     log('Host clustered with %s.' % node, 'INFO')
 
 
-def cluster_with():
+def clustered_with_leader():
+    """Whether this unit is clustered with the leader
+
+    :returns: Whether this unit is clustered with the leader
+    :rtype: bool
+    """
+    node = leader_node()
+    if node:
+        return node in running_nodes()
+    status_set('waiting', 'Leader not available for clustering')
+    return False
+
+
+def update_peer_cluster_status():
+    """Inform peers that this unit is clustered if it is."""
+    # check the leader and try to cluster with it
+    if clustered_with_leader():
+        log('Host already clustered with %s.' % leader_node())
+
+        cluster_rid = relation_id('cluster', local_unit())
+        is_clustered = relation_get(attribute='clustered',
+                                    rid=cluster_rid,
+                                    unit=local_unit())
+
+        log('am I clustered?: %s' % bool(is_clustered), level=DEBUG)
+        if not is_clustered:
+            # NOTE(freyes): this node needs to be marked as clustered, it's
+            # part of the cluster according to 'rabbitmqctl cluster_status'
+            # (LP: #1691510)
+            relation_set(relation_id=cluster_rid,
+                         clustered=get_unit_hostname(),
+                         timestamp=time.time())
+
+
+def join_leader():
+    """Attempt to cluster with leader.
+
+    Attempt to cluster with leader.
+    """
     if is_unit_paused_set():
         log("Do not run cluster_with while unit is paused", "WARNING")
         return
-
-    log('Clustering with new node')
-
-    # check the leader and try to cluster with it
-    node = leader_node()
-    if node:
-        if node in running_nodes():
-            log('Host already clustered with %s.' % node)
-
-            cluster_rid = relation_id('cluster', local_unit())
-            is_clustered = relation_get(attribute='clustered',
-                                        rid=cluster_rid,
-                                        unit=local_unit())
-
-            log('am I clustered?: %s' % bool(is_clustered), level=DEBUG)
-            if not is_clustered:
-                # NOTE(freyes): this node needs to be marked as clustered, it's
-                # part of the cluster according to 'rabbitmqctl cluster_status'
-                # (LP: #1691510)
-                relation_set(relation_id=cluster_rid,
-                             clustered=get_unit_hostname(),
-                             timestamp=time.time())
-
-            return False
-        # NOTE: The primary problem rabbitmq has clustering is when
-        # more than one node attempts to cluster at the same time.
-        # The asynchronous nature of hook firing nearly guarantees
-        # this. Using cluster_wait based on modulo_distribution
-        cluster_wait()
+    if clustered_with_leader():
+        log("Unit already clustered with leader", "DEBUG")
+    else:
+        log("Attempting to cluster with leader", "INFO")
         try:
+            node = leader_node()
             join_cluster(node)
             # NOTE: toggle the cluster relation to ensure that any peers
             #       already clustered re-assess status correctly
-            relation_set(clustered=get_unit_hostname(), timestamp=time.time())
-            return True
+            update_peer_cluster_status()
         except subprocess.CalledProcessError as e:
             status_set('blocked', 'Failed to cluster with %s. Exception: %s'
                        % (node, e))
-            start_app()
-    else:
-        status_set('waiting', 'Leader not available for clustering')
-        return False
-
-    return False
 
 
 def check_cluster_memberships():
