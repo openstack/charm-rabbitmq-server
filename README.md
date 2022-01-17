@@ -49,6 +49,24 @@ an application that supports the rabbitmq interface. For instance:
 
     juju add-relation rabbitmq-server:amqp nova-cloud-controller:amqp
 
+## Monitoring
+
+To collect RabbitMQ metrics, add a relation between rabbitmq-server and
+an application that supports the `scrape` interface. For instance:
+
+    juju add-relation rabbitmq-server:scrape prometheus:scrape
+
+> **Note:** The scrape relation is only supported when the RabbitMQ version is >= 3.8.
+
+The charm can be related to a dashboard charm like grafana to view visualization metrics:
+
+    juju add-relation rabbitmq-server:dashboards grafana:dashboards
+
+To get alerts of RabbitMQ split-brain events, add a relation between rabbitmq-server and
+an application that supports the `prometheus-rules` interface. For instance:
+
+    juju add-relation rabbitmq-server:prometheus-rules prometheus:prometheus-rules
+
 ## High availability
 
 When more than one unit is deployed the charm will bring up a native RabbitMQ
