@@ -10,10 +10,7 @@ tags:
 - amqp
 - misc
 series:
-- bionic
 - focal
-- groovy
-- hirsute
 - impish
 provides:
   amqp:
