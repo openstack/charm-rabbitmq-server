@@ -151,6 +151,47 @@ RABBITMQCTL_LIST_VHOSTS_382 = (b'[{"name": "/"},{"name": "landscape"},'
                                b'{"name": "openstack"}]')
 
 
+RABBITMQCTL_USER_TAGS = b"""[
+{"user":"testuser1","tags":[]}
+,{"user":"nagios-rabbitmq-server-0","tags":["monitoring"]}
+,{"user":"cinder","tags":[""]}
+,{"user":"nagios-rabbitmq-server-2","tags":["monitoring"]}
+,{"user":"nagios-rabbitmq-server-1","tags":["monitoring"]}
+,{"user":"guest","tags":["monitoring"]}
+,{"user":"guest","tags":["administrator"]}]"""
+
+RABBITMQCTL_LIST_PERMS = b"""
+[
+{"vhost":"nagios-rabbitmq-server-0","configure":".*","write":".*","read":".*"}
+]"""
+
+RABBITMQCTL_LIST_PLUGINS = b"""
+{"format":"normal","plugins":[
+{"enabled":"not_enabled","name":"rabbitmq_amqp1_0","running":false,
+ "running_version":null,"version":[51,46,56,46,50]},
+{"enabled":"enabled","name":"rabbitmq_event_exchange","running":false,
+ "running_version":null,"version":[51,46,56,46,50]},
+{"enabled":"implicit","name":"rabbitmq_auth_backend_cache","running":false,
+ "running_version":null,"version":[51,46,56,46,50]}],"status":"node_down"}
+"""
+
+RABBITMQCTL_LIST_POLICIES = b"""[
+{"vhost":"nagios-rabbitmq-server-0",
+"name":"HA","pattern":"^(?!amq\\\\.).*",
+"apply-to":"all",
+"definition":"{\\"ha-mode\\":\\"all\\",\\"ha-sync-mode\\":\\"automatic\\"}",
+"priority":0}
+]"""
+
+TEST_HA_POLICY = {
+    'apply-to': 'all',
+    'definition': '{"ha-mode":"all","ha-sync-mode":"automatic"}',
+    'name': 'HA',
+    'pattern': '^(?!amq\\.).*',
+    'priority': 0,
+    'vhost': 'nagios-rabbitmq-server-0'}
+
+
 class UtilsTests(CharmTestCase):
     def setUp(self):
         super(UtilsTests, self).setUp(rabbit_utils,
@@ -1000,31 +1041,37 @@ class UtilsTests(CharmTestCase):
         rabbit_utils.cluster_wait()
         mock_distributed_wait.assert_called_with(modulo=10, wait=60)
 
+    @mock.patch.object(rabbit_utils, 'get_vhost_policy')
     @mock.patch.object(rabbit_utils, 'rabbitmqctl')
-    def test_configure_notification_ttl(self, rabbitmqctl):
+    def test_configure_notification_ttl(self, mock_rabbitmqctl,
+                                        mock_get_vhost_policy):
+        mock_get_vhost_policy.return_value = []
         rabbit_utils.configure_notification_ttl('test',
                                                 23000)
-        rabbitmqctl.assert_called_once_with(
+        mock_rabbitmqctl.assert_called_once_with(
             'set_policy',
-            'TTL', '^(versioned_)?notifications.*',
-            '{"message-ttl":23000}',
+            '-p', 'test',
             '--priority', '1',
             '--apply-to', 'queues',
-            '-p', 'test'
+            'TTL', '^(versioned_)?notifications.*',
+            '{"message-ttl":23000}'
         )
 
+    @mock.patch.object(rabbit_utils, 'get_vhost_policy')
     @mock.patch.object(rabbit_utils, 'rabbitmqctl')
-    def test_configure_ttl(self, rabbitmqctl):
+    def test_configure_ttl(self, mock_rabbitmqctl,
+                           mock_get_vhost_policy):
+        mock_get_vhost_policy.return_value = []
         rabbit_utils.configure_ttl('test', ttlname='heat_expiry',
                                    ttlreg='heat-engine-listener|engine_worker',
                                    ttl=23000)
-        rabbitmqctl.assert_called_once_with(
+        mock_rabbitmqctl.assert_called_once_with(
             'set_policy',
-            'heat_expiry', '"heat-engine-listener|engine_worker"',
-            '{"expires":23000}',
+            '-p', 'test',
             '--priority', '1',
             '--apply-to', 'queues',
-            '-p', 'test'
+            'heat_expiry', '"heat-engine-listener|engine_worker"',
+            '{"expires":23000}'
         )
 
     @mock.patch.object(rabbit_utils, 'leader_get')
@@ -1417,6 +1464,7 @@ class UtilsTests(CharmTestCase):
         # default config value should show 10 minutes
         max_age = rabbit_utils.get_max_stats_file_age()
         self.assertEqual(600, max_age)
+
         # changing to run every 15 minutes shows 30 minutes
         self.test_config.set('stats_cron_schedule', '*/15 * * * *')
         max_age = rabbit_utils.get_max_stats_file_age()
@@ -1497,3 +1545,266 @@ class UtilsTests(CharmTestCase):
             'DISTRIB_CODENAME': 'xenial'}
         self.test_config.set('management_plugin', True)
         self.assertFalse(rabbit_utils.management_plugin_enabled())
+
+    @mock.patch.object(rabbit_utils, 'subprocess')
+    @mock.patch.object(rabbit_utils, 'rabbit_supports_json')
+    def test_list_user_tags(self, mock_rabbit_supports_json, mock_subprocess):
+        mock_rabbit_supports_json.return_value = False
+        with self.assertRaises(NotImplementedError):
+            rabbit_utils.list_user_tags('usera')
+        mock_rabbit_supports_json.return_value = True
+        mock_subprocess.check_output.return_value = RABBITMQCTL_USER_TAGS
+        self.assertEqual(
+            rabbit_utils.list_user_tags('guest'),
+            ['administrator', 'monitoring'])
+
+    @mock.patch.object(rabbit_utils, 'subprocess')
+    @mock.patch.object(rabbit_utils, 'rabbit_supports_json')
+    def test_list_user_permissions(self, mock_rabbit_supports_json,
+                                   mock_subprocess):
+        mock_rabbit_supports_json.return_value = False
+        with self.assertRaises(NotImplementedError):
+            rabbit_utils.list_user_permissions('usera')
+        mock_rabbit_supports_json.return_value = True
+        mock_subprocess.check_output.return_value = RABBITMQCTL_LIST_PERMS
+        self.assertEqual(
+            rabbit_utils.list_user_permissions('nagios-rabbitmq-server-0'),
+            [
+                {
+                    'configure': '.*',
+                    'read': '.*',
+                    'vhost': 'nagios-rabbitmq-server-0',
+                    'write': '.*'}])
+
+    @mock.patch.object(rabbit_utils, 'list_user_permissions')
+    @mock.patch.object(rabbit_utils, 'rabbit_supports_json')
+    def test_list_user_vhost_permissions(self, mock_rabbit_supports_json,
+                                         mock_list_user_permissions):
+        mock_rabbit_supports_json.return_value = True
+        mock_list_user_permissions.return_value = [
+            {
+                'vhost': 'nagios-rabbitmq-server-0',
+                'configure': '.*',
+                'write': '.*',
+                'read': '.*'}]
+        self.assertEqual(
+            rabbit_utils.list_user_vhost_permissions(
+                'nagios-rabbitmq-server-0',
+                'nagios-rabbitmq-server-0'),
+            [
+                {
+                    'configure': '.*',
+                    'read': '.*',
+                    'write': '.*'}])
+
+    @mock.patch.object(rabbit_utils, 'get_plugin_manager')
+    @mock.patch.object(rabbit_utils, 'subprocess')
+    @mock.patch.object(rabbit_utils, 'rabbit_supports_json')
+    def test_list_enabled_plugins(self, mock_rabbit_supports_json,
+                                  mock_subprocess,
+                                  mock_get_plugin_manager):
+        mock_rabbit_supports_json.return_value = False
+        with self.assertRaises(NotImplementedError):
+            rabbit_utils.list_enabled_plugins()
+        mock_rabbit_supports_json.return_value = True
+        mock_subprocess.check_output.return_value = RABBITMQCTL_LIST_PLUGINS
+        self.assertEqual(
+            rabbit_utils.list_enabled_plugins(),
+            ['rabbitmq_auth_backend_cache', 'rabbitmq_event_exchange'])
+
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
+    @mock.patch.object(rabbit_utils, 'list_user_tags')
+    def test_apply_tags(self, mock_list_user_tags, mock_rabbitmqctl):
+        mock_list_user_tags.return_value = ['admin']
+        rabbit_utils.apply_tags('user1', ['admin'])
+        self.assertFalse(mock_rabbitmqctl.called)
+        rabbit_utils.apply_tags('user1', ['monitor'])
+        mock_rabbitmqctl.assert_called_once_with(
+            'set_user_tags', 'user1', 'monitor')
+        mock_rabbitmqctl.reset_mock()
+        mock_list_user_tags.side_effect = NotImplementedError
+        rabbit_utils.apply_tags('user1', ['monitor'])
+        mock_rabbitmqctl.assert_called_once_with(
+            'set_user_tags', 'user1', 'monitor')
+
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
+    @mock.patch.object(rabbit_utils, 'list_user_vhost_permissions')
+    def test_grant_permissions(self, mock_list_user_vhost_permissions,
+                               mock_rabbitmqctl):
+        # Check perms are set if multiple sets of perms are returned
+        mock_list_user_vhost_permissions.return_value = [
+            {
+                'configure': '.*',
+                'read': '.*',
+                'write': '.*'},
+            {
+                'configure': '.*',
+                'read': '.*',
+                'write': '.*'}]
+        rabbit_utils.grant_permissions('user1', 'vhost1')
+        mock_rabbitmqctl.assert_called_once_with(
+            'set_permissions', '-p', 'vhost1', 'user1', '.*', '.*', '.*')
+
+        # Check perms are not set if existing perms match
+        mock_rabbitmqctl.reset_mock()
+        mock_list_user_vhost_permissions.return_value = [
+            {
+                'configure': '.*',
+                'read': '.*',
+                'write': '.*'}]
+        rabbit_utils.grant_permissions('user1', 'vhost1')
+        self.assertFalse(mock_rabbitmqctl.called)
+
+        # Check perms are set if existing perms do not match
+        mock_rabbitmqctl.reset_mock()
+        mock_list_user_vhost_permissions.return_value = [
+            {
+                'configure': '.*',
+                'read': '.*',
+                'write': 'r'}]
+        rabbit_utils.grant_permissions('user1', 'vhost1')
+        mock_list_user_vhost_permissions.return_value = [
+            {
+                'configure': '.*',
+                'read': '.*',
+                'write': '.*'}]
+
+        # Check perms are set if no existing perms are found
+        mock_rabbitmqctl.reset_mock()
+        mock_list_user_vhost_permissions.return_value = []
+        rabbit_utils.grant_permissions('user1', 'vhost1')
+        mock_list_user_vhost_permissions.return_value = [
+            {
+                'configure': '.*',
+                'read': '.*',
+                'write': '.*'}]
+
+        # Check perms are set if get_user_vhost_permissions throws
+        # NotImplementedError
+        mock_rabbitmqctl.reset_mock()
+        mock_list_user_vhost_permissions.side_effect = NotImplementedError
+        rabbit_utils.grant_permissions('user1', 'vhost1')
+        mock_list_user_vhost_permissions.return_value = [
+            {
+                'configure': '.*',
+                'read': '.*',
+                'write': '.*'}]
+
+    @mock.patch.object(rabbit_utils, 'glob')
+    def test_get_plugin_manager(self, mock_glob):
+        mock_glob.glob.return_value = [
+            '/sbin/rabbitmq-plugins',
+            '/bin/rabbitmq-plugins']
+        self.assertEqual(
+            rabbit_utils.get_plugin_manager(),
+            '/sbin/rabbitmq-plugins')
+
+    @mock.patch.object(rabbit_utils, 'list_enabled_plugins')
+    @mock.patch.object(rabbit_utils, '_manage_plugin')
+    def test_enable_plugin(self, mock_manage_plugin,
+                           mock_list_enabled_plugins):
+        mock_list_enabled_plugins.return_value = ['unicorn']
+        rabbit_utils.enable_plugin('unicorn')
+        self.assertFalse(mock_manage_plugin.called)
+
+        rabbit_utils.enable_plugin('grapefruit')
+        mock_manage_plugin.assert_called_once_with('grapefruit', 'enable')
+
+    @mock.patch.object(rabbit_utils, 'list_enabled_plugins')
+    @mock.patch.object(rabbit_utils, '_manage_plugin')
+    def test_disable_plugin(self, mock_manage_plugin,
+                            mock_list_enabled_plugins):
+        mock_list_enabled_plugins.return_value = ['unicorn']
+        rabbit_utils.disable_plugin('grapefruit')
+        self.assertFalse(mock_manage_plugin.called)
+
+        rabbit_utils.disable_plugin('unicorn')
+        mock_manage_plugin.assert_called_once_with('unicorn', 'disable')
+
+    @mock.patch.object(rabbit_utils, 'rabbit_supports_json')
+    @mock.patch.object(rabbit_utils.subprocess, 'check_output')
+    def test_list_policies(self, mock_check_output, mock_rabbit_supports_json):
+        mock_rabbit_supports_json.return_value = True
+        mock_check_output.return_value = RABBITMQCTL_LIST_POLICIES
+        self.assertEqual(
+            rabbit_utils.list_policies('nagios-rabbitmq-server-0'),
+            [TEST_HA_POLICY])
+
+    @mock.patch.object(rabbit_utils, 'list_policies')
+    def test_get_vhost_policy(self, mock_list_policies):
+        mock_list_policies.return_value = [TEST_HA_POLICY]
+        self.assertEqual(
+            rabbit_utils.get_vhost_policy('nagios-rabbitmq-server-0', 'HA'),
+            TEST_HA_POLICY)
+        self.assertIsNone(
+            rabbit_utils.get_vhost_policy('nagios-rabbitmq-server-0', 'FAKE'))
+        mock_list_policies.return_value = []
+        self.assertIsNone(
+            rabbit_utils.get_vhost_policy('nagios-rabbitmq-server-0', 'HA'))
+
+    @mock.patch.object(rabbit_utils, 'get_vhost_policy')
+    def test_compare_policy(self, mock_get_vhost_policy):
+        mock_get_vhost_policy.return_value = TEST_HA_POLICY
+        self.assertTrue(
+            rabbit_utils.compare_policy(
+                'nagios-rabbitmq-server-0',
+                'HA',
+                '^(?!amq\\.).*',
+                '{"ha-mode":"all","ha-sync-mode":"automatic"}',
+                priority=0,
+                apply_to='all'))
+        # Check defaults
+        self.assertTrue(
+            rabbit_utils.compare_policy(
+                'nagios-rabbitmq-server-0',
+                'HA',
+                '^(?!amq\\.).*',
+                '{"ha-mode":"all","ha-sync-mode":"automatic"}'))
+        self.assertFalse(
+            rabbit_utils.compare_policy(
+                'nagios-rabbitmq-server-0',
+                'HA',
+                '^(?!foo\\.).*',
+                '{"ha-mode":"all","ha-sync-mode":"automatic"}'))
+
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
+    @mock.patch.object(rabbit_utils, 'get_vhost_policy')
+    def test_set_policy(self, mock_get_vhost_policy, mock_rabbitmqctl):
+        mock_get_vhost_policy.return_value = TEST_HA_POLICY
+        rabbit_utils.set_policy(
+            'nagios-rabbitmq-server-0',
+            'HA',
+            '^(?!amq\\.).*',
+            '{"ha-mode":"all","ha-sync-mode":"automatic"}',
+            priority=0,
+            apply_to='all')
+        # set_policy not called for existing policy.
+        self.assertFalse(mock_rabbitmqctl.called)
+        rabbit_utils.set_policy(
+            'nagios-rabbitmq-server-0',
+            'HA',
+            '^(?!foo\\.).*',
+            '{"ha-mode":"all","ha-sync-mode":"automatic"}',
+            priority=0,
+            apply_to='all')
+        mock_rabbitmqctl.assert_called_once_with(
+            'set_policy',
+            '-p', 'nagios-rabbitmq-server-0',
+            '--apply-to', 'all',
+            'HA',
+            '^(?!foo\\.).*',
+            '{"ha-mode":"all","ha-sync-mode":"automatic"}')
+
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
+    @mock.patch.object(rabbit_utils, 'get_vhost_policy')
+    def test_clear_policy(self, mock_get_vhost_policy, mock_rabbitmqctl):
+        mock_get_vhost_policy.return_value = None
+        rabbit_utils.clear_policy('nagios-rabbitmq-server-0', 'HA')
+        self.assertFalse(mock_rabbitmqctl.called)
+        mock_get_vhost_policy.return_value = TEST_HA_POLICY
+        rabbit_utils.clear_policy('nagios-rabbitmq-server-0', 'HA')
+        mock_rabbitmqctl.assert_called_once_with(
+            'clear_policy',
+            '-p',
+            'nagios-rabbitmq-server-0',
+            'HA')
