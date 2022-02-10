@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import six
 
 from charmhelpers.core.hookenv import (
     log,
@@ -27,10 +26,7 @@ except ImportError:
     from charmhelpers.fetch import apt_install
     from charmhelpers.fetch import apt_update
     apt_update(fatal=True)
-    if six.PY2:
-        apt_install('python-jinja2', fatal=True)
-    else:
-        apt_install('python3-jinja2', fatal=True)
+    apt_install('python3-jinja2', fatal=True)
     from jinja2 import FileSystemLoader, Environment
 
 

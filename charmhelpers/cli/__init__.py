@@ -16,9 +16,6 @@ import inspect
 import argparse
 import sys
 
-import six
-from six.moves import zip
-
 import charmhelpers.core.unitdata
 
 
@@ -149,10 +146,7 @@ class CommandLine(object):
     def run(self):
         "Run cli, processing arguments and executing subcommands."
         arguments = self.argument_parser.parse_args()
-        if six.PY2:
-            argspec = inspect.getargspec(arguments.func)
-        else:
-            argspec = inspect.getfullargspec(arguments.func)
+        argspec = inspect.getfullargspec(arguments.func)
         vargs = []
         for arg in argspec.args:
             vargs.append(getattr(arguments, arg))
@@ -177,10 +171,7 @@ def describe_arguments(func):
     Analyze a function's signature and return a data structure suitable for
     passing in as arguments to an argparse parser's add_argument() method."""
 
-    if six.PY2:
-        argspec = inspect.getargspec(func)
-    else:
-        argspec = inspect.getfullargspec(func)
+    argspec = inspect.getfullargspec(func)
     # we should probably raise an exception somewhere if func includes **kwargs
     if argspec.defaults:
         positional_args = argspec.args[:-len(argspec.defaults)]

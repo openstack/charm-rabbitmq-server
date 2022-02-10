@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from six import string_types
-
 from charmhelpers.contrib.hardening.audits.file import TemplatedFile
 from charmhelpers.contrib.hardening.host import TEMPLATES_DIR
 from charmhelpers.contrib.hardening import utils
@@ -41,7 +39,7 @@ class LoginContext(object):
         # a string assume it to be octal and turn it into an octal
         # string.
         umask = settings['environment']['umask']
-        if not isinstance(umask, string_types):
+        if not isinstance(umask, str):
             umask = '%s' % oct(umask)
 
         ctxt = {

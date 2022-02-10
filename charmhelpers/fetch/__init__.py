@@ -20,11 +20,7 @@ from charmhelpers.core.hookenv import (
     log,
 )
 
-import six
-if six.PY3:
-    from urllib.parse import urlparse, urlunparse
-else:
-    from urlparse import urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse
 
 
 # The order of this list is very important. Handlers should be listed in from
@@ -134,14 +130,14 @@ def configure_sources(update=False,
     sources = safe_load((config(sources_var) or '').strip()) or []
     keys = safe_load((config(keys_var) or '').strip()) or None
 
-    if isinstance(sources, six.string_types):
+    if isinstance(sources, str):
         sources = [sources]
 
     if keys is None:
         for source in sources:
             add_source(source, None)
     else:
-        if isinstance(keys, six.string_types):
+        if isinstance(keys, str):
             keys = [keys]
 
         if len(sources) != len(keys):

@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import six
 import re
 
 TRUTHY_STRINGS = {'y', 'yes', 'true', 't', 'on'}
@@ -27,8 +26,8 @@ def bool_from_string(value, truthy_strings=TRUTHY_STRINGS, falsey_strings=FALSEY
 
     Returns True if value translates to True otherwise False.
     """
-    if isinstance(value, six.string_types):
-        value = six.text_type(value)
+    if isinstance(value, str):
+        value = str(value)
     else:
         msg = "Unable to interpret non-string value '%s' as boolean" % (value)
         raise ValueError(msg)
@@ -61,8 +60,8 @@ def bytes_from_string(value):
         'P': 5,
         'PB': 5,
     }
-    if isinstance(value, six.string_types):
-        value = six.text_type(value)
+    if isinstance(value, str):
+        value = str(value)
     else:
         msg = "Unable to interpret non-string value '%s' as bytes" % (value)
         raise ValueError(msg)

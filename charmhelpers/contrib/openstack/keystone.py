@@ -1,4 +1,3 @@
-#!/usr/bin/python
 #
 # Copyright 2017 Canonical Ltd
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import six
 from charmhelpers.fetch import apt_install
 from charmhelpers.contrib.openstack.context import IdentityServiceContext
 from charmhelpers.core.hookenv import (
@@ -117,10 +115,7 @@ class KeystoneManager2(KeystoneManager):
             from keystoneclient.auth.identity import v2
             from keystoneclient import session
         except ImportError:
-            if six.PY2:
-                apt_install(["python-keystoneclient"], fatal=True)
-            else:
-                apt_install(["python3-keystoneclient"], fatal=True)
+            apt_install(["python3-keystoneclient"], fatal=True)
 
             from keystoneclient.v2_0 import client
             from keystoneclient.auth.identity import v2
@@ -151,10 +146,7 @@ class KeystoneManager3(KeystoneManager):
             from keystoneclient import session
             from keystoneclient.auth.identity import v3
         except ImportError:
-            if six.PY2:
-                apt_install(["python-keystoneclient"], fatal=True)
-            else:
-                apt_install(["python3-keystoneclient"], fatal=True)
+            apt_install(["python3-keystoneclient"], fatal=True)
 
             from keystoneclient.v3 import client
             from keystoneclient.auth import token_endpoint

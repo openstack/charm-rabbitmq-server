@@ -31,7 +31,6 @@ import subprocess
 import hashlib
 import functools
 import itertools
-import six
 
 from contextlib import contextmanager
 from collections import OrderedDict, defaultdict
@@ -263,7 +262,7 @@ def service(action, service_name, **kwargs):
         cmd = ['systemctl', action, service_name]
     else:
         cmd = ['service', service_name, action]
-        for key, value in six.iteritems(kwargs):
+        for key, value in kwargs.items():
             parameter = '%s=%s' % (key, value)
             cmd.append(parameter)
     return subprocess.call(cmd) == 0
@@ -289,7 +288,7 @@ def service_running(service_name, **kwargs):
         if os.path.exists(_UPSTART_CONF.format(service_name)):
             try:
                 cmd = ['status', service_name]
-                for key, value in six.iteritems(kwargs):
+                for key, value in kwargs.items():
                     parameter = '%s=%s' % (key, value)
                     cmd.append(parameter)
                 output = subprocess.check_output(
@@ -564,7 +563,7 @@ def write_file(path, content, owner='root', group='root', perms=0o444):
         with open(path, 'wb') as target:
             os.fchown(target.fileno(), uid, gid)
             os.fchmod(target.fileno(), perms)
-            if six.PY3 and isinstance(content, six.string_types):
+            if isinstance(content, str):
                 content = content.encode('UTF-8')
             target.write(content)
         return
@@ -967,7 +966,7 @@ def get_bond_master(interface):
 
 def list_nics(nic_type=None):
     """Return a list of nics of given type(s)"""
-    if isinstance(nic_type, six.string_types):
+    if isinstance(nic_type, str):
         int_types = [nic_type]
     else:
         int_types = nic_type
@@ -1081,8 +1080,7 @@ def chownr(path, owner, group, follow_links=True, chowntopdir=False):
             try:
                 chown(full, uid, gid)
             except (IOError, OSError) as e:
-                # Intended to ignore "file not found". Catching both to be
-                # compatible with both Python 2.7 and 3.x.
+                # Intended to ignore "file not found".
                 if e.errno == errno.ENOENT:
                     pass
 

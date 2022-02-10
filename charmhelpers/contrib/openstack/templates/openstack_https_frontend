@@ -22,6 +22,8 @@ Listen {{ ext_port }}
     ProxyPassReverse / http://localhost:{{ int }}/
     ProxyPreserveHost on
     RequestHeader set X-Forwarded-Proto "https"
+    KeepAliveTimeout 75
+    MaxKeepAliveRequests 1000
 </VirtualHost>
 {% endfor -%}
 <Proxy *>

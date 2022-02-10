@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import six
 import subprocess
 
 from charmhelpers.core.hookenv import (
@@ -82,6 +81,6 @@ class MySQLConfContext(object):
     """
     def __call__(self):
         settings = utils.get_settings('mysql')
-        # Translate for python3
-        return {'mysql_settings':
-                [(k, v) for k, v in six.iteritems(settings['security'])]}
+        return {
+            'mysql_settings': [(k, v) for k, v in settings['security'].items()]
+        }

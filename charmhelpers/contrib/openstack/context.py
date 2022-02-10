@@ -30,8 +30,6 @@ from subprocess import (
     check_output,
     CalledProcessError)
 
-import six
-
 import charmhelpers.contrib.storage.linux.ceph as ch_ceph
 
 from charmhelpers.contrib.openstack.audits.openstack_security_guide import (
@@ -130,10 +128,7 @@ except ImportError:
 try:
     import psutil
 except ImportError:
-    if six.PY2:
-        apt_install('python-psutil', fatal=True)
-    else:
-        apt_install('python3-psutil', fatal=True)
+    apt_install('python3-psutil', fatal=True)
     import psutil
 
 CA_CERT_PATH = '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
@@ -150,10 +145,7 @@ def ensure_packages(packages):
 
 
 def context_complete(ctxt):
-    _missing = []
-    for k, v in six.iteritems(ctxt):
-        if v is None or v == '':
-            _missing.append(k)
+    _missing = [k for k, v in ctxt.items() if v is None or v == '']
 
     if _missing:
         log('Missing required data: %s' % ' '.join(_missing), level=INFO)
@@ -180,7 +172,7 @@ class OSContextGenerator(object):
         # Fresh start
         self.complete = False
         self.missing_data = []
-        for k, v in six.iteritems(ctxt):
+        for k, v in ctxt.items():
             if v is None or v == '':
                 if k not in self.missing_data:
                     self.missing_data.append(k)
@@ -1111,10 +1103,14 @@ class ApacheSSLContext(OSContextGenerator):
             endpoint = resolve_address(net_type)
             addresses.append((addr, endpoint))
 
-        return sorted(set(addresses))
+        # Log the set of addresses to have a trail log and capture if tuples
+        # change over time in the same unit (LP: #1952414).
+        sorted_addresses = sorted(set(addresses))
+        log('get_network_addresses: {}'.format(sorted_addresses))
+        return sorted_addresses
 
     def __call__(self):
-        if isinstance(self.external_ports, six.string_types):
+        if isinstance(self.external_ports, str):
             self.external_ports = [self.external_ports]
 
         if not self.external_ports or not https():
@@ -1531,9 +1527,9 @@ class SubordinateConfigContext(OSContextGenerator):
                             continue
 
                         sub_config = sub_config[self.config_file]
-                        for k, v in six.iteritems(sub_config):
+                        for k, v in sub_config.items():
                             if k == 'sections':
-                                for section, config_list in six.iteritems(v):
+                                for section, config_list in v.items():
                                     log("adding section '%s'" % (section),
                                         level=DEBUG)
                                     if ctxt[k].get(section):
@@ -1887,8 +1883,11 @@ class DataPortContext(NeutronPortContext):
             normalized.update({port: port for port in resolved
                                if port in ports})
             if resolved:
-                return {normalized[port]: bridge for port, bridge in
-                        six.iteritems(portmap) if port in normalized.keys()}
+                return {
+                    normalized[port]: bridge
+                    for port, bridge in portmap.items()
+                    if port in normalized.keys()
+                }
 
         return None
 
@@ -2291,15 +2290,10 @@ class HostInfoContext(OSContextGenerator):
         name = name or socket.gethostname()
         fqdn = ''
 
-        if six.PY2:
-            exc = socket.error
-        else:
-            exc = OSError
-
         try:
             addrs = socket.getaddrinfo(
                 name, None, 0, socket.SOCK_DGRAM, 0, socket.AI_CANONNAME)
-        except exc:
+        except OSError:
             pass
         else:
             for addr in addrs:
@@ -2416,12 +2410,12 @@ class DHCPAgentContext(OSContextGenerator):
         existing_ovs_use_veth = None
         # If there is a dhcp_agent.ini file read the current setting
         if os.path.isfile(DHCP_AGENT_INI):
-            # config_ini does the right thing and returns None if the setting is
-            # commented.
+            # config_ini does the right thing and returns None if the setting
+            # is commented.
             existing_ovs_use_veth = (
                 config_ini(DHCP_AGENT_INI)["DEFAULT"].get("ovs_use_veth"))
         # Convert to Bool if necessary
-        if isinstance(existing_ovs_use_veth, six.string_types):
+        if isinstance(existing_ovs_use_veth, str):
             return bool_from_string(existing_ovs_use_veth)
         return existing_ovs_use_veth
 

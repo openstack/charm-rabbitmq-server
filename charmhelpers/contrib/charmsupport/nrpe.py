@@ -28,6 +28,7 @@ import subprocess
 import yaml
 
 from charmhelpers.core.hookenv import (
+    application_name,
     config,
     hook_name,
     local_unit,
@@ -174,7 +175,8 @@ define service {{
             if os.path.exists(os.path.join(path, parts[0])):
                 command = os.path.join(path, parts[0])
                 if len(parts) > 1:
-                    command += " " + " ".join(parts[1:])
+                    safe_args = [shlex.quote(arg) for arg in parts[1:]]
+                    command += " " + " ".join(safe_args)
                 return command
         log('Check command not found: {}'.format(parts[0]))
         return ''
@@ -520,3 +522,39 @@ def remove_deprecated_check(nrpe, deprecated_services):
     for dep_svc in deprecated_services:
         log('Deprecated service: {}'.format(dep_svc))
         nrpe.remove_check(shortname=dep_svc)
+
+
+def add_deferred_restarts_check(nrpe):
+    """
+    Add NRPE check for services with deferred restarts.
+
+    :param NRPE nrpe: NRPE object to add check to
+    """
+    unit_name = local_unit().replace('/', '-')
+    shortname = unit_name + '_deferred_restarts'
+    check_cmd = 'check_deferred_restarts.py --application {}'.format(
+        application_name())
+
+    log('Adding deferred restarts nrpe check: {}'.format(shortname))
+    nrpe.add_check(
+        shortname=shortname,
+        description='Check deferred service restarts {}'.format(unit_name),
+        check_cmd=check_cmd)
+
+
+def remove_deferred_restarts_check(nrpe):
+    """
+    Remove NRPE check for services with deferred service restarts.
+
+    :param NRPE nrpe: NRPE object to remove check from
+    """
+    unit_name = local_unit().replace('/', '-')
+    shortname = unit_name + '_deferred_restarts'
+    check_cmd = 'check_deferred_restarts.py --application {}'.format(
+        application_name())
+
+    log('Removing deferred restarts nrpe check: {}'.format(shortname))
+    nrpe.remove_check(
+        shortname=shortname,
+        description='Check deferred service restarts {}'.format(unit_name),
+        check_cmd=check_cmd)

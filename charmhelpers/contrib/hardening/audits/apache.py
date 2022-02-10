@@ -15,8 +15,6 @@
 import re
 import subprocess
 
-import six
-
 from charmhelpers.core.hookenv import (
     log,
     INFO,
@@ -35,7 +33,7 @@ class DisabledModuleAudit(BaseAudit):
     def __init__(self, modules):
         if modules is None:
             self.modules = []
-        elif isinstance(modules, six.string_types):
+        elif isinstance(modules, str):
             self.modules = [modules]
         else:
             self.modules = modules
@@ -68,9 +66,7 @@ class DisabledModuleAudit(BaseAudit):
     @staticmethod
     def _get_loaded_modules():
         """Returns the modules which are enabled in Apache."""
-        output = subprocess.check_output(['apache2ctl', '-M'])
-        if six.PY3:
-            output = output.decode('utf-8')
+        output = subprocess.check_output(['apache2ctl', '-M']).decode('utf-8')
         modules = []
         for line in output.splitlines():
             # Each line of the enabled module output looks like:

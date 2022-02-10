@@ -14,8 +14,6 @@
 
 import os
 
-import six
-
 from charmhelpers.fetch import apt_install, apt_update
 from charmhelpers.core.hookenv import (
     log,
@@ -29,10 +27,7 @@ try:
     from jinja2 import FileSystemLoader, ChoiceLoader, Environment, exceptions
 except ImportError:
     apt_update(fatal=True)
-    if six.PY2:
-        apt_install('python-jinja2', fatal=True)
-    else:
-        apt_install('python3-jinja2', fatal=True)
+    apt_install('python3-jinja2', fatal=True)
     from jinja2 import FileSystemLoader, ChoiceLoader, Environment, exceptions
 
 
@@ -62,7 +57,7 @@ def get_loader(templates_dir, os_release):
         order by OpenStack release.
     """
     tmpl_dirs = [(rel, os.path.join(templates_dir, rel))
-                 for rel in six.itervalues(OPENSTACK_CODENAMES)]
+                 for rel in OPENSTACK_CODENAMES.values()]
 
     if not os.path.isdir(templates_dir):
         log('Templates directory not found @ %s.' % templates_dir,
@@ -225,10 +220,7 @@ class OSConfigRenderer(object):
             # if this code is running, the object is created pre-install hook.
             # jinja2 shouldn't get touched until the module is reloaded on next
             # hook execution, with proper jinja2 bits successfully imported.
-            if six.PY2:
-                apt_install('python-jinja2')
-            else:
-                apt_install('python3-jinja2')
+            apt_install('python3-jinja2')
 
     def register(self, config_file, contexts, config_template=None):
         """
@@ -318,9 +310,7 @@ class OSConfigRenderer(object):
             log('Config not registered: %s' % config_file, level=ERROR)
             raise OSConfigException
 
-        _out = self.render(config_file)
-        if six.PY3:
-            _out = _out.encode('UTF-8')
+        _out = self.render(config_file).encode('UTF-8')
 
         with open(config_file, 'wb') as out:
             out.write(_out)
@@ -331,7 +321,8 @@ class OSConfigRenderer(object):
         """
         Write out all registered config files.
         """
-        [self.write(k) for k in six.iterkeys(self.templates)]
+        for k in self.templates.keys():
+            self.write(k)
 
     def set_release(self, openstack_release):
         """
@@ -347,8 +338,8 @@ class OSConfigRenderer(object):
         Returns a list of context interfaces that yield a complete context.
         '''
         interfaces = []
-        [interfaces.extend(i.complete_contexts())
-         for i in six.itervalues(self.templates)]
+        for i in self.templates.values():
+            interfaces.extend(i.complete_contexts())
         return interfaces
 
     def get_incomplete_context_data(self, interfaces):
@@ -360,7 +351,7 @@ class OSConfigRenderer(object):
         '''
         incomplete_context_data = {}
 
-        for i in six.itervalues(self.templates):
+        for i in self.templates.values():
             for context in i.contexts:
                 for interface in interfaces:
                     related = False
