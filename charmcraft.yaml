@@ -6,6 +6,7 @@ parts:
     source: .
     prime:
       - actions/*
+      - charmhelpers/*
       - files/*
       - hooks/*
       - lib/*
