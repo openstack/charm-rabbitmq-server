@@ -6,6 +6,7 @@ revision
 .testrepository
 *.sw[nop]
 *.pyc
+*.charm
 __pycache__/
 .project
 .pydevproject

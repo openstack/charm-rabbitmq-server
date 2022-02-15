@@ -4,4 +4,7 @@
       - charm-unit-jobs-py39
       - charm-xena-functional-jobs
       - charm-yoga-functional-jobs
-
+    vars:
+      needs_charm_build: true
+      charm_build_name: rabbitmq-server
+      build_type: charmcraft
