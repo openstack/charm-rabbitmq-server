@@ -1,57 +1,12 @@
 - project:
     templates:
-      - charm-unit-jobs
+      - charm-unit-jobs-py36
+      - charm-unit-jobs-py38
     check:
       jobs:
-      - rabbit-xenial
-      - rabbit-bionic
-      - rabbit-focal
-      - rabbit-groovy
-      - rabbit-hirsute
-      - rabbit-impish:
-          voting: false
+        - bionic
+        - focal
     vars:
-      needs_charm_build: false
-
-- job:
-    name: rabbit-xenial
-    parent: func-target
-    dependencies: &smoke-jobs
-      - rabbit-focal
-    vars:
-      tox_extra_args: xenial-mitaka
-- job:
-    name: rabbit-bionic
-    parent: func-target
-    dependencies: *smoke-jobs
-    vars:
-      tox_extra_args: bionic-queens
-- job:
-    name: rabbit-focal
-    parent: func-target
-    dependencies: &lint-jobs
-        - osci-lint
-        - tox-py35
-        - tox-py36
-        - tox-py37
-        - tox-py38
-    vars:
-      tox_extra_args: focal-ussuri
-- job:
-    name: rabbit-groovy
-    parent: func-target
-    dependencies: *smoke-jobs
-    vars:
-      tox_extra_args: groovy-victoria
-- job:
-    name: rabbit-hirsute
-    parent: func-target
-    dependencies: *smoke-jobs
-    vars:
-      tox_extra_args: hirsute-wallaby
-- job:
-    name: rabbit-impish
-    parent: func-target
-    dependencies: *smoke-jobs
-    vars:
-      tox_extra_args: impish-xena
+      needs_charm_build: true
+      charm_build_name: rabbitmq-server
+      build_type: charmcraft

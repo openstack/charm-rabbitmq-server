@@ -1,5 +1,7 @@
+local_overlay_enabled: true
+
 variables:
-  openstack-origin: &openstack-origin cloud:focal-victoria
+  openstack-origin: &openstack-origin distro
 
 series: focal
 
@@ -24,12 +26,14 @@ machines:
 applications:
 
   keystone-mysql-router:
-    charm: cs:~openstack-charmers/mysql-router
+    charm: ch:mysql-router
+    channel: 8.0.19/edge
   cinder-mysql-router:
-    charm: cs:~openstack-charmers/mysql-router
+    charm: ch:mysql-router
+    channel: 8.0.19/edge
 
   mysql-innodb-cluster:
-    charm: cs:~openstack-charmers/mysql-innodb-cluster
+    charm: ch:mysql-innodb-cluster
     num_units: 3
     options:
       source: *openstack-origin
@@ -37,9 +41,10 @@ applications:
       - '0'
       - '1'
       - '2'
+    channel: 8.0.19/edge
 
   rabbitmq-server:
-    charm: "../../../rabbitmq-server"
+    charm: ../../rabbitmq-server.charm
     num_units: 3
     constraints:
       cpu-cores=2
@@ -56,25 +61,27 @@ applications:
       - '5'
 
   cinder:
-    charm: cs:~openstack-charmers/cinder
+    charm: ch:cinder
     num_units: 1
     options:
       openstack-origin: *openstack-origin
     to:
       - '6'
+    channel: ussuri/edge
 
   keystone:
-    charm: cs:~openstack-charmers/keystone
+    charm: ch:keystone
     num_units: 1
     options:
       openstack-origin: *openstack-origin
       admin-password: openstack
     to:
       - '7'
+    channel: ussuri/edge
 
   nagios:
     charm: cs:nagios
-    series: bionic  # not supported on focal yet
+    series: bionic
     num_units: 1
     to:
       - '8'

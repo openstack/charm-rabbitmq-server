@@ -11,3 +11,4 @@ __pycache__/
 .pydevproject
 .stestr
 .unit-state.db
+*.charm

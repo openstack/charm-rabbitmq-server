@@ -1,36 +1,14 @@
 charm_name: rabbitmq-server
 
 smoke_bundles:
-  - focal-ussuri
+  - focal
 
 gate_bundles:
-  - xenial-mitaka
-  - bionic-queens
-  - focal-ussuri
-  - focal-wallaby
-  - hirsute-wallaby
+  - bionic
+  - focal
 
-dev_bundles:
-  - xenial-ocata
-  - xenial-pike
-  - xenial-queens
-  - bionic-rocky
-  - bionic-stein
-  - bionic-train
-  - bionic-ussuri
-  - focal-victoria
-  - groovy-victoria
-  - focal-xena
-  - impish-xena
+dev_bundles: []
 
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RabbitMQDeferredRestartTest
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RmqTests
-
-tests_options:
-  force_deploy:
-    # the nrpe charm doesn't support groovy and is in the bundle; it needs to
-    # be force installed.
-    - groovy-victoria
-    - hirsute-wallaby
-    - impish-xena

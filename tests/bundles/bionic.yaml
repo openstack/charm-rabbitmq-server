@@ -1,3 +1,5 @@
+local_overlay_enabled: true
+
 series: bionic
 
 relations:
@@ -16,7 +18,7 @@ relations:
 
 applications:
   rabbitmq-server:
-    charm: "../../../rabbitmq-server"
+    charm: ../../rabbitmq-server.charm
     num_units: 3
     constraints:
       cpu-cores=2
@@ -26,21 +28,29 @@ applications:
       ssl: "off"
       management_plugin: "False"
       stats_cron_schedule: "*/1 * * * *"
+
   cinder:
-    charm: cs:~openstack-charmers/cinder
+    charm: ch:cinder
     num_units: 1
+    channel: queens/edge
+
   percona-cluster:
-    charm: cs:~openstack-charmers/percona-cluster
+    charm: ch:percona-cluster
     num_units: 1
     options:
       max-connections: 1000
+    channel: 5.7/edge
+
   keystone:
-    charm: cs:~openstack-charmers/keystone
+    charm: ch:keystone
     num_units: 1
     options:
       admin-password: openstack
+    channel: queens/edge
+
   nagios:
     charm: cs:nagios
     num_units: 1
+
   nrpe:
     charm: cs:nrpe
