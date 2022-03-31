@@ -29,10 +29,10 @@ def gen_data_lines(filename):
 def gen_stats(data_lines):
     for line in data_lines:
         try:
-            vhost, queue, _, _, m_all, _ = line.split(None, 5)
+            vhost, queue, _, _, m_all, _, _ = line.split(None, 6)
         except ValueError:
-            print("ERROR: problem parsing the stats file")
-            sys.exit(2)
+            print("ERROR: problem parsing the line {}".format(line))
+            continue
         assert m_all.isdigit(), ("Message count is not a number: {0!r}"
                                  .format(m_all))
         yield vhost, queue, int(m_all)
