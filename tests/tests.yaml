@@ -1,15 +1,12 @@
 charm_name: rabbitmq-server
 
 smoke_bundles:
-  - focal-xena
+  - focal-yoga
 
 gate_bundles:
-  - focal-wallaby
-  - focal-xena
-  - impish-xena
+  - focal-yoga
 
 dev_bundles:
-  - focal-yoga
   - jammy-yoga
 
 tests:
@@ -19,5 +16,4 @@ tests:
 tests_options:
   force_deploy:
     # nrpe charm doesn't support hirsute->jammy and needs to be force installed
-    - impish-xena
     - jammy-yoga
