@@ -77,16 +77,6 @@ applications:
       - '7'
     channel: latest/edge
 
-  nagios:
-    charm: cs:nagios
-    series: bionic  # not supported on focal+ yet
-    num_units: 1
-    to:
-      - '8'
-
-  nrpe:
-    charm: cs:nrpe
-
 relations:
 
   - - 'cinder:amqp'
@@ -101,7 +91,3 @@ relations:
     - 'keystone-mysql-router:shared-db'
   - - 'keystone-mysql-router:db-router'
     - 'mysql-innodb-cluster:db-router'
-  - - 'nrpe:nrpe-external-master'
-    - 'rabbitmq-server:nrpe-external-master'
-  - - 'nrpe:monitors'
-    - 'nagios:monitors'
