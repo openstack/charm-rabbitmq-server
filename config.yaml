@@ -288,29 +288,6 @@ options:
       hacluster charm will keep rabbit in active/active setup, but in addition
       it will deploy a VIP that can be used by services that cannot work
       with mutiple AMQPs (like Glance in pre-Icehouse).
-  modulo-nodes:
-    type: int
-    default:
-    description: |
-      This config option is rarely required but is provided for fine tuning, it
-      is safe to leave unset. Modulo nodes is used to help avoid restart
-      collisions as well as distribute load on the cloud at larger scale.
-      During restarts and cluster joins rabbitmq needs to execute these
-      operations serially. By setting modulo-nodes to the size of the cluster
-      and known-wait to a reasonable value, the charm will distribute the
-      operations serially. If this value is unset, the charm will check
-      min-cluster-size or else finally default to the size of the cluster
-      based on peer relations. Setting this value to 0 will execute operations
-      with no wait time. Setting this value to less than the cluster size will
-      distribute load but may lead to restart collisions.
-  known-wait:
-    type: int
-    default: 30
-    description: |
-      Known wait along with modulo nodes is used to help avoid restart
-      collisions. Known wait is the amount of time between one node executing
-      an operation and another. On slower hardware this value may need to be
-      larger than the default of 30 seconds.
   notification-ttl:
     type: int
     default: 3600000
