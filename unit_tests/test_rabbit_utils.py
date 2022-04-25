@@ -1490,16 +1490,13 @@ class UtilsTests(CharmTestCase):
         mock_cmp_pkgrevno.return_value = -1
         self.assertFalse(rabbit_utils.rabbit_supports_json())
 
-    @mock.patch('rabbit_utils.caching_cmp_pkgrevno')
     @mock.patch('rabbit_utils.set_policy')
     @mock.patch('rabbit_utils.config')
     def test_set_ha_mode(self,
                          mock_config,
-                         mock_set_policy,
-                         mock_caching_cmp_pkgrevno):
+                         mock_set_policy):
         """Testing set_ha_mode"""
         mock_config.side_effect = self.test_config
-        mock_caching_cmp_pkgrevno.return_value = 1
 
         expected_policy = {
             'all': {

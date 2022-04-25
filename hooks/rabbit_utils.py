@@ -777,14 +777,6 @@ def set_ha_mode(vhost, mode, params=None, sync_mode='automatic'):
                       sync has to be done
                       http://www.rabbitmq.com./ha.html#eager-synchronisation
     """
-
-    if caching_cmp_pkgrevno('rabbitmq-server', '3.0.0') < 0:
-        log(("Mirroring queues cannot be enabled, only supported "
-             "in rabbitmq-server >= 3.0"), level=WARNING)
-        log(("More information at http://www.rabbitmq.com/blog/"
-             "2012/11/19/breaking-things-with-rabbitmq-3-0"), level='INFO')
-        return
-
     if mode == 'all':
         definition = {
             "ha-mode": "all",
@@ -811,13 +803,6 @@ def clear_ha_mode(vhost, name='HA', force=False):
     """
     Clear policy from the `vhost` by `name`
     """
-    if cmp_pkgrevno('rabbitmq-server', '3.0.0') < 0:
-        log(("Mirroring queues not supported "
-             "in rabbitmq-server >= 3.0"), level=WARNING)
-        log(("More information at http://www.rabbitmq.com/blog/"
-             "2012/11/19/breaking-things-with-rabbitmq-3-0"), level='INFO')
-        return
-
     log("Clearing '%s' policy from vhost '%s'" % (name, vhost), level='INFO')
     try:
         clear_policy(vhost, name)
@@ -831,13 +816,6 @@ def set_all_mirroring_queues(enable):
     :param enable: if True then enable mirroring queue for all the vhosts,
                    otherwise the HA policy is removed
     """
-    if cmp_pkgrevno('rabbitmq-server', '3.0.0') < 0:
-        log(("Mirroring queues not supported "
-             "in rabbitmq-server >= 3.0"), level=WARNING)
-        log(("More information at http://www.rabbitmq.com/blog/"
-             "2012/11/19/breaking-things-with-rabbitmq-3-0"), level='INFO')
-        return
-
     if enable:
         status_set('active', 'Checking queue mirroring is enabled')
     else:
