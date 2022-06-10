@@ -118,12 +118,7 @@ from charmhelpers.contrib.openstack.utils import (
 )
 from charmhelpers.core.unitdata import kv
 
-try:
-    from sriov_netplan_shim import pci
-except ImportError:
-    # The use of the function and contexts that require the pci module is
-    # optional.
-    pass
+from charmhelpers.contrib.hardware import pci
 
 try:
     import psutil
@@ -426,6 +421,9 @@ class IdentityServiceContext(OSContextGenerator):
             ('password', ctxt.get('admin_password', '')),
             ('signing_dir', ctxt.get('signing_dir', '')),))
 
+        if ctxt.get('service_type'):
+            c.update((('service_type', ctxt.get('service_type')),))
+
         return c
 
     def __call__(self):
@@ -467,6 +465,9 @@ class IdentityServiceContext(OSContextGenerator):
                              'auth_protocol': auth_protocol,
                              'internal_protocol': int_protocol,
                              'api_version': api_version})
+
+                if rdata.get('service_type'):
+                    ctxt['service_type'] = rdata.get('service_type')
 
                 if float(api_version) > 2:
                     ctxt.update({
@@ -538,6 +539,9 @@ class IdentityCredentialsContext(IdentityServiceContext):
                     'auth_protocol': auth_protocol,
                     'api_version': api_version
                 })
+
+                if rdata.get('service_type'):
+                    ctxt['service_type'] = rdata.get('service_type')
 
                 if float(api_version) > 2:
                     ctxt.update({'admin_domain_name':
@@ -2556,14 +2560,18 @@ class OVSDPDKDeviceContext(OSContextGenerator):
         :rtype: List[int]
         """
         cores = []
-        ranges = cpulist.split(',')
-        for cpu_range in ranges:
-            if "-" in cpu_range:
-                cpu_min_max = cpu_range.split('-')
-                cores += range(int(cpu_min_max[0]),
-                               int(cpu_min_max[1]) + 1)
-            else:
-                cores.append(int(cpu_range))
+        if cpulist and re.match(r"^[0-9,\-^]*$", cpulist):
+            ranges = cpulist.split(',')
+            for cpu_range in ranges:
+                if "-" in cpu_range:
+                    cpu_min_max = cpu_range.split('-')
+                    cores += range(int(cpu_min_max[0]),
+                                   int(cpu_min_max[1]) + 1)
+                elif "^" in cpu_range:
+                    cpu_rm = cpu_range.split('^')
+                    cores.remove(int(cpu_rm[1]))
+                else:
+                    cores.append(int(cpu_range))
         return cores
 
     def _numa_node_cores(self):
@@ -2582,36 +2590,32 @@ class OVSDPDKDeviceContext(OSContextGenerator):
 
     def cpu_mask(self):
         """Get hex formatted CPU mask
-
         The mask is based on using the first config:dpdk-socket-cores
         cores of each NUMA node in the unit.
         :returns: hex formatted CPU mask
         :rtype: str
         """
-        return self.cpu_masks()['dpdk_lcore_mask']
-
-    def cpu_masks(self):
-        """Get hex formatted CPU masks
-
-        The mask is based on using the first config:dpdk-socket-cores
-        cores of each NUMA node in the unit, followed by the
-        next config:pmd-socket-cores
-
-        :returns: Dict of hex formatted CPU masks
-        :rtype: Dict[str, str]
-        """
-        num_lcores = config('dpdk-socket-cores')
-        pmd_cores = config('pmd-socket-cores')
-        lcore_mask = 0
-        pmd_mask = 0
+        num_cores = config('dpdk-socket-cores')
+        mask = 0
         for cores in self._numa_node_cores().values():
-            for core in cores[:num_lcores]:
-                lcore_mask = lcore_mask | 1 << core
-            for core in cores[num_lcores:][:pmd_cores]:
-                pmd_mask = pmd_mask | 1 << core
-        return {
-            'pmd_cpu_mask': format(pmd_mask, '#04x'),
-            'dpdk_lcore_mask': format(lcore_mask, '#04x')}
+            for core in cores[:num_cores]:
+                mask = mask | 1 << core
+        return format(mask, '#04x')
+
+    @classmethod
+    def pmd_cpu_mask(cls):
+        """Get hex formatted pmd CPU mask
+
+        The mask is based on config:pmd-cpu-set.
+        :returns: hex formatted CPU mask
+        :rtype: str
+        """
+        mask = 0
+        cpu_list = cls._parse_cpu_list(config('pmd-cpu-set'))
+        if cpu_list:
+            for core in cpu_list:
+                mask = mask | 1 << core
+        return format(mask, '#x')
 
     def socket_memory(self):
         """Formatted list of socket memory configuration per socket.
@@ -2690,6 +2694,7 @@ class OVSDPDKDeviceContext(OSContextGenerator):
             ctxt['device_whitelist'] = self.device_whitelist()
             ctxt['socket_memory'] = self.socket_memory()
             ctxt['cpu_mask'] = self.cpu_mask()
+            ctxt['pmd_cpu_mask'] = self.pmd_cpu_mask()
         return ctxt
 
 
@@ -3120,7 +3125,7 @@ class SRIOVContext(OSContextGenerator):
         """Determine number of Virtual Functions (VFs) configured for device.
 
         :param device: Object describing a PCI Network interface card (NIC)/
-        :type device: sriov_netplan_shim.pci.PCINetDevice
+        :type device: contrib.hardware.pci.PCINetDevice
         :param sriov_numvfs: Number of VFs requested for blanket configuration.
         :type sriov_numvfs: int
         :returns: Number of VFs to configure for device

@@ -6,6 +6,9 @@ auth_uri = {{ service_protocol }}://{{ service_host }}:{{ service_port }}/v3
 auth_url = {{ auth_protocol }}://{{ auth_host }}:{{ auth_port }}/v3
 project_domain_name = {{ admin_domain_name }}
 user_domain_name = {{ admin_domain_name }}
+{% if service_type -%}
+service_type = {{ service_type }}
+{% endif -%}
 {% else -%}
 auth_uri = {{ service_protocol }}://{{ service_host }}:{{ service_port }}
 auth_url = {{ auth_protocol }}://{{ auth_host }}:{{ auth_port }}

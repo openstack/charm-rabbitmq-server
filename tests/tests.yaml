@@ -1,13 +1,15 @@
 charm_name: rabbitmq-server
 
 smoke_bundles:
-  - focal-yoga
+  - jammy-yoga
 
 gate_bundles:
-  - focal-yoga
+  - jammy-yoga
 
 dev_bundles:
   - jammy-yoga
+  - jammy-zed
+  - kinetic-zed
 
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RabbitMQDeferredRestartTest
@@ -15,5 +17,4 @@ tests:
 
 tests_options:
   force_deploy:
-    # nrpe charm doesn't support hirsute->jammy and needs to be force installed
-    - jammy-yoga
+    - kinetic-zed
