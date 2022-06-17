@@ -479,3 +479,48 @@ class RelationUtil(CharmTestCase):
             'rabbitmq-server')
         wait_app.assert_called_once_with()
         self.assertFalse(update_clients.called)
+
+    @patch.object(rabbitmq_server_relations, 'leader_set')
+    @patch.object(rabbitmq_server_relations, 'leader_get')
+    @patch.object(rabbitmq_server_relations, 'apt_install')
+    @patch.object(rabbitmq_server_relations, 'filter_installed_packages')
+    @patch.object(rabbitmq_server_relations, 'apt_update')
+    @patch.object(rabbitmq_server_relations, 'update_clients')
+    @patch('rabbit_utils.clustered_with_leader')
+    @patch('rabbit_utils.update_peer_cluster_status')
+    @patch('rabbit_utils.migrate_passwords_to_peer_relation')
+    @patch.object(rabbitmq_server_relations, 'is_elected_leader')
+    @patch('os.listdir')
+    @patch('charmhelpers.contrib.hardening.harden.config')
+    @patch.object(rabbitmq_server_relations, 'config')
+    def test_upgrade_charm(self, config, harden_config, listdir,
+                           is_elected_releader,
+                           migrate_passwords_to_peer_relation,
+                           update_peer_cluster_status,
+                           clustered_with_leader,
+                           update_clients,
+                           apt_update,
+                           filter_installed_packages,
+                           apt_install,
+                           leader_get,
+                           leader_set):
+        config.side_effect = self.test_config
+        harden_config.side_effect = self.test_config
+        is_elected_releader.return_value = True
+        clustered_with_leader.return_value = True
+        filter_installed_packages.side_effect = lambda x: x
+
+        leader_get.return_value = None
+
+        rabbitmq_server_relations.upgrade_charm()
+
+        migrate_passwords_to_peer_relation.assert_called()
+        update_peer_cluster_status.assert_called()
+        apt_update.assert_called_with(fatal=True)
+        apt_install.assert_called_with(['python3-amqplib',
+                                        'python3-croniter'],
+                                       fatal=True)
+        leader_set.assert_called_with(
+            {rabbit_utils.CLUSTER_MODE_KEY:
+             self.test_config.get(rabbit_utils.CLUSTER_MODE_KEY)}
+        )

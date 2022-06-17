@@ -819,6 +819,12 @@ def upgrade_charm():
     if missing_packages:
         apt_install(missing_packages, fatal=True)
 
+    if is_leader() and not leader_get(rabbit.CLUSTER_MODE_KEY):
+        log("Setting {} to {} on upgrade-charm.".format(
+            rabbit.CLUSTER_MODE_KEY,
+            config(rabbit.CLUSTER_MODE_KEY)), level='INFO')
+        leader_set({rabbit.CLUSTER_MODE_KEY: config(rabbit.CLUSTER_MODE_KEY)})
+
 
 MAN_PLUGIN = 'rabbitmq_management'
 PROM_PLUGIN = 'rabbitmq_prometheus'
