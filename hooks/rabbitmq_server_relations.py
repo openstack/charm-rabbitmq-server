@@ -613,7 +613,7 @@ def cluster_changed(relation_id=None, remote_unit=None):
                     rabbit.CLUSTER_MODE_KEY: config(
                         rabbit.CLUSTER_MODE_KEY)})
                 rabbit.ConfigRenderer(
-                    rabbit.CONFIG_FILES).write_all()
+                    rabbit.CONFIG_FILES()).write_all()
 
     if not is_leader() and is_relation_made('nrpe-external-master'):
         update_nrpe_checks()
