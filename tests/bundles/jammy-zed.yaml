@@ -1,7 +1,7 @@
 variables:
-  openstack-origin: &openstack-origin cloud:focal-yoga
+  openstack-origin: &openstack-origin cloud:jammy-zed
 
-series: focal
+series: jammy
 
 comment:
 - 'machines section to decide order of deployment. database sooner = faster'
@@ -17,8 +17,6 @@ machines:
   '5':
   '6':
   '7':
-  '8':
-    series: bionic  # nagios not supported on focal yet
 
 
 applications:
@@ -77,16 +75,6 @@ applications:
       - '7'
     channel: latest/edge
 
-  nagios:
-    charm: cs:nagios
-    series: bionic  # not supported on focal yet
-    num_units: 1
-    to:
-      - '8'
-
-  nrpe:
-    charm: cs:nrpe
-
 relations:
 
   - - 'cinder:amqp'
@@ -101,7 +89,3 @@ relations:
     - 'keystone-mysql-router:shared-db'
   - - 'keystone-mysql-router:db-router'
     - 'mysql-innodb-cluster:db-router'
-  - - 'nrpe:nrpe-external-master'
-    - 'rabbitmq-server:nrpe-external-master'
-  - - 'nrpe:monitors'
-    - 'nagios:monitors'

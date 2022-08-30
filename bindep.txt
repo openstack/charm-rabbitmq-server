@@ -1,0 +1,3 @@
+libffi-dev [platform:dpkg]
+libxml2-dev [platform:dpkg]
+libxslt1-dev [platform:dpkg]

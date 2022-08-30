@@ -114,6 +114,33 @@ def service_stop(service_name, **kwargs):
     return service('stop', service_name, **kwargs)
 
 
+def service_enable(service_name, **kwargs):
+    """Enable a system service.
+
+    The specified service name is managed via the system level init system.
+    Some init systems (e.g. upstart) require that additional arguments be
+    provided in order to directly control service instances whereas other init
+    systems allow for addressing instances of a service directly by name (e.g.
+    systemd).
+
+    The kwargs allow for the additional parameters to be passed to underlying
+    init systems for those systems which require/allow for them. For example,
+    the ceph-osd upstart script requires the id parameter to be passed along
+    in order to identify which running daemon should be restarted. The follow-
+    ing example restarts the ceph-osd service for instance id=4:
+
+    service_enable('ceph-osd', id=4)
+
+    :param service_name: the name of the service to enable
+    :param **kwargs: additional parameters to pass to the init system when
+                     managing services. These will be passed as key=value
+                     parameters to the init system's commandline. kwargs
+                     are ignored for init systems not allowing additional
+                     parameters via the commandline (systemd).
+    """
+    return service('enable', service_name, **kwargs)
+
+
 def service_restart(service_name, **kwargs):
     """Restart a system service.
 
@@ -134,7 +161,7 @@ def service_restart(service_name, **kwargs):
     :param service_name: the name of the service to restart
     :param **kwargs: additional parameters to pass to the init system when
                      managing services. These will be passed as key=value
-                     parameters to the  init system's commandline. kwargs
+                     parameters to the init system's commandline. kwargs
                      are ignored for init systems not allowing additional
                      parameters via the commandline (systemd).
     """
@@ -250,7 +277,7 @@ def service_resume(service_name, init_dir="/etc/init",
     return started
 
 
-def service(action, service_name, **kwargs):
+def service(action, service_name=None, **kwargs):
     """Control a system service.
 
     :param action: the action to take on the service
@@ -259,7 +286,9 @@ def service(action, service_name, **kwargs):
                     the form of key=value.
     """
     if init_is_systemd(service_name=service_name):
-        cmd = ['systemctl', action, service_name]
+        cmd = ['systemctl', action]
+        if service_name is not None:
+            cmd.append(service_name)
     else:
         cmd = ['service', service_name, action]
         for key, value in kwargs.items():

@@ -222,6 +222,14 @@ CLOUD_ARCHIVE_POCKETS = {
     'yoga/proposed': 'focal-proposed/yoga',
     'focal-yoga/proposed': 'focal-proposed/yoga',
     'focal-proposed/yoga': 'focal-proposed/yoga',
+    # Zed
+    'zed': 'jammy-updates/zed',
+    'jammy-zed': 'jammy-updates/zed',
+    'jammy-zed/updates': 'jammy-updates/zed',
+    'jammy-updates/zed': 'jammy-updates/zed',
+    'zed/proposed': 'jammy-proposed/zed',
+    'jammy-zed/proposed': 'jammy-proposed/zed',
+    'jammy-proposed/zed': 'jammy-proposed/zed',
 }
 
 
@@ -248,6 +256,7 @@ OPENSTACK_RELEASES = (
     'wallaby',
     'xena',
     'yoga',
+    'zed',
 )
 
 
@@ -274,6 +283,7 @@ UBUNTU_OPENSTACK_RELEASE = OrderedDict([
     ('hirsute', 'wallaby'),
     ('impish', 'xena'),
     ('jammy', 'yoga'),
+    ('kinetic', 'zed'),
 ])
 
 
