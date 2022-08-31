@@ -10,6 +10,7 @@ tags:
 - amqp
 - misc
 series:
+- focal
 - jammy
 provides:
   amqp:

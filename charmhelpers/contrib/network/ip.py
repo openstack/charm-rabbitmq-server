@@ -467,7 +467,7 @@ def ns_query(address):
 
     try:
         answers = dns.resolver.query(address, rtype)
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+    except dns.resolver.NXDOMAIN:
         return None
 
     if answers:
