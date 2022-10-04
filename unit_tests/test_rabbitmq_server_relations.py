@@ -459,7 +459,9 @@ class RelationUtil(CharmTestCase):
     @patch('rabbitmq_server_relations.config')
     @patch('rabbit_utils.config')
     @patch('rabbit_utils.remove_file')
+    @patch('rabbit_utils.add_nrpe_file_access')
     def test_update_nrpe_checks(self,
+                                mock_add_nrpe_access,
                                 mock_remove_file,
                                 mock_config3,
                                 mock_config,
@@ -531,6 +533,8 @@ class RelationUtil(CharmTestCase):
             description='Check RabbitMQ (SSL) {} {}'.format('bar-0',
                                                             'nagios-unit-0'),
             check_cmd=cmd_5671)
+
+        mock_add_nrpe_access.assert_called_once()
 
         # test stats_cron_schedule has been removed
         mock_remove_file.reset_mock()
@@ -838,7 +842,14 @@ class RelationUtil(CharmTestCase):
     @patch('os.listdir')
     @patch('charmhelpers.contrib.hardening.harden.config')
     @patch.object(rabbitmq_server_relations, 'config')
-    def test_upgrade_charm(self, config, harden_config, listdir,
+    @patch.object(rabbitmq_server_relations, 'is_relation_made')
+    @patch('rabbit_utils.add_nrpe_file_access')
+    @patch('rabbit_utils.fix_nrpe_file_owner')
+    def test_upgrade_charm(self,
+                           mock_fix_nrpe_owner,
+                           mock_add_nrpe_access,
+                           is_relation_made,
+                           config, harden_config, listdir,
                            is_elected_releader,
                            migrate_passwords_to_peer_relation,
                            update_peer_cluster_status,
@@ -854,6 +865,7 @@ class RelationUtil(CharmTestCase):
         is_elected_releader.return_value = True
         clustered_with_leader.return_value = True
         filter_installed_packages.side_effect = lambda x: x
+        is_relation_made.return_value = True
 
         leader_get.return_value = None
 
@@ -869,3 +881,6 @@ class RelationUtil(CharmTestCase):
             {rabbit_utils.CLUSTER_MODE_KEY:
              self.test_config.get(rabbit_utils.CLUSTER_MODE_KEY)}
         )
+
+        mock_add_nrpe_access.assert_called_once()
+        mock_fix_nrpe_owner.assert_called_once()

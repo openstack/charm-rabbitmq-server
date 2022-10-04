@@ -929,6 +929,7 @@ def update_nrpe_checks():
     nrpe_compat.write()
 
     rabbit.remove_nrpe_files()
+    rabbit.add_nrpe_file_access()
 
 
 @hooks.hook('upgrade-charm')
@@ -984,6 +985,15 @@ def upgrade_charm():
             rabbit.CLUSTER_MODE_KEY,
             config(rabbit.CLUSTER_MODE_KEY)), level='INFO')
         leader_set({rabbit.CLUSTER_MODE_KEY: config(rabbit.CLUSTER_MODE_KEY)})
+
+    # BUG:#1879524
+    # rabbitmq stat files checked by nrpe might be owned by root preventing
+    # monitoring to read correctly the values.
+    # Ensure that they belong to rabbitmq user to not break compatibility with
+    # older existing deployment
+    if is_relation_made('nrpe-external-master'):
+        rabbit.add_nrpe_file_access()
+        rabbit.fix_nrpe_file_owner()
 
 
 MAN_PLUGIN = 'rabbitmq_management'
