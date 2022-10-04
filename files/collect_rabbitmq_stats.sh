@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (C) 2011, 2014 Canonical
+# Copyright (C) 2011, 2014, 2022 Canonical
 # All Rights Reserved
 # Author: Liam Young, Jacek Nykis
 
@@ -29,6 +29,7 @@ else
     echo "No PID file found"
     exit 3
 fi
+umask 027
 DATA_DIR="/var/lib/rabbitmq/data"
 DATA_FILE="${DATA_DIR}/$(hostname -s)_queue_stats.dat"
 LOG_DIR="/var/lib/rabbitmq/logs"
@@ -51,6 +52,7 @@ while read VHOST; do
     awk "{print \"$VHOST \" \$0 \" $(date +'%s') \"}" >> ${TMP_DATA_FILE} 2>${LOG_DIR}/list_queues.log
 done
 mv ${TMP_DATA_FILE} ${DATA_FILE}
-chmod 644 ${DATA_FILE}
+chmod 640 ${DATA_FILE}
+chmod 640 ${RABBIT_STATS_DATA_FILE}
 echo "mnesia_size: ${MNESIA_DB_SIZE}@$NOW" > $RABBIT_STATS_DATA_FILE
 echo "rss_size: ${RABBIT_RSS}@$NOW" >> $RABBIT_STATS_DATA_FILE

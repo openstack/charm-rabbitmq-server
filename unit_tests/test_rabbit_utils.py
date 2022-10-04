@@ -1185,6 +1185,46 @@ class UtilsTests(CharmTestCase):
                           level='DEBUG')
             ])
 
+    @mock.patch('rabbit_utils.run_cmd')
+    def test_add_nrpe_file_access(self, mock_run_cmd):
+        rabbit_utils.NRPE_USER = 'nrpe_user'
+        rabbit_utils.add_nrpe_file_access()
+        mock_run_cmd.assert_called_once_with(['usermod',
+                                              '-a',
+                                              '-G',
+                                              'rabbitmq',
+                                              'nrpe_user',
+                                              ])
+
+    @mock.patch('rabbit_utils.run_cmd')
+    @mock.patch('os.path.exists')
+    @mock.patch('rabbit_utils.RABBIT_USER', 'rabbit')
+    @mock.patch('rabbit_utils.LIB_PATH', '/var/tmp/rabbit/')
+    def test_fix_nrpe_file_owner(self, mock_os_exists, mock_run_cmd):
+        call_args1 = ['chown',
+                      '-R',
+                      'rabbit:rabbit',
+                      '/var/tmp/rabbit/data/'
+                      ]
+        call_args2 = ['chown',
+                      '-R',
+                      'rabbit:rabbit',
+                      '/var/tmp/rabbit/logs/'
+                      ]
+        call_args3 = ['chmod',
+                      '750',
+                      '/var/tmp/rabbit/data/',
+                      '/var/tmp/rabbit/logs/',
+                      ]
+        mock_os_exists.return_value = True
+        rabbit_utils.fix_nrpe_file_owner()
+
+        self.assertEqual(mock_run_cmd.call_count, 3)
+        mock_run_cmd.assert_has_calls([mock.call(call_args1),
+                                       mock.call(call_args2),
+                                       mock.call(call_args3)
+                                       ])
+
     @mock.patch('os.path.isdir')
     @mock.patch('rabbit_utils.charm_dir')
     @mock.patch('rabbit_utils.config')

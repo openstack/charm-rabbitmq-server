@@ -120,13 +120,14 @@ ENV_CONF = '/etc/rabbitmq/rabbitmq-env.conf'
 RABBITMQ_CONFIG = '/etc/rabbitmq/rabbitmq.config'
 RABBITMQ_CONF = '/etc/rabbitmq/rabbitmq.conf'
 ENABLED_PLUGINS = '/etc/rabbitmq/enabled_plugins'
+NRPE_USER = 'nagios'
 RABBIT_USER = 'rabbitmq'
 LIB_PATH = '/var/lib/rabbitmq/'
 HOSTS_FILE = '/etc/hosts'
 NAGIOS_PLUGINS = '/usr/local/lib/nagios/plugins'
 SCRIPTS_DIR = '/usr/local/bin'
 STATS_CRONFILE = '/etc/cron.d/rabbitmq-stats'
-CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
+CRONJOB_CMD = ("{schedule} rabbitmq timeout -k 10s -s SIGINT {timeout} "
                "{command} 2>&1 | logger -p local0.notice\n")
 
 COORD_KEY_RESTART = "restart"
@@ -1821,6 +1822,42 @@ def management_plugin_enabled():
         return False
     else:
         return config('management_plugin') is True
+
+
+def add_nrpe_file_access():
+    """ Add Nagios user the access to rabbitmq directories
+
+    It allows Nagios NRPE agent to collect the stats from rabbitmq
+    """
+    run_cmd(['usermod', '-a', '-G', 'rabbitmq', NRPE_USER])
+
+
+def fix_nrpe_file_owner():
+    """ Set rabbitmq as owner of logs data generated from cron job
+
+    Necessary on older deployments where the cron task would create files
+    with root as owner previously
+    It ensures the compatibility with existing deployments
+    """
+    # Although this should run only when related to nrpe subordinate
+    # there is still a possibility for a race condition if upgrading the units
+    # before the cron task had the time to create the files
+    if os.path.exists(f'{LIB_PATH}data') and os.path.exists(f'{LIB_PATH}logs'):
+        run_cmd(['chown',
+                 '-R',
+                 f'{RABBIT_USER}:{RABBIT_USER}',
+                 f'{LIB_PATH}data/',
+                 ])
+        run_cmd(['chown',
+                 '-R',
+                 f'{RABBIT_USER}:{RABBIT_USER}',
+                 f'{LIB_PATH}logs/',
+                 ])
+        run_cmd(['chmod',
+                 '750',
+                 f'{LIB_PATH}data/',
+                 f'{LIB_PATH}logs/',
+                 ])
 
 
 def sync_nrpe_files():
