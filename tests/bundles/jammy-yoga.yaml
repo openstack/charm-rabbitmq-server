@@ -63,7 +63,7 @@ applications:
       openstack-origin: *openstack-origin
     to:
       - '6'
-    channel: latest/edge
+    channel: yoga/edge
 
   keystone:
     charm: ch:keystone
@@ -73,7 +73,7 @@ applications:
       admin-password: openstack
     to:
       - '7'
-    channel: latest/edge
+    channel: yoga/edge
 
 relations:
 
