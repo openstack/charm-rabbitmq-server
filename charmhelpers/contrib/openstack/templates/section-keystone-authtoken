@@ -9,7 +9,4 @@ project_name = {{ admin_tenant_name }}
 username = {{ admin_user }}
 password = {{ admin_password }}
 signing_dir = {{ signing_dir }}
-{% if service_type -%}
-service_type = {{ service_type }}
-{% endif -%}
 {% endif -%}
