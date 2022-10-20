@@ -65,7 +65,7 @@ applications:
       openstack-origin: *openstack-origin
     to:
       - '6'
-    channel: latest/edge
+    channel: yoga/edge
 
   keystone:
     charm: ch:keystone
@@ -75,17 +75,17 @@ applications:
       admin-password: openstack
     to:
       - '7'
-    channel: latest/edge
+    channel: yoga/edge
 
   nagios:
-    charm: cs:nagios
+    charm: ch:nagios
     series: bionic  # not supported on focal yet
     num_units: 1
     to:
       - '8'
 
   nrpe:
-    charm: cs:nrpe
+    charm: ch:nrpe
 
 relations:
 
