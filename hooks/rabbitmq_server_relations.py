@@ -939,7 +939,7 @@ def update_nrpe_checks():
     rabbit.add_nrpe_file_access()
 
 
-@hooks.hook('upgrade-charm')
+@hooks.hook('upgrade-charm.real')
 @harden()
 def upgrade_charm():
     pre_install_hooks()
@@ -965,7 +965,9 @@ def upgrade_charm():
         shutil.move(old, new)
 
     rabbit.update_peer_cluster_status()
-    if not rabbit.clustered_with_leader():
+    # this should be run only when rabbitmq is not a single unit and
+    # being really part of a cluster
+    if not rabbit.clustered_with_leader() and config('min-cluster-size'):
         serial = coordinator.Serial()
         log("Requesting cluster join lock")
         serial.acquire(rabbit.COORD_KEY_CLUSTER)
