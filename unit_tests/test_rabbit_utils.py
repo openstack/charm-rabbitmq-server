@@ -480,6 +480,7 @@ class UtilsTests(CharmTestCase):
         mock_running_nodes.return_value = ['node12', 'node42', 'node27']
         self.assertTrue(rabbit_utils.clustered_with_leader())
 
+    @mock.patch('rabbit_utils.clear_nodes_cache')
     @mock.patch('rabbit_utils.get_unit_hostname')
     @mock.patch('rabbit_utils.time.time')
     @mock.patch.object(rabbit_utils, 'clustered_with_leader')
@@ -493,7 +494,8 @@ class UtilsTests(CharmTestCase):
                                                   mock_relation_get,
                                                   mock_clustered_with_leader,
                                                   mock_time,
-                                                  mock_get_unit_hostname):
+                                                  mock_get_unit_hostname,
+                                                  mock_clear_nodes_cache):
         mock_get_unit_hostname.return_value = 'host1'
         mock_time.return_value = '12:30'
         mock_leader_node.return_value = 'node42'
@@ -504,6 +506,7 @@ class UtilsTests(CharmTestCase):
         mock_relation_id.return_value = 'rid1'
         mock_relation_get.return_value = 'True'
         rabbit_utils.update_peer_cluster_status()
+        mock_clear_nodes_cache.assert_called_once_with()
         self.assertFalse(mock_relation_set.called)
 
         mock_clustered_with_leader.return_value = True
@@ -1068,6 +1071,7 @@ class UtilsTests(CharmTestCase):
             '{"expires":23000}'
         )
 
+    @mock.patch.object(rabbit_utils, 'cluster_ready')
     @mock.patch.object(rabbit_utils, 'leader_get')
     @mock.patch.object(rabbit_utils, 'is_partitioned')
     @mock.patch.object(rabbit_utils, 'wait_app')
@@ -1079,7 +1083,7 @@ class UtilsTests(CharmTestCase):
     def test_assess_cluster_status(
             self, rabbitmq_is_installed, is_unit_paused_set,
             is_sufficient_peers, clustered, check_cluster_memberships,
-            wait_app, is_partitioned, leader_get):
+            wait_app, is_partitioned, leader_get, cluster_ready):
         is_partitioned.return_value = False
         self.relation_ids.return_value = ["cluster:1"]
         self.related_units.return_value = ["rabbitmq-server/1"]
@@ -1088,6 +1092,7 @@ class UtilsTests(CharmTestCase):
             'min-cluster-size': _min,
             'cluster-partition-handling': 'autoheal'}
         self.config.side_effect = lambda key: _config.get(key)
+        cluster_ready.return_value = False
 
         # Paused
         is_unit_paused_set.return_value = True
@@ -1116,8 +1121,15 @@ class UtilsTests(CharmTestCase):
             "Unit has peers, but RabbitMQ not clustered")
         self.assertEqual(_expected, rabbit_utils.assess_cluster_status())
 
-        # Departed node
+        # rabbitmq-server is clustered, but the charms haven't yet caught up.
         clustered.return_value = True
+        _expected = (
+            "waiting",
+            "RabbitMQ is clustered, but not all charms are ready")
+        self.assertEqual(_expected, rabbit_utils.assess_cluster_status())
+
+        # Departed node
+        cluster_ready.return_value = True
         _departed_node = "rabbit@hostname"
         check_cluster_memberships.return_value = _departed_node
         _expected = (

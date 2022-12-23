@@ -328,13 +328,19 @@ def update_clients(check_deferred_restarts=True):
     if check_deferred_restarts and get_deferred_restarts():
         log("Not sendinfg client update as a restart is pending.", INFO)
         return
-    if rabbit.leader_node_is_ready() or rabbit.client_node_is_ready():
+    _leader_node_is_ready = rabbit.leader_node_is_ready()
+    _client_node_is_ready = rabbit.client_node_is_ready()
+    if _leader_node_is_ready or _client_node_is_ready:
         for rid in relation_ids('amqp'):
             for unit in related_units(rid):
                 amqp_changed(
                     relation_id=rid,
                     remote_unit=unit,
                     check_deferred_restarts=check_deferred_restarts)
+    else:
+        log("Not updating clients: leader node is ready:{}, "
+            "client node is ready:{}".format(
+                _leader_node_is_ready, _client_node_is_ready), DEBUG)
 
 
 @hooks.hook('dashboards-relation-joined')
