@@ -69,6 +69,7 @@ from charmhelpers.core.hookenv import (
     service_name,
     status_set,
     cached,
+    flush,
     relation_set,
     relation_get,
     application_version_set,
@@ -972,6 +973,9 @@ def clustered_with_leader():
 
 def update_peer_cluster_status():
     """Inform peers that this unit is clustered if it is."""
+    # clear the nodes cache so that the rabbit nodes are re-evaluated if the
+    # cluster has formed during the hook execution.
+    clear_nodes_cache()
     # check the leader and try to cluster with it
     if clustered_with_leader():
         log('Host already clustered with %s.' % leader_node())
@@ -986,9 +990,14 @@ def update_peer_cluster_status():
             # NOTE(freyes): this node needs to be marked as clustered, it's
             # part of the cluster according to 'rabbitmqctl cluster_status'
             # (LP: #1691510)
+            log("Setting 'clustered' on 'cluster' relation", level=DEBUG)
             relation_set(relation_id=cluster_rid,
                          clustered=get_unit_hostname(),
                          timestamp=time.time())
+        else:
+            log("Already set 'clustered' on cluster relation", level=DEBUG)
+    else:
+        log('Host not clustered with leader', level=DEBUG)
 
 
 def join_leader():
@@ -1005,6 +1014,10 @@ def join_leader():
         log("Attempting to cluster with leader", "INFO")
         try:
             node = leader_node()
+            if node is None:
+                log("Couldn't identify leader", "INFO")
+                status_set('blocked', "Leader not yet identified")
+                return
             join_cluster(node)
             # NOTE: toggle the cluster relation to ensure that any peers
             #       already clustered re-assess status correctly
@@ -1320,7 +1333,9 @@ def is_partitioned():
 @cached
 def running_nodes():
     ''' Determine the current set of running nodes in the RabbitMQ cluster '''
-    return nodes(get_running=True)
+    _nodes = nodes(get_running=True)
+    log("running_nodes: {}".format(_nodes), DEBUG)
+    return _nodes
 
 
 @cached
@@ -1335,11 +1350,23 @@ def leader_node():
         leader_node_hostname = peer_retrieve('leader_node_hostname')
     except ValueError:
         # This is a single unit
+        log("leader_node: None", DEBUG)
         return None
     if leader_node_hostname:
+        log("leader_node: rabbit@{}".format(leader_node_hostname), DEBUG)
         return "rabbit@" + leader_node_hostname
     else:
+        log("leader_node: None", DEBUG)
         return None
+
+
+def clear_nodes_cache():
+    """Clear the running_nodes() and nodes() and leader_node() cache"""
+    log("Clearing the cache for nodes.", DEBUG)
+    flush('leader_node')
+    flush('running_nodes')
+    flush('nodes')
+    flush('clustered')
 
 
 def get_node_hostname(ip_addr):
@@ -1390,6 +1417,10 @@ def assess_cluster_status(*args):
         if not clustered():
             return 'waiting', 'Unit has peers, but RabbitMQ not clustered'
 
+    # See if all the rabbitmq charms think they are clustered (e.g. that the
+    # 'clustered' attribute is set on the 'cluster' relationship
+    if not cluster_ready():
+        return 'waiting', 'RabbitMQ is clustered, but not all charms are ready'
     # Departed nodes
     departed_node = check_cluster_memberships()
     if departed_node:
@@ -1660,7 +1691,7 @@ def cluster_ready():
 
     @returns boolean
     """
-    min_size = config('min-cluster-size')
+    min_size = int(config('min-cluster-size') or 0)
     units = 1
     for rid in relation_ids('cluster'):
         units += len(related_units(rid))
@@ -1668,9 +1699,12 @@ def cluster_ready():
         min_size = units
 
     if not is_sufficient_peers():
+        log("In cluster_ready: not sufficient peers", level=DEBUG)
         return False
     elif min_size > 1:
         if not clustered():
+            log("This unit is not detected as clustered, but should be at "
+                "this stage", WARNING)
             return False
         clustered_units = 1
         for rid in relation_ids('cluster'):
