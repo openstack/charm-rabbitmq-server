@@ -11,14 +11,19 @@ pbr==5.6.0
 simplejson>=2.2.0
 netifaces>=0.10.4
 
+# NOTE: newer versions of cryptography require a Rust compiler to build,
+# see
+# * https://github.com/openstack-charmers/zaza/issues/421
+# * https://mail.python.org/pipermail/cryptography-dev/2021-January/001003.html
+#
+cryptography<3.4
+
 # Strange import error with newer netaddr:
 netaddr>0.7.16,<0.8.0
 
 Jinja2>=2.6  # BSD License (3 clause)
 six>=1.9.0
 
-# dnspython 2.0.0 dropped py3.5 support
-dnspython<2.0.0; python_version < '3.6'
-dnspython; python_version >= '3.6'
+dnspython
 
 psutil>=1.1.1,<2.0.0
