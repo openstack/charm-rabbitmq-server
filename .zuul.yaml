@@ -1,4 +1,5 @@
 - project:
     templates:
-      - openstack-python3-charm-jobs
+      - openstack-python3-charm-yoga-jobs  # provides py38 and non-voting py310
+      - python36-charm-jobs  # provides py36
       - openstack-cover-jobs
