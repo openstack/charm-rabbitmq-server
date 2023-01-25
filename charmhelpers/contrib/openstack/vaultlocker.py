@@ -173,7 +173,12 @@ def retrieve_secret_id(url, token):
         # hvac < 0.9.2 assumes adapter is an instance, so doesn't instantiate
         if not isinstance(client.adapter, hvac.adapters.Request):
             client.adapter = hvac.adapters.Request(base_uri=url, token=token)
-    response = client._post('/v1/sys/wrapping/unwrap')
+    try:
+        # hvac == 1.0.0 has an API to unwrap with the user token
+        response = client.sys.unwrap()
+    except AttributeError:
+        # fallback to hvac < 1.0.0
+        response = client._post('/v1/sys/wrapping/unwrap')
     if response.status_code == 200:
         data = response.json()
         return data['data']['secret_id']

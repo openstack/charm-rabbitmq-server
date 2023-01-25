@@ -23,6 +23,12 @@ from subprocess import (
     call
 )
 
+from charmhelpers.core.hookenv import (
+    log,
+    WARNING,
+    INFO
+)
+
 
 def _luks_uuid(dev):
     """
@@ -110,7 +116,7 @@ def is_device_mounted(device):
     return bool(re.search(r'MOUNTPOINT=".+"', out))
 
 
-def mkfs_xfs(device, force=False, inode_size=1024):
+def mkfs_xfs(device, force=False, inode_size=None):
     """Format device with XFS filesystem.
 
     By default this should fail if the device already has a filesystem on it.
@@ -118,11 +124,20 @@ def mkfs_xfs(device, force=False, inode_size=1024):
     :ptype device: tr
     :param force: Force operation
     :ptype: force: boolean
-    :param inode_size: XFS inode size in bytes
+    :param inode_size: XFS inode size in bytes; if set to 0 or None,
+        the value used will be the XFS system default
     :ptype inode_size: int"""
     cmd = ['mkfs.xfs']
     if force:
         cmd.append("-f")
 
-    cmd += ['-i', "size={}".format(inode_size), device]
+    if inode_size:
+        if inode_size >= 256 and inode_size <= 2048:
+            cmd += ['-i', "size={}".format(inode_size)]
+        else:
+            log("Config value xfs-inode-size={} is invalid. Using system default.".format(inode_size), level=WARNING)
+    else:
+        log("Using XFS filesystem with system default inode size.", level=INFO)
+
+    cmd += [device]
     check_call(cmd)

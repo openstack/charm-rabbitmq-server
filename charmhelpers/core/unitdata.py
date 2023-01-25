@@ -171,8 +171,9 @@ class Storage(object):
     path parameter which causes sqlite3 to only build the db in memory.
     This should only be used for testing purposes.
     """
-    def __init__(self, path=None):
+    def __init__(self, path=None, keep_revisions=False):
         self.db_path = path
+        self.keep_revisions = keep_revisions
         if path is None:
             if 'UNIT_STATE_DB' in os.environ:
                 self.db_path = os.environ['UNIT_STATE_DB']
@@ -242,7 +243,7 @@ class Storage(object):
         Remove a key from the database entirely.
         """
         self.cursor.execute('delete from kv where key=?', [key])
-        if self.revision and self.cursor.rowcount:
+        if self.keep_revisions and self.revision and self.cursor.rowcount:
             self.cursor.execute(
                 'insert into kv_revisions values (?, ?, ?)',
                 [key, self.revision, json.dumps('DELETED')])
@@ -259,14 +260,14 @@ class Storage(object):
         if keys is not None:
             keys = ['%s%s' % (prefix, key) for key in keys]
             self.cursor.execute('delete from kv where key in (%s)' % ','.join(['?'] * len(keys)), keys)
-            if self.revision and self.cursor.rowcount:
+            if self.keep_revisions and self.revision and self.cursor.rowcount:
                 self.cursor.execute(
                     'insert into kv_revisions values %s' % ','.join(['(?, ?, ?)'] * len(keys)),
                     list(itertools.chain.from_iterable((key, self.revision, json.dumps('DELETED')) for key in keys)))
         else:
             self.cursor.execute('delete from kv where key like ?',
                                 ['%s%%' % prefix])
-            if self.revision and self.cursor.rowcount:
+            if self.keep_revisions and self.revision and self.cursor.rowcount:
                 self.cursor.execute(
                     'insert into kv_revisions values (?, ?, ?)',
                     ['%s%%' % prefix, self.revision, json.dumps('DELETED')])
@@ -299,7 +300,7 @@ class Storage(object):
             where key = ?''', [serialized, key])
 
         # Save
-        if not self.revision:
+        if (not self.keep_revisions) or (not self.revision):
             return value
 
         self.cursor.execute(

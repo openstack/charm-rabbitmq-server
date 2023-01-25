@@ -614,7 +614,8 @@ class Pool(BasePool):
 
 class ReplicatedPool(BasePool):
     def __init__(self, service, name=None, pg_num=None, replicas=None,
-                 percent_data=None, app_name=None, op=None):
+                 percent_data=None, app_name=None, op=None,
+                 profile_name='replicated_rule'):
         """Initialize ReplicatedPool object.
 
         Pool information is either initialized from individual keyword
@@ -631,6 +632,8 @@ class ReplicatedPool(BasePool):
                          to this replicated pool.
         :type replicas: int
         :raises: KeyError
+        :param profile_name: Crush Profile to use
+        :type profile_name: Optional[str]
         """
         # NOTE: Do not perform initialization steps that require live data from
         # a running cluster here. The *Pool classes may be used for validation.
@@ -645,11 +648,20 @@ class ReplicatedPool(BasePool):
             # we will fail with KeyError if it is not provided.
             self.replicas = op['replicas']
             self.pg_num = op.get('pg_num')
+            self.profile_name = op.get('crush-profile') or profile_name
         else:
             self.replicas = replicas or 2
             self.pg_num = pg_num
+            self.profile_name = profile_name or 'replicated_rule'
 
     def _create(self):
+        # Validate if crush profile exists
+        if self.profile_name is None:
+            msg = ("Failed to discover crush profile named "
+                   "{}".format(self.profile_name))
+            log(msg, level=ERROR)
+            raise PoolCreationError(msg)
+
         # Do extra validation on pg_num with data from live cluster
         if self.pg_num:
             # Since the number of placement groups were specified, ensure
@@ -667,12 +679,12 @@ class ReplicatedPool(BasePool):
                 '--pg-num-min={}'.format(
                     min(AUTOSCALER_DEFAULT_PGS, self.pg_num)
                 ),
-                self.name, str(self.pg_num)
+                self.name, str(self.pg_num), self.profile_name
             ]
         else:
             cmd = [
                 'ceph', '--id', self.service, 'osd', 'pool', 'create',
-                self.name, str(self.pg_num)
+                self.name, str(self.pg_num), self.profile_name
             ]
         check_call(cmd)
 
@@ -691,7 +703,7 @@ class ErasurePool(BasePool):
     def __init__(self, service, name=None, erasure_code_profile=None,
                  percent_data=None, app_name=None, op=None,
                  allow_ec_overwrites=False):
-        """Initialize ReplicatedPool object.
+        """Initialize ErasurePool object.
 
         Pool information is either initialized from individual keyword
         arguments or from a individual CephBrokerRq operation Dict.
@@ -777,6 +789,9 @@ def enabled_manager_modules():
     :rtype: List[str]
     """
     cmd = ['ceph', 'mgr', 'module', 'ls']
+    quincy_or_later = cmp_pkgrevno('ceph-common', '17.1.0') >= 0
+    if quincy_or_later:
+        cmd.append('--format=json')
     try:
         modules = check_output(cmd).decode('utf-8')
     except CalledProcessError as e:
@@ -1842,7 +1857,7 @@ class CephBrokerRq(object):
         }
 
     def add_op_create_replicated_pool(self, name, replica_count=3, pg_num=None,
-                                      **kwargs):
+                                      crush_profile=None, **kwargs):
         """Adds an operation to create a replicated pool.
 
         Refer to docstring for ``_partial_build_common_op_create`` for
@@ -1856,6 +1871,10 @@ class CephBrokerRq(object):
                        for pool.
         :type pg_num: int
         :raises: AssertionError if provided data is of invalid type/range
+        :param crush_profile: Name of crush profile to use. If not set the
+                              ceph-mon unit handling the broker request will
+                              set its default value.
+        :type crush_profile: Optional[str]
         """
         if pg_num and kwargs.get('weight'):
             raise ValueError('pg_num and weight are mutually exclusive')
@@ -1865,6 +1884,7 @@ class CephBrokerRq(object):
             'name': name,
             'replicas': replica_count,
             'pg_num': pg_num,
+            'crush-profile': crush_profile
         }
         op.update(self._partial_build_common_op_create(**kwargs))
 

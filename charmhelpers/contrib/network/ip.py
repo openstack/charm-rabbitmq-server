@@ -467,7 +467,7 @@ def ns_query(address):
 
     try:
         answers = dns.resolver.query(address, rtype)
-    except dns.resolver.NXDOMAIN:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
         return None
 
     if answers:
@@ -539,7 +539,7 @@ def port_has_listener(address, port):
     """
     cmd = ['nc', '-z', address, str(port)]
     result = subprocess.call(cmd)
-    return not(bool(result))
+    return not (bool(result))
 
 
 def assert_charm_supports_ipv6():

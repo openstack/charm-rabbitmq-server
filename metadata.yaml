@@ -12,6 +12,7 @@ tags:
 series:
 - focal
 - jammy
+- kinetic
 provides:
   amqp:
     interface: rabbitmq

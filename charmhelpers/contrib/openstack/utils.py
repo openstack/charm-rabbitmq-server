@@ -158,6 +158,7 @@ OPENSTACK_CODENAMES = OrderedDict([
     ('2021.1', 'wallaby'),
     ('2021.2', 'xena'),
     ('2022.1', 'yoga'),
+    ('2022.2', 'zed'),
 ])
 
 # The ugly duckling - must list releases oldest to newest
@@ -400,13 +401,16 @@ def get_os_codename_version(vers):
         error_out(e)
 
 
-def get_os_version_codename(codename, version_map=OPENSTACK_CODENAMES):
+def get_os_version_codename(codename, version_map=OPENSTACK_CODENAMES,
+                            raise_exception=False):
     '''Determine OpenStack version number from codename.'''
     for k, v in version_map.items():
         if v == codename:
             return k
     e = 'Could not derive OpenStack version for '\
         'codename: %s' % codename
+    if raise_exception:
+        raise ValueError(str(e))
     error_out(e)
 
 
@@ -1323,7 +1327,7 @@ def _check_listening_on_services_ports(services, test=False):
     @param test: default=False, if False, test for closed, otherwise open.
     @returns OrderedDict(service: [port-not-open, ...]...), [boolean]
     """
-    test = not(not(test))  # ensure test is True or False
+    test = not (not (test))  # ensure test is True or False
     all_ports = list(itertools.chain(*services.values()))
     ports_states = [port_has_listener('0.0.0.0', p) for p in all_ports]
     map_ports = OrderedDict()
@@ -1579,7 +1583,7 @@ def is_unit_paused_set():
         with unitdata.HookData()() as t:
             kv = t[0]
             # transform something truth-y into a Boolean.
-            return not(not(kv.get('unit-paused')))
+            return not (not (kv.get('unit-paused')))
     except Exception:
         return False
 
@@ -2177,7 +2181,7 @@ def is_unit_upgrading_set():
         with unitdata.HookData()() as t:
             kv = t[0]
             # transform something truth-y into a Boolean.
-            return not(not(kv.get('unit-upgrading')))
+            return not (not (kv.get('unit-upgrading')))
     except Exception:
         return False
 
