@@ -16,6 +16,7 @@
 
 import glob
 import os
+import re
 import shutil
 import sys
 import subprocess
@@ -56,7 +57,6 @@ from charmhelpers.contrib.openstack.utils import (
     is_hook_allowed,
     is_unit_paused_set,
     set_unit_upgrading,
-    clear_unit_paused,
     clear_unit_upgrading,
 )
 
@@ -560,7 +560,7 @@ def cluster_joined(relation_id=None):
 
     if is_leader():
         log('Leader peer_storing cookie', level=INFO)
-        cookie = open(rabbit.COOKIE_PATH, 'r').read().strip()
+        cookie = read_erlang_cookie()
         peer_store('cookie', cookie)
         peer_store('leader_node_ip', unit_private_ip())
         peer_store('leader_node_hostname', rabbit.get_unit_hostname())
@@ -596,6 +596,11 @@ def cluster_changed(relation_id=None, remote_unit=None):
             config('ha-vip-only') is False:
         log('hacluster relation is present, skipping native '
             'rabbitmq cluster config.', level=INFO)
+        return
+
+    if is_unit_paused_set():
+        log('Unit is paused-set, so avoiding any other cluster activities',
+            level=INFO)
         return
 
     if rabbit.is_sufficient_peers():
@@ -658,9 +663,7 @@ def update_cookie(leaders_cookie=None):
         cookie = leaders_cookie
     else:
         cookie = peer_retrieve('cookie')
-    cookie_local = None
-    with open(rabbit.COOKIE_PATH, 'r') as f:
-        cookie_local = f.read().strip()
+    cookie_local = read_erlang_cookie()
 
     if cookie_local == cookie:
         log('Cookie already synchronized with peer.')
@@ -669,11 +672,90 @@ def update_cookie(leaders_cookie=None):
         raise Exception("rabbitmq-server must be restarted but not permitted")
 
     service_stop('rabbitmq-server')
-    with open(rabbit.COOKIE_PATH, 'wb') as out:
-        out.write(cookie.encode('ascii'))
+    write_erlang_cookie(cookie)
     if not is_unit_paused_set():
         service_restart('rabbitmq-server')
         rabbit.wait_app()
+
+
+def read_erlang_cookie():
+    """Read the erlang cookie and return it stripped of newline.
+
+    :returns: the erlang cookie
+    :rtype: str
+    """
+    with open(rabbit.COOKIE_PATH, 'r') as f:
+        return f.read().strip()
+
+
+def write_erlang_cookie(cookie):
+    """Write the erlang cookie to the cookie file.
+
+    :param cookie: the cookie to write.
+    :type cookie: str
+    """
+    try:
+        with open(rabbit.COOKIE_PATH, 'wb') as out:
+            out.write(cookie.encode('ascii'))
+    except Exception as e:
+        log("Could't write new cookie value to {}: reason: {}"
+            .format(rabbit.COOKIE_PATH, str(e)),
+            level=ERROR)
+
+
+def check_erlang_cookie_on_series_upgrade():
+    """Check the erlang cookie with peer storage.
+
+    During series upgrade from focal to jammy (rabbitmq upgrade from 3.8 to
+    3.9,) there is a package bug [1] that overwrites
+    the rabbit.COOKIEPATH with a more secure version of the cookie if it isn't
+    secure enough, which is exactly what the 3.8 and prior cookie looks like.
+    If the unit is the leader (and thus the first) it gets a new cookie and
+    'survives' the upgrade, but doesn't copy the cookie to the peer storage.  A
+    non leader then fails during the post-series-upgrade hook.  This function
+    does two things:
+
+     1. It ensures that the cookie is secure (if it's the leader), and places
+        it in peer storage.
+     2. If it's the non-leader then, it copies the cookie from peer storage and
+        puts it in the rabbit.COOKIE_PATH file.
+    """
+    COOKIE_KEY = 'cookie'
+    RABBITMQ_SERVER = 'rabbitmq-server'
+
+    restart_with_cookie = None
+    if is_leader():
+        # grab the leader cookie and check if it's not secure.
+        cookie_local = read_erlang_cookie()
+        if re.match(r'^[A-Z]{20}$', cookie_local):
+            # write a new, more secure, cookie
+            cmd = "openssl rand -base64 42"
+            try:
+                new_cookie = subprocess.check_output(cmd.split()).decode()
+                cookie_local = new_cookie
+                restart_with_cookie = new_cookie
+            except subprocess.CalledProcessError as e:
+                log("Couldn't generate a new {}: reason: {}"
+                    .format(rabbit.COOKIE_PATH, str(e)),
+                    level=ERROR)
+        # ensure the local cookie matches the one stored.
+        cookie = peer_retrieve(COOKIE_KEY)
+        if cookie != cookie_local:
+            peer_store(COOKIE_KEY, cookie_local)
+    else:
+        # non leader so see if we need to change the cookie
+        cookie = peer_retrieve(COOKIE_KEY)
+        cookie_local = read_erlang_cookie()
+        if cookie != cookie_local:
+            restart_with_cookie = cookie
+
+    # now if a restart is required, restart rabbitmq
+    if restart_with_cookie is not None:
+        service_stop(RABBITMQ_SERVER)
+        write_erlang_cookie(restart_with_cookie)
+        if not is_unit_paused_set():
+            service_restart(RABBITMQ_SERVER)
+            rabbit.wait_app()
 
 
 @hooks.hook('ha-relation-joined')
@@ -1039,7 +1121,7 @@ def series_upgrade_complete():
         os.remove(rabbit.RABBITMQ_CONFIG)
         rabbit.ConfigRenderer(
             rabbit.CONFIG_FILES()).write_all()
-    clear_unit_paused()
+    check_erlang_cookie_on_series_upgrade()
     clear_unit_upgrading()
     rabbit.resume_unit_helper(rabbit.ConfigRenderer(rabbit.CONFIG_FILES()))
 

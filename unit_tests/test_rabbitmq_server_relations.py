@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 
-from unit_tests.test_utils import CharmTestCase
+from unit_tests.test_utils import CharmTestCase, patch_open
 from unittest.mock import patch, MagicMock, call
 
 from charmhelpers.core.unitdata import Storage
@@ -479,6 +479,235 @@ class RelationUtil(CharmTestCase):
             'rabbitmq-server')
         wait_app.assert_called_once_with()
         self.assertFalse(update_clients.called)
+
+    def test_read_erlang_cookie(self):
+        with patch_open() as (mock_open, mock_file):
+            mock_file.read.return_value = "the-cookie\n"
+            self.assertEqual(rabbitmq_server_relations.read_erlang_cookie(),
+                             "the-cookie")
+            mock_open.assert_called_once_with(rabbit_utils.COOKIE_PATH, 'r')
+
+    def test_write_erlang_cookie(self):
+        with patch_open() as (mock_open, mock_file):
+            rabbitmq_server_relations.write_erlang_cookie('a-cookie')
+            mock_open.assert_called_once_with(rabbit_utils.COOKIE_PATH, 'wb')
+            mock_file.write.assert_called_once_with(b'a-cookie')
+
+    @patch.object(rabbitmq_server_relations.rabbit, 'wait_app')
+    @patch.object(rabbitmq_server_relations, 'log')
+    @patch.object(rabbitmq_server_relations, 'is_unit_paused_set')
+    @patch.object(rabbitmq_server_relations, 'service_stop')
+    @patch.object(rabbitmq_server_relations, 'service_restart')
+    @patch.object(rabbitmq_server_relations, 'peer_store')
+    @patch.object(rabbitmq_server_relations, 'peer_retrieve')
+    @patch('subprocess.check_output')
+    @patch.object(rabbitmq_server_relations, 'read_erlang_cookie')
+    @patch.object(rabbitmq_server_relations, 'write_erlang_cookie')
+    def test_check_erlang_cookie_on_series_upgrade__is_leader(
+        self,
+        write_erlang_cookie,
+        read_erlang_cookie,
+        subprocess_check_output,
+        peer_retrieve,
+        peer_store,
+        service_restart,
+        service_stop,
+        is_unit_paused_set,
+        log,
+        wait_app,
+    ):
+        # check that reading the peer cookie writes to the peer storage, but no
+        # new cookie is generated, no restart needed.
+        self.is_leader.return_value = True
+        read_erlang_cookie.return_value = 'the-cookie'
+        peer_retrieve.return_value = 'worse-cookie'
+        rabbitmq_server_relations.check_erlang_cookie_on_series_upgrade()
+        read_erlang_cookie.assert_called_once_with()
+        peer_store.assert_called_once_with('cookie', 'the-cookie')
+        service_stop.assert_not_called()
+        write_erlang_cookie.assert_not_called()
+        is_unit_paused_set.assert_not_called()
+        wait_app.assert_not_called()
+
+    @patch.object(rabbitmq_server_relations.rabbit, 'wait_app')
+    @patch.object(rabbitmq_server_relations, 'log')
+    @patch.object(rabbitmq_server_relations, 'is_unit_paused_set')
+    @patch.object(rabbitmq_server_relations, 'service_stop')
+    @patch.object(rabbitmq_server_relations, 'service_restart')
+    @patch.object(rabbitmq_server_relations, 'peer_store')
+    @patch.object(rabbitmq_server_relations, 'peer_retrieve')
+    @patch('subprocess.check_output')
+    @patch.object(rabbitmq_server_relations, 'read_erlang_cookie')
+    @patch.object(rabbitmq_server_relations, 'write_erlang_cookie')
+    def test_check_erlang_cookie_on_series_upgrade__is_leader__insecure_cookie(
+        self,
+        write_erlang_cookie,
+        read_erlang_cookie,
+        subprocess_check_output,
+        peer_retrieve,
+        peer_store,
+        service_restart,
+        service_stop,
+        is_unit_paused_set,
+        log,
+        wait_app,
+    ):
+        # check that a new cookie does have to be upgraded (e.g. it matches the
+        # 20 charmacters of A-Z.  Also, the unit is not paused.
+        self.is_leader.return_value = True
+        peer_retrieve.return_value = 'worse-cookie'
+        read_erlang_cookie.return_value = "ABCDEABCDEABCDEABCDE"
+        is_unit_paused_set.return_value = False
+        subprocess_check_output.return_value = b"really-good-cookie"
+        rabbitmq_server_relations.check_erlang_cookie_on_series_upgrade()
+        log.assert_not_called()
+        subprocess_check_output.assert_called_once_with(
+            ['openssl', 'rand', '-base64', '42'])
+        read_erlang_cookie.assert_called_once_with()
+        peer_store.assert_called_once_with('cookie', 'really-good-cookie')
+        service_stop.assert_called_once_with('rabbitmq-server')
+        write_erlang_cookie.assert_called_once_with('really-good-cookie')
+        is_unit_paused_set.assert_called_once_with()
+        service_restart.assert_called_once_with('rabbitmq-server')
+        wait_app.assert_called_once_with()
+
+    @patch.object(rabbitmq_server_relations.rabbit, 'wait_app')
+    @patch.object(rabbitmq_server_relations, 'log')
+    @patch.object(rabbitmq_server_relations, 'is_unit_paused_set')
+    @patch.object(rabbitmq_server_relations, 'service_stop')
+    @patch.object(rabbitmq_server_relations, 'service_restart')
+    @patch.object(rabbitmq_server_relations, 'peer_store')
+    @patch.object(rabbitmq_server_relations, 'peer_retrieve')
+    @patch('subprocess.check_output')
+    @patch.object(rabbitmq_server_relations, 'read_erlang_cookie')
+    @patch.object(rabbitmq_server_relations, 'write_erlang_cookie')
+    def test_check_erlang_cookie_on_series_upgrade__is_leader__unit_paused(
+        self,
+        write_erlang_cookie,
+        read_erlang_cookie,
+        subprocess_check_output,
+        peer_retrieve,
+        peer_store,
+        service_restart,
+        service_stop,
+        is_unit_paused_set,
+        log,
+        wait_app,
+    ):
+        # check that a new cookie does have to be upgraded (e.g. it matches the
+        # 20 charmacters of A-Z.  Also, the unit is paused.
+        self.is_leader.return_value = True
+        peer_retrieve.return_value = 'worse-cookie'
+        read_erlang_cookie.return_value = "ABCDEABCDEABCDEABCDE"
+        is_unit_paused_set.return_value = True
+        subprocess_check_output.return_value = b"really-good-cookie"
+        rabbitmq_server_relations.check_erlang_cookie_on_series_upgrade()
+        log.assert_not_called()
+        subprocess_check_output.assert_called_once_with(
+            ['openssl', 'rand', '-base64', '42'])
+        read_erlang_cookie.assert_called_once_with()
+        peer_store.assert_called_once_with('cookie', 'really-good-cookie')
+        service_stop.assert_called_once_with('rabbitmq-server')
+        write_erlang_cookie.assert_called_once_with('really-good-cookie')
+        is_unit_paused_set.assert_called_once_with()
+        service_restart.assert_not_called()
+        wait_app.assert_not_called()
+
+    @patch.object(rabbitmq_server_relations.rabbit, 'wait_app')
+    @patch.object(rabbitmq_server_relations, 'log')
+    @patch.object(rabbitmq_server_relations, 'is_unit_paused_set')
+    @patch.object(rabbitmq_server_relations, 'service_stop')
+    @patch.object(rabbitmq_server_relations, 'service_restart')
+    @patch.object(rabbitmq_server_relations, 'peer_store')
+    @patch.object(rabbitmq_server_relations, 'peer_retrieve')
+    @patch('subprocess.check_output')
+    @patch.object(rabbitmq_server_relations, 'read_erlang_cookie')
+    @patch.object(rabbitmq_server_relations, 'write_erlang_cookie')
+    def test_check_erlang_cookie_on_series_upgrade__is_leader__subp_error(
+        self,
+        write_erlang_cookie,
+        read_erlang_cookie,
+        subprocess_check_output,
+        peer_retrieve,
+        peer_store,
+        service_restart,
+        service_stop,
+        is_unit_paused_set,
+        log,
+        wait_app,
+    ):
+        # check that a new cookie does have to be upgraded (e.g. it matches the
+        # 20 charmacters of A-Z.  However, the subprocess fails and so no new
+        # cookie is generated.
+        self.is_leader.return_value = True
+        peer_retrieve.return_value = 'worse-cookie'
+        read_erlang_cookie.return_value = "ABCDEABCDEABCDEABCDE"
+        is_unit_paused_set.return_value = True
+
+        def _raise_error(*args, **kwargs):
+            raise subprocess.CalledProcessError(
+                cmd="some-command",
+                returncode=1,
+                stderr="went bang",
+                output="nothing good")
+
+        subprocess_check_output.side_effect = _raise_error
+        rabbitmq_server_relations.check_erlang_cookie_on_series_upgrade()
+        log.assert_called_once_with(
+            "Couldn't generate a new /var/lib/rabbitmq/.erlang.cookie: reason:"
+            " Command 'some-command' returned non-zero exit status 1.",
+            level='ERROR')
+        subprocess_check_output.assert_called_once_with(
+            ['openssl', 'rand', '-base64', '42'])
+        read_erlang_cookie.assert_called_once_with()
+        peer_store.assert_called_once_with('cookie', 'ABCDEABCDEABCDEABCDE')
+        service_stop.assert_not_called()
+        write_erlang_cookie.assert_not_called()
+        is_unit_paused_set.assert_not_called()
+        service_restart.assert_not_called()
+        wait_app.assert_not_called()
+
+    @patch.object(rabbitmq_server_relations.rabbit, 'wait_app')
+    @patch.object(rabbitmq_server_relations, 'log')
+    @patch.object(rabbitmq_server_relations, 'is_unit_paused_set')
+    @patch.object(rabbitmq_server_relations, 'service_stop')
+    @patch.object(rabbitmq_server_relations, 'service_restart')
+    @patch.object(rabbitmq_server_relations, 'peer_store')
+    @patch.object(rabbitmq_server_relations, 'peer_retrieve')
+    @patch('subprocess.check_output')
+    @patch.object(rabbitmq_server_relations, 'read_erlang_cookie')
+    @patch.object(rabbitmq_server_relations, 'write_erlang_cookie')
+    def test_check_erlang_cookie_on_series_upgrade__is_not_leader(
+        self,
+        write_erlang_cookie,
+        read_erlang_cookie,
+        subprocess_check_output,
+        peer_retrieve,
+        peer_store,
+        service_restart,
+        service_stop,
+        is_unit_paused_set,
+        log,
+        wait_app,
+    ):
+        # Not the leader, so just verify if the cookie in the peer relation is
+        # different and if so, store it and restart the app (start by being
+        # paused).
+        self.is_leader.return_value = False
+        peer_retrieve.return_value = 'worse-cookie'
+        read_erlang_cookie.return_value = "ABCDEABCDEABCDEABCDE"
+        is_unit_paused_set.return_value = True
+        subprocess_check_output.return_value = b"really-good-cookie"
+        rabbitmq_server_relations.check_erlang_cookie_on_series_upgrade()
+        log.assert_not_called()
+        subprocess_check_output.assert_not_called()
+        read_erlang_cookie.assert_called_once_with()
+        peer_store.assert_not_called()
+        service_stop.assert_called_once_with('rabbitmq-server')
+        write_erlang_cookie.assert_called_once_with('worse-cookie')
+        is_unit_paused_set.assert_called_once_with()
+        service_restart.assert_not_called()
+        wait_app.assert_not_called()
 
     @patch.object(rabbitmq_server_relations, 'leader_set')
     @patch.object(rabbitmq_server_relations, 'leader_get')
