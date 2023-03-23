@@ -19,6 +19,7 @@ import re
 from collections import OrderedDict
 from subprocess import check_output, CalledProcessError, PIPE
 import sys
+import traceback
 
 
 _path = os.path.dirname(os.path.realpath(__file__))
@@ -71,6 +72,9 @@ from hooks.rabbit_utils import (
     list_vhosts,
     vhost_queue_info,
     rabbitmq_version_newer_or_equal,
+    get_usernames_for_passwords,
+    NotLeaderError,
+    InvalidServiceUserError,
 )
 
 
@@ -299,6 +303,39 @@ def show_deferred_events(args):
     os_utils.show_deferred_events_action_helper()
 
 
+def list_service_usernames(args):
+    """List the service usernames known in this model that can be rotated."""
+    usernames = get_usernames_for_passwords()
+    action_set({'usernames': usernames or []})
+
+
+def rotate_service_user_password(args):
+    """Rotate the service user's password.
+
+    The parameter must be passed in the service-user parameter.
+    """
+    service_user = action_get("service-user")
+    if service_user is None:
+        action_fail(
+            "The 'service-user' parameter was not passed and is required.")
+        return
+    try:
+        rabbitmq_server_relations.rotate_service_user_password(service_user)
+    except NotLeaderError:
+        action_fail(
+            "This unit either isn't the leader or is not ready to do "
+            "leader actions.  The rotate-service-user-password action. "
+            "can't be run at the moment. Please verify that the unit is the "
+            "leader and that the cluster is ready.")
+    except InvalidServiceUserError:
+        action_fail(
+            "Service username {} is not valid for password rotation.  Please "
+            "check the action 'list-service-users' for the correct username."
+            .format(service_user))
+    except Exception:
+        raise
+
+
 # A dictionary of all the defined actions to callables (which take
 # parsed arguments).
 ACTIONS = {
@@ -313,6 +350,8 @@ ACTIONS = {
     "restart-services": restart,
     "run-deferred-hooks": run_deferred_hooks,
     "show-deferred-events": show_deferred_events,
+    "list-service-usernames": list_service_usernames,
+    "rotate-service-user-password": rotate_service_user_password,
 }
 
 
@@ -332,7 +371,10 @@ def main(args):
         try:
             action(args)
         except Exception as e:
+            log("Action {} failed: {}\nTrackback:\n{}"
+                .format(action_name, str(e), traceback.format_exc()), ERROR)
             action_fail("Action {} failed: {}".format(action_name, str(e)))
+
     _run_atexit()
 
 

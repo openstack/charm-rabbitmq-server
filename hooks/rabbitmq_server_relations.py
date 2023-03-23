@@ -100,6 +100,7 @@ from charmhelpers.core.hookenv import (
 )
 from charmhelpers.core.host import (
     cmp_pkgrevno,
+    pwgen,
     service_stop,
     service_restart,
 )
@@ -315,6 +316,77 @@ def configure_amqp(username, vhost, relation_id, admin=False,
     return password
 
 
+def rotate_service_user_password(service_username):
+    """Rotate the service username and update the relation.
+
+    This only works on the leader unit due to how peer storage is overlayed on
+    leader storage.
+
+    :param service_username: the username to rotate the password for.
+    :type service_username: str
+    :raises NotLeaderError: if the unit is not the leader.
+    :raises InvalidServiceUserError: if the service_username doesn't exist.
+    """
+    if not rabbit.leader_node_is_ready():
+        raise rabbit.NotLeaderError(
+            "This unit can't perform leadership actions and so the password "
+            "cannot be rotated.")
+    if service_username not in rabbit.get_usernames_for_passwords():
+        raise rabbit.InvalidServiceUserError(
+            "Username {} is not valid for password rotation."
+            .format(service_username))
+
+    # pick a new password.
+    new_passwd = pwgen(length=64)
+
+    # Update the password in rabbitmq
+    rabbit.change_user_password(service_username, new_passwd)
+
+    # Update the setting either locally on disk, leader settings or peer
+    # storage.
+    try:
+        peer_store("{}.passwd".format(service_username), new_passwd)
+    except ValueError:
+        # if there was no cluster, just push to leader settings.
+        leader_set({"{}.passwd".format(service_username): new_passwd})
+
+    # Note that the password is not stored in the local cache, so the kv()
+    # won't need updating for this.  The related unit with the username does
+    # need finding, though.  Note that the username may have a '_' in it if
+    # multiple prefixes are used, but that was specified as service_username
+    pattern = re.compile(r"(\S+)_username")
+    for rid in relation_ids('amqp'):
+        key = None
+        for unit in related_units(rid):
+            current = relation_get(rid=rid, unit=unit) or {}
+            # the username is either as 'username' or '{previx}_username'
+            if 'username' in current:
+                key = 'password'
+                break
+            for key in current.keys():
+                match = pattern.match(key)
+                if match:
+                    key = '_'.join((match[1], 'password'))
+                    break
+            else:
+                continue
+            break
+        if key is not None:
+            log("Updating password on key {} on relation_id: {}"
+                .format(key, rid),
+                INFO)
+            relation_set(relation_id=rid,
+                         relation_settings={key: new_passwd})
+            # set the password for the peer as well for update_client to work
+            # on the non-leader units
+            peer_key = "{}_{}".format(rid, key)
+            try:
+                peer_store(peer_key, new_passwd)
+            except ValueError:
+                # if there was no cluster, just push to leader settings.
+                leader_set({peer_key: new_passwd})
+
+
 def update_clients(check_deferred_restarts=True):
     """Update amqp client relation hooks
 
@@ -326,7 +398,7 @@ def update_clients(check_deferred_restarts=True):
     :type check_deferred_events: bool
     """
     if check_deferred_restarts and get_deferred_restarts():
-        log("Not sendinfg client update as a restart is pending.", INFO)
+        log("Not sending client update as a restart is pending.", INFO)
         return
     _leader_node_is_ready = rabbit.leader_node_is_ready()
     _client_node_is_ready = rabbit.client_node_is_ready()

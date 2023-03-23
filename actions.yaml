@@ -79,3 +79,20 @@ run-deferred-hooks:
 show-deferred-events:
     descrpition: |
         Show the outstanding restarts
+rotate-service-user-password:
+  description: |
+    Rotate the specified rabbitmq-server user's password. The current password
+    is replaced with a randomly generated password. The password is changed on
+    the relation to the user's units. This may result in a control plane outage
+    for the duration of the password changing process.
+  params:
+    service-user:
+      type: string
+      description: |
+        The username of the rabbitmq-server service as specified in
+        list-service-usernames.
+list-service-usernames:
+  description: |
+    List the usernames of the passwords that have been provided on the
+    amqp relations. The service username passed to
+    'rotate-service-user-password' needs to be on this list.
