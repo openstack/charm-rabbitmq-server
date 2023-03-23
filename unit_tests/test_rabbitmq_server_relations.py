@@ -326,6 +326,119 @@ class RelationUtil(CharmTestCase):
             if os.path.exists(tmpdir):
                 shutil.rmtree(tmpdir)
 
+    @patch.object(rabbitmq_server_relations.rabbit, 'leader_node_is_ready')
+    def test_rotate_service_user_password__not_leader(
+        self,
+        mock_leader_node_is_ready,
+    ):
+        mock_leader_node_is_ready.return_value = False
+        with self.assertRaises(
+                rabbitmq_server_relations.rabbit.NotLeaderError):
+            rabbitmq_server_relations.rotate_service_user_password('glance')
+
+    @patch.object(rabbitmq_server_relations.rabbit,
+                  'get_usernames_for_passwords')
+    @patch.object(rabbitmq_server_relations.rabbit, 'leader_node_is_ready')
+    def test_rotate_service_user_password__invalid_username(
+        self,
+        mock_leader_node_is_ready,
+        mock_get_usernames_for_passwords,
+    ):
+        mock_leader_node_is_ready.return_value = True
+        mock_get_usernames_for_passwords.return_value = ['cinder', 'glance']
+        with self.assertRaises(
+                rabbitmq_server_relations.rabbit.InvalidServiceUserError):
+            rabbitmq_server_relations.rotate_service_user_password('other')
+
+    @patch('rabbitmq_server_relations.relation_get')
+    @patch('rabbitmq_server_relations.relation_set')
+    @patch.object(rabbitmq_server_relations, 'leader_set')
+    @patch.object(rabbitmq_server_relations, 'peer_store')
+    @patch.object(rabbitmq_server_relations.rabbit, 'change_user_password')
+    @patch.object(rabbitmq_server_relations, 'pwgen')
+    @patch.object(rabbitmq_server_relations.rabbit,
+                  'get_usernames_for_passwords')
+    @patch.object(rabbitmq_server_relations.rabbit, 'leader_node_is_ready')
+    def test_rotate_service_user_password__peer_store_valueerror(
+        self,
+        mock_leader_node_is_ready,
+        mock_get_usernames_for_passwords,
+        mock_pwgen,
+        mock_change_user_password,
+        mock_peer_store,
+        mock_leader_set,
+        mock_relation_set,
+        mock_relation_get
+    ):
+        mock_leader_node_is_ready.return_value = True
+        mock_get_usernames_for_passwords.return_value = ['cinder', 'glance']
+        self.relation_ids.return_value = ['amqp:0']
+        self.related_units.return_value = ['glance/0']
+        mock_relation_get.return_value = {
+            'username': 'glance',
+        }
+        mock_pwgen.return_value = "new-password"
+
+        def _error(*args, **kwargs):
+            raise ValueError('bang')
+
+        mock_peer_store.side_effect = _error
+
+        rabbitmq_server_relations.rotate_service_user_password('glance')
+
+        mock_change_user_password.assert_called_once_with(
+            'glance', 'new-password')
+        mock_peer_store.assert_has_calls([
+            call('glance.passwd', 'new-password'),
+            call('amqp:0_password', 'new-password')])
+        mock_leader_set.assert_has_calls([
+            call({'glance.passwd': 'new-password'}),
+            call({'amqp:0_password': 'new-password'})])
+        mock_relation_set.assert_called_once_with(
+            relation_id='amqp:0',
+            relation_settings={'password': 'new-password'})
+
+    @patch('rabbitmq_server_relations.relation_get')
+    @patch('rabbitmq_server_relations.relation_set')
+    @patch.object(rabbitmq_server_relations, 'leader_set')
+    @patch.object(rabbitmq_server_relations, 'peer_store')
+    @patch.object(rabbitmq_server_relations.rabbit, 'change_user_password')
+    @patch.object(rabbitmq_server_relations, 'pwgen')
+    @patch.object(rabbitmq_server_relations.rabbit,
+                  'get_usernames_for_passwords')
+    @patch.object(rabbitmq_server_relations.rabbit, 'leader_node_is_ready')
+    def test_rotate_service_user_password__peer_store_ok(
+        self,
+        mock_leader_node_is_ready,
+        mock_get_usernames_for_passwords,
+        mock_pwgen,
+        mock_change_user_password,
+        mock_peer_store,
+        mock_leader_set,
+        mock_relation_set,
+        mock_relation_get
+    ):
+        mock_leader_node_is_ready.return_value = True
+        mock_get_usernames_for_passwords.return_value = ['cinder', 'glance']
+        self.relation_ids.return_value = ['amqp:0']
+        self.related_units.return_value = ['glance/0']
+        mock_relation_get.return_value = {
+            'some_username': 'glance',
+        }
+        mock_pwgen.return_value = "new-password"
+
+        rabbitmq_server_relations.rotate_service_user_password('glance')
+
+        mock_change_user_password.assert_called_once_with(
+            'glance', 'new-password')
+        mock_peer_store.assert_has_calls([
+            call('glance.passwd', 'new-password'),
+            call('amqp:0_some_password', 'new-password')])
+        mock_leader_set.assert_not_called()
+        mock_relation_set.assert_called_once_with(
+            relation_id='amqp:0',
+            relation_settings={'some_password': 'new-password'})
+
     @patch.object(rabbitmq_server_relations.rabbit, 'grant_permissions')
     @patch('rabbit_utils.create_user')
     @patch('rabbit_utils.local_unit')

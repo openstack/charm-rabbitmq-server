@@ -92,7 +92,7 @@ from charmhelpers.core.host import (
 
 from charmhelpers.contrib.peerstorage import (
     peer_store,
-    peer_retrieve
+    peer_retrieve,
 )
 
 from charmhelpers.fetch import (
@@ -124,6 +124,7 @@ CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
 
 _named_passwd = '/var/lib/charm/{}/{}.passwd'
 _local_named_passwd = '/var/lib/charm/{}/{}.local_passwd'
+_service_password_glob = '/var/lib/charm/{}/*.passwd'
 
 
 # hook_contexts are used as a convenient mechanism to render templates
@@ -149,6 +150,16 @@ CONFIG_FILES = OrderedDict([
         'services': ['rabbitmq-server']
     }),
 ])
+
+
+class NotLeaderError(Exception):
+    """Exception raised if not the leader."""
+    pass
+
+
+class InvalidServiceUserError(Exception):
+    """Exception raised if an invalid Service User is detected."""
+    pass
 
 
 class ConfigRenderer(object):
@@ -308,6 +319,24 @@ def create_user(user, password, tags=[]):
         user
     ))
     rabbitmqctl('set_user_tags', user, ' '.join(tags))
+
+
+def change_user_password(user, new_password):
+    """Change the password of the rabbitmq user.
+
+    :param user: the user to change; must exist in the rabbitmq instance.
+    :type user: str
+    :param new_password: the password to change to.
+    :type new_password: str
+    :raises KeyError: if the user doesn't exist.
+    """
+    exists = user_exists(user)
+    if not exists:
+        msg = "change_user_password: user '{}' doesn't exist.".format(user)
+        log(msg, ERROR)
+        raise KeyError(msg)
+    rabbitmqctl('change_password', user, new_password)
+    log("Changed password on rabbitmq for user: {}".format(user), INFO)
 
 
 def grant_permissions(user, vhost):
@@ -738,7 +767,7 @@ def get_rabbit_password_on_disk(username, password=None, local=False):
 
 def migrate_passwords_to_peer_relation():
     '''Migrate any passwords storage on disk to cluster peer relation'''
-    for f in glob.glob('/var/lib/charm/{}/*.passwd'.format(service_name())):
+    for f in glob.glob(_service_password_glob.format(service_name())):
         _key = os.path.basename(f)
         with open(f, 'r') as passwd:
             _value = passwd.read().strip()
@@ -748,6 +777,48 @@ def migrate_passwords_to_peer_relation():
         except ValueError:
             # NOTE cluster relation not yet ready - skip for now
             pass
+
+
+def get_usernames_for_passwords_on_disk():
+    """Return a list of usernames that have passwords on the disk.
+
+    Note this is only for non local passwords (i.e. that end in .passwd)
+
+    :returns: the list of usernames with passwords on the disk.
+    :rtype: List[str]
+    """
+    return [
+        os.path.splitext(os.path.basename(f))[0]
+        for f in glob.glob(_service_password_glob.format(service_name()))]
+
+
+def get_usernames_for_passwords():
+    """Return a list of usernames that have passwords.
+
+    This checks BOTH the peer relationship (leader-storage, or the fallback to
+    the 'cluster' relation) and on disk.  If the peer storage has usernames,
+    ignore the ones on disk (as they have already been migrated), otherwise
+    return the ones on disk.
+
+    The keys that have passwords in peer storage end with .passwd.
+
+    :returns: the list of usernames that have had passwords set.
+    :rtype: List[str]
+    """
+    # first get from leader settings/peer relation, if available
+    peer_keys = None
+    try:
+        peer_keys = peer_retrieve(None)
+    except ValueError:
+        pass
+    if peer_keys is None:
+        peer_keys = {}
+    usernames = set(u[:-7] for u in peer_keys.keys() if u.endswith(".passwd"))
+    # if usernames were found in peer storage, return them.
+    if usernames:
+        return sorted(usernames)
+    # otherwise, return the ones on disk, if any
+    return sorted(get_usernames_for_passwords_on_disk())
 
 
 def get_rabbit_password(username, password=None, local=False):

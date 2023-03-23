@@ -1402,3 +1402,86 @@ class UtilsTests(CharmTestCase):
         self.test_config.set('stats_cron_schedule', 'poorly formatted')
         max_age = rabbit_utils.get_max_stats_file_age()
         self.assertEqual(0, max_age)
+
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
+    @mock.patch.object(rabbit_utils, 'user_exists')
+    @mock.patch("rabbit_utils.log")
+    def test_change_user_password__user_doesnt_exist(
+        self,
+        mock_log,
+        mock_user_exists,
+        mock_rabbitmqctl
+    ):
+        mock_user_exists.return_value = False
+        with self.assertRaises(KeyError):
+            rabbit_utils.change_user_password('a-user', 'new-password')
+        mock_rabbitmqctl.assert_not_called()
+
+    @mock.patch.object(rabbit_utils, 'rabbitmqctl')
+    @mock.patch.object(rabbit_utils, 'user_exists')
+    @mock.patch("rabbit_utils.log")
+    def test_change_user_password(
+        self,
+        mock_log,
+        mock_user_exists,
+        mock_rabbitmqctl
+    ):
+        mock_user_exists.return_value = True
+        rabbit_utils.change_user_password('a-user', 'new-password')
+        mock_rabbitmqctl.assert_called_once_with(
+            'change_password', 'a-user', 'new-password')
+
+    @mock.patch.object(rabbit_utils, 'service_name')
+    @mock.patch('glob.glob')
+    def test_get_usernames_for_passwords_on_disk(
+            self, mock_glob, mock_service_name):
+        mock_glob.return_value = ['a.passwd', 'b.passwd']
+        mock_service_name.return_value = 'the-service'
+        self.assertEqual(rabbit_utils.get_usernames_for_passwords_on_disk(),
+                         ['a', 'b'])
+        mock_glob.assert_called_once_with(
+            rabbit_utils._service_password_glob.format('the-service'))
+
+    @mock.patch.object(rabbit_utils, 'peer_retrieve')
+    @mock.patch.object(rabbit_utils, 'get_usernames_for_passwords_on_disk')
+    def test_get_usernames_for_passwords__peer_retrieve_is_none(
+        self,
+        mock_get_usernames_for_passwords_on_disk,
+        mock_peer_retrieve,
+    ):
+        mock_peer_retrieve.return_value = None
+        mock_get_usernames_for_passwords_on_disk.return_value = ['a']
+        self.assertEqual(rabbit_utils.get_usernames_for_passwords(), ['a'])
+        mock_peer_retrieve.assert_called_once_with(None)
+
+    @mock.patch.object(rabbit_utils, 'peer_retrieve')
+    @mock.patch.object(rabbit_utils, 'get_usernames_for_passwords_on_disk')
+    def test_get_usernames_for_passwords__peer_retrieve_raises_valueerror(
+        self,
+        mock_get_usernames_for_passwords_on_disk,
+        mock_peer_retrieve,
+    ):
+        def _error(*args, **kwargs):
+            raise ValueError('bang')
+
+        mock_peer_retrieve.return_value = ['b.passwd']
+        mock_peer_retrieve.side_effect = _error
+        mock_get_usernames_for_passwords_on_disk.return_value = ['a']
+        self.assertEqual(rabbit_utils.get_usernames_for_passwords(), ['a'])
+        mock_peer_retrieve.assert_called_once_with(None)
+
+    @mock.patch.object(rabbit_utils, 'peer_retrieve')
+    @mock.patch.object(rabbit_utils, 'get_usernames_for_passwords_on_disk')
+    def test_get_usernames_for_passwords__peer_retrieve_ok(
+        self,
+        mock_get_usernames_for_passwords_on_disk,
+        mock_peer_retrieve,
+    ):
+        mock_peer_retrieve.return_value = {
+            'c.passwd': 'c-pass',
+            'b.passwd': 'b-pass',
+            'z.thing': 'thing'
+        }
+        mock_get_usernames_for_passwords_on_disk.return_value = ['a']
+        self.assertEqual(rabbit_utils.get_usernames_for_passwords(),
+                         ['b', 'c'])

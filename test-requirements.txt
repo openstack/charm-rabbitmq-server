@@ -18,6 +18,7 @@ requests>=2.18.4
 mock>=1.2,<4.0.0; python_version < '3.6'
 mock>=1.2; python_version >= '3.6'
 
+testtools<2.6; python_version < '3.10'
 stestr>=2.2.0
 
 # Dependency of stestr. Workaround for
