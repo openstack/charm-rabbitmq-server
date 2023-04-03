@@ -994,7 +994,7 @@ class UtilsTests(CharmTestCase):
                                    ttl=23000)
         rabbitmqctl.assert_called_once_with(
             'set_policy',
-            'heat_expiry', '"heat-engine-listener|engine_worker"',
+            'heat_expiry', 'heat-engine-listener|engine_worker',
             '{"expires":23000}',
             '--priority', '1',
             '--apply-to', 'queues',

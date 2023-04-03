@@ -465,7 +465,7 @@ def configure_ttl(vhost, ttlname, ttlreg, ttl):
         return
     rabbitmqctl('set_policy',
                 '{ttlname}'.format(ttlname=ttlname),
-                '"{ttlreg}"'.format(ttlreg=ttlreg),
+                '{ttlreg}'.format(ttlreg=ttlreg),
                 '{{"expires":{ttl}}}'.format(ttl=ttl),
                 '--priority', '1',
                 '--apply-to', 'queues',
