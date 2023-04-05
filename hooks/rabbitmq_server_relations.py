@@ -1007,7 +1007,7 @@ RMQ_MON_PORT = 15692
 @rabbit.coordinated_restart_on_change(rabbit.restart_map(), manage_restart)
 @harden()
 def config_changed(check_deferred_restarts=True):
-    """Run config-chaged hook.
+    """Run config-changed hook.
 
     :param check_deferred_events: Whether to check if restarts are
                                   permitted before running hook.
