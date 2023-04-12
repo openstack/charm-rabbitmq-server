@@ -12,7 +12,7 @@ tags:
 series:
 - focal
 - jammy
-- kinetic
+- lunar
 provides:
   amqp:
     interface: rabbitmq

@@ -159,6 +159,7 @@ OPENSTACK_CODENAMES = OrderedDict([
     ('2021.2', 'xena'),
     ('2022.1', 'yoga'),
     ('2022.2', 'zed'),
+    ('2023.1', 'antelope'),
 ])
 
 # The ugly duckling - must list releases oldest to newest
