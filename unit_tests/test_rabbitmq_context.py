@@ -315,7 +315,7 @@ class TestRabbitMQEnvContext(unittest.TestCase):
                                   "'+A 48'"})
 
     @mock.patch.object(rabbitmq_context, 'relation_ids', lambda *args: [])
-    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 128)
+    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 40)
     @mock.patch.object(rabbitmq_context, 'service_name')
     @mock.patch.object(rabbitmq_context, 'config')
     def test_rabbitmqenv_in_container(self, mock_config, mock_service_name):
@@ -340,11 +340,35 @@ class TestRabbitMQEnvContext(unittest.TestCase):
             ctxt = rabbitmq_context.RabbitMQEnvContext()()
             self.assertEqual(ctxt['settings'],
                              {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
-                              "'+A 3072'"})
+                              "'+A 960'"})
 
             del config['erl-vm-io-thread-multiplier']
             mock_is_ctnr.return_value = False
             ctxt = rabbitmq_context.RabbitMQEnvContext()()
             self.assertEqual(ctxt['settings'],
                              {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
-                              "'+A 3072'"})
+                              "'+A 960'"})
+
+    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 48)
+    @mock.patch.object(rabbitmq_context, 'relation_ids', lambda *args: [])
+    @mock.patch.object(rabbitmq_context, 'service_name')
+    @mock.patch.object(rabbitmq_context, 'config')
+    def test_rabbitmqenv_max_num_threads(self, mock_config, mock_service_name):
+        config = {}
+
+        def fake_config(key):
+            return config.get(key)
+
+        mock_service_name.return_value = 'svc_foo'
+        mock_config.side_effect = fake_config
+
+        ctxt = rabbitmq_context.RabbitMQEnvContext()()
+        self.assertEqual(ctxt['settings'],
+                         {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
+                          "'+A 1024'"})
+
+        config['erl-vm-io-thread-multiplier'] = 10
+        ctxt = rabbitmq_context.RabbitMQEnvContext()()
+        self.assertEqual(ctxt['settings'],
+                         {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
+                          "'+A 480'"})
