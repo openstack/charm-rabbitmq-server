@@ -1067,7 +1067,7 @@ class UtilsTests(CharmTestCase):
             '-p', 'test',
             '--priority', '1',
             '--apply-to', 'queues',
-            'heat_expiry', '"heat-engine-listener|engine_worker"',
+            'heat_expiry', 'heat-engine-listener|engine_worker',
             '{"expires":23000}'
         )
 
