@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from unittest import mock
 from functools import wraps
 
@@ -307,3 +308,104 @@ class MainTestCase(RabbitActionTestCase):
         with mock.patch.dict(actions.ACTIONS, {"foo": dummy_action}):
             actions.main(["foo"])
         self.assertEqual(dummy_calls, ["Action foo failed: uh oh"])
+
+
+class ListServiceUsersTestCase(CharmTestCase):
+
+    def setUp(self):
+        super().setUp(actions, ['action_set', 'get_usernames_for_passwords'])
+
+    def test_list_service_usernames(self):
+        self.get_usernames_for_passwords.return_value = ['a', 'b']
+        actions.list_service_usernames([])
+        self.get_usernames_for_passwords.assert_called_once_with()
+        self.action_set.assert_called_once_with(
+            {'usernames': ['a', 'b']})
+
+
+class RotateServiceUserPasswordTestCase(CharmTestCase):
+
+    def setUp(self):
+        super().setUp(actions, ['action_get', 'action_fail'])
+
+    def _assert_regex_in(self, regex, mock_item):
+        pattern = re.compile(regex)
+        calls = mock_item.call_args_list
+        for call in calls:
+            args = call[0]
+            msg = args[0]
+            print("message: {}".format(msg))
+            print("regex: {}".format(regex))
+            if pattern.match(msg):
+                print("pattern matched.")
+                return
+        self.fail("regex {} not found in any log.".format(regex))
+
+    @mock.patch.object(actions.rabbitmq_server_relations,
+                       'rotate_service_user_password')
+    def test_rotate_service_user_password(
+            self, mock_rotate_service_user_password):
+        self.action_get.return_value = 'keystone'
+
+        actions.rotate_service_user_password([])
+
+        self.action_get.assert_called_once_with('service-user')
+        mock_rotate_service_user_password.assert_called_once_with('keystone')
+
+    @mock.patch.object(actions.rabbitmq_server_relations,
+                       'rotate_service_user_password')
+    def test_rotate_service_user_password__service_user_none(
+            self, mock_rotate_service_user_password):
+        self.action_get.return_value = None
+
+        actions.rotate_service_user_password([])
+
+        self.action_fail.assert_called_once_with(
+            "The 'service-user' parameter was not passed and is required.")
+        mock_rotate_service_user_password.assert_not_called()
+
+    @mock.patch.object(actions.rabbitmq_server_relations,
+                       'rotate_service_user_password')
+    def test_rotate_service_user_password__not_leader(
+            self, mock_rotate_service_user_password):
+        self.action_get.return_value = 'keystone'
+
+        def _error(*args, **kwargs):
+            raise actions.NotLeaderError('bang')
+
+        mock_rotate_service_user_password.side_effect = _error
+
+        actions.rotate_service_user_password([])
+
+        self._assert_regex_in(r"^This unit .* isn't the leader",
+                              self.action_fail)
+
+    @mock.patch.object(actions.rabbitmq_server_relations,
+                       'rotate_service_user_password')
+    def test_rotate_service_user_password__invalid_service_user(
+            self, mock_rotate_service_user_password):
+        self.action_get.return_value = 'keystone'
+
+        def _error(*args, **kwargs):
+            raise actions.InvalidServiceUserError('bang')
+
+        mock_rotate_service_user_password.side_effect = _error
+
+        actions.rotate_service_user_password([])
+
+        self._assert_regex_in(r"^Service username .* not valid",
+                              self.action_fail)
+
+    @mock.patch.object(actions.rabbitmq_server_relations,
+                       'rotate_service_user_password')
+    def test_rotate_service_user_password__other_exception(
+            self, mock_rotate_service_user_password):
+        self.action_get.return_value = 'keystone'
+
+        def _error(*args, **kwargs):
+            raise actions.Exception('bang')
+
+        mock_rotate_service_user_password.side_effect = _error
+
+        with self.assertRaises(Exception):
+            actions.rotate_service_user_password([])
