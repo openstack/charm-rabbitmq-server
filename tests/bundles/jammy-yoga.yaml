@@ -30,8 +30,6 @@ applications:
   mysql-innodb-cluster:
     charm: ch:mysql-innodb-cluster
     num_units: 3
-    options:
-      source: *openstack-origin
     to:
       - '0'
       - '1'
@@ -49,7 +47,6 @@ applications:
       ssl: "off"
       management_plugin: "False"
       stats_cron_schedule: "*/1 * * * *"
-      source: *openstack-origin
     to:
       - '3'
       - '4'
