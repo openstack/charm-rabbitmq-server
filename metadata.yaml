@@ -5,6 +5,7 @@ description: |
   RabbitMQ is an implementation of AMQP, the emerging standard for high
   performance enterprise messaging. The RabbitMQ server is a robust and
   scalable implementation of an AMQP broker.
+docs: https://discourse.charmhub.io/t/rabbitmq-server-docs-index/10546
 tags:
 - openstack
 - amqp
