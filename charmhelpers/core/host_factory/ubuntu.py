@@ -32,6 +32,7 @@ UBUNTU_RELEASES = (
     'jammy',
     'kinetic',
     'lunar',
+    'mantic',
 )
 
 

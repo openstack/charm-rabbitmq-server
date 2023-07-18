@@ -13,6 +13,7 @@ series:
 - focal
 - jammy
 - lunar
+- mantic
 provides:
   amqp:
     interface: rabbitmq

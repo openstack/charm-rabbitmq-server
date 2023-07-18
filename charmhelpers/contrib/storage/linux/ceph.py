@@ -28,7 +28,6 @@ import os
 import shutil
 import json
 import time
-import uuid
 
 from subprocess import (
     check_call,
@@ -1677,6 +1676,10 @@ class CephBrokerRq(object):
     The API is versioned and defaults to version 1.
     """
 
+    # The below hash is the result of running
+    # `hashlib.sha1('[]'.encode()).hexdigest()`
+    EMPTY_LIST_SHA = '97d170e1550eee4afc0af065b78cda302a97674c'
+
     def __init__(self, api_version=1, request_id=None, raw_request_data=None):
         """Initialize CephBrokerRq object.
 
@@ -1685,8 +1688,12 @@ class CephBrokerRq(object):
 
         :param api_version: API version for request (default: 1).
         :type api_version: Optional[int]
-        :param request_id: Unique identifier for request.
-                           (default: string representation of generated UUID)
+        :param request_id: Unique identifier for request. The identifier will
+                           be updated as ops are added or removed from the
+                           broker request. This ensures that Ceph will
+                           correctly process requests where operations are
+                           added after the initial request is processed.
+                           (default: sha1 of operations)
         :type request_id: Optional[str]
         :param raw_request_data: JSON-encoded string to build request from.
         :type raw_request_data: Optional[str]
@@ -1695,15 +1702,19 @@ class CephBrokerRq(object):
         if raw_request_data:
             request_data = json.loads(raw_request_data)
             self.api_version = request_data['api-version']
-            self.request_id = request_data['request-id']
             self.set_ops(request_data['ops'])
+            self.request_id = request_data['request-id']
         else:
             self.api_version = api_version
             if request_id:
                 self.request_id = request_id
             else:
-                self.request_id = str(uuid.uuid1())
+                self.request_id = CephBrokerRq.EMPTY_LIST_SHA
             self.ops = []
+
+    def _hash_ops(self):
+        """Return the sha1 of the requested Broker ops."""
+        return hashlib.sha1(json.dumps(self.ops, sort_keys=True).encode()).hexdigest()
 
     def add_op(self, op):
         """Add an op if it is not already in the list.
@@ -1713,6 +1724,7 @@ class CephBrokerRq(object):
         """
         if op not in self.ops:
             self.ops.append(op)
+            self.request_id = self._hash_ops()
 
     def add_op_request_access_to_group(self, name, namespace=None,
                                        permission=None, key_name=None,
@@ -1991,6 +2003,7 @@ class CephBrokerRq(object):
         to allow comparisons to ensure validity.
         """
         self.ops = ops
+        self.request_id = self._hash_ops()
 
     @property
     def request(self):
