@@ -160,6 +160,7 @@ OPENSTACK_CODENAMES = OrderedDict([
     ('2022.1', 'yoga'),
     ('2022.2', 'zed'),
     ('2023.1', 'antelope'),
+    ('2023.2', 'bobcat'),
 ])
 
 # The ugly duckling - must list releases oldest to newest
@@ -957,7 +958,7 @@ def os_requires_version(ostack_release, pkg):
     def wrap(f):
         @wraps(f)
         def wrapped_f(*args):
-            if os_release(pkg) < ostack_release:
+            if CompareOpenStackReleases(os_release(pkg)) < ostack_release:
                 raise Exception("This hook is not supported on releases"
                                 " before %s" % ostack_release)
             f(*args)

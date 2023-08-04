@@ -409,6 +409,9 @@ def get_requests_for_local_unit(relation_name=None):
     relation_name = relation_name or 'certificates'
     bundles = []
     for rid in relation_ids(relation_name):
+        sent = relation_get(rid=rid, unit=local_unit())
+        legacy_keys = ['certificate_name', 'common_name']
+        is_legacy_request = set(sent).intersection(legacy_keys)
         for unit in related_units(rid):
             data = relation_get(rid=rid, unit=unit)
             if data.get(raw_certs_key):
@@ -416,6 +419,14 @@ def get_requests_for_local_unit(relation_name=None):
                     'ca': data['ca'],
                     'chain': data.get('chain'),
                     'certs': json.loads(data[raw_certs_key])})
+            elif is_legacy_request:
+                bundles.append({
+                    'ca': data['ca'],
+                    'chain': data.get('chain'),
+                    'certs': {sent['common_name']:
+                              {'cert': data.get(local_name + '.server.cert'),
+                               'key': data.get(local_name + '.server.key')}}})
+
     return bundles
 
 

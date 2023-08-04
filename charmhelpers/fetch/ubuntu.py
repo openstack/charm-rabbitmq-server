@@ -238,6 +238,14 @@ CLOUD_ARCHIVE_POCKETS = {
     'antelope/proposed': 'jammy-proposed/antelope',
     'jammy-antelope/proposed': 'jammy-proposed/antelope',
     'jammy-proposed/antelope': 'jammy-proposed/antelope',
+    # bobcat
+    'bobcat': 'jammy-updates/bobcat',
+    'jammy-bobcat': 'jammy-updates/bobcat',
+    'jammy-bobcat/updates': 'jammy-updates/bobcat',
+    'jammy-updates/bobcat': 'jammy-updates/bobcat',
+    'bobcat/proposed': 'jammy-proposed/bobcat',
+    'jammy-bobcat/proposed': 'jammy-proposed/bobcat',
+    'jammy-proposed/bobcat': 'jammy-proposed/bobcat',
 
     # OVN
     'focal-ovn-22.03': 'focal-updates/ovn-22.03',
@@ -270,6 +278,7 @@ OPENSTACK_RELEASES = (
     'yoga',
     'zed',
     'antelope',
+    'bobcat',
 )
 
 
@@ -298,6 +307,7 @@ UBUNTU_OPENSTACK_RELEASE = OrderedDict([
     ('jammy', 'yoga'),
     ('kinetic', 'zed'),
     ('lunar', 'antelope'),
+    ('mantic', 'bobcat'),
 ])
 
 
@@ -591,7 +601,7 @@ def _get_key_by_keyid(keyid):
     curl_cmd = ['curl', keyserver_url.format(keyid)]
     # use proxy server settings in order to retrieve the key
     return subprocess.check_output(curl_cmd,
-                                   env=env_proxy_settings(['https']))
+                                   env=env_proxy_settings(['https', 'no_proxy']))
 
 
 def _dearmor_gpg_key(key_asc):

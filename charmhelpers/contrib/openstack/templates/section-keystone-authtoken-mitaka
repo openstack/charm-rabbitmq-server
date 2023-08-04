@@ -22,6 +22,8 @@ signing_dir = {{ signing_dir }}
 {% if use_memcache == true %}
 memcached_servers = {{ memcache_url }}
 {% endif -%}
+{% if admin_role -%}
 service_token_roles = {{ admin_role }}
 service_token_roles_required = True
+{% endif -%}
 {% endif -%}
