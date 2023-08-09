@@ -1,7 +1,7 @@
 pause:
   description: Pause the rabbitmq unit.
 resume:
-  descrpition: Resume the rabbitmq unit.
+  description: Resume the rabbitmq unit.
 cluster-status:
   description: Show the current cluster status.
 check-queues:
@@ -77,7 +77,7 @@ run-deferred-hooks:
     .
     NOTE: Service will be restarted as needed irrespective of enable-auto-restarts
 show-deferred-events:
-    descrpition: |
+    description: |
         Show the outstanding restarts
 rotate-service-user-password:
   description: |
