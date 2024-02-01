@@ -10,6 +10,10 @@ charms can be obtained from the [Charm Store][charms-requires-rabbitmq] (the
 charms officially supported by the OpenStack Charms project are published by
 'openstack-charmers').
 
+NOTE: the charm doesn't officially support application data bags, and thus may
+not work correctly with them.  See [this bug][app-data-bag-bug] for more
+details.
+
 # Usage
 
 ## Configuration
@@ -107,6 +111,8 @@ Actions allow specific operations to be performed on a per-unit basis.
 * `list-unconsumed-queues`
 * `pause`
 * `resume`
+* `list-service-usernames`
+* `rotate-service-user-password`
 
 To display action descriptions run `juju actions --schema rabbitmq-server`. If
 the charm is not deployed then see file ``actions.yaml``.
@@ -135,3 +141,4 @@ For general charm questions refer to the [OpenStack Charm Guide][cg].
 [uca]: https://wiki.ubuntu.com/OpenStack/CloudArchive
 [cdg-ha-rabbitmq]: https://docs.openstack.org/project-deploy-guide/charm-deployment-guide/latest/app-ha.html#rabbitmq
 [juju-docs-config-apps]: https://juju.is/docs/configuring-applications
+[app-data-bag-bug]: https://bugs.launchpad.net/charm-rabbitmq-server/+bug/2051930

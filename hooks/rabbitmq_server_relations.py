@@ -363,8 +363,8 @@ def rotate_service_user_password(service_username):
             if 'username' in current:
                 key = 'password'
                 break
-            for key in current.keys():
-                match = pattern.match(key)
+            for inner_key in current.keys():
+                match = pattern.match(inner_key)
                 if match:
                     key = '_'.join((match[1], 'password'))
                     break
