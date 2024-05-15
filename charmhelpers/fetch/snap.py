@@ -52,7 +52,7 @@ def _snap_exec(commands):
     :param commands: List commands
     :return: Integer exit code
     """
-    assert type(commands) == list
+    assert isinstance(commands, list)
 
     retry_count = 0
     return_code = None

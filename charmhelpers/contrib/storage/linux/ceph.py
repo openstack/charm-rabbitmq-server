@@ -158,15 +158,19 @@ def get_osd_settings(relation_name):
     return _order_dict_by_key(osd_settings)
 
 
-def send_application_name(relid=None):
+def send_application_name(relid=None, app_name=None):
     """Send the application name down the relation.
 
     :param relid: Relation id to set application name in.
     :type relid: str
+    :param app_name: Application name to send in the relation.
+    :type app_name: str
     """
+    if app_name is None:
+        app_name = application_name()
     relation_set(
         relation_id=relid,
-        relation_settings={'application-name': application_name()})
+        relation_settings={'application-name': app_name})
 
 
 def send_osd_settings():

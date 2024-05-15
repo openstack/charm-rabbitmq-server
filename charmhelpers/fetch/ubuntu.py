@@ -246,6 +246,14 @@ CLOUD_ARCHIVE_POCKETS = {
     'bobcat/proposed': 'jammy-proposed/bobcat',
     'jammy-bobcat/proposed': 'jammy-proposed/bobcat',
     'jammy-proposed/bobcat': 'jammy-proposed/bobcat',
+    # caracal
+    'caracal': 'jammy-updates/caracal',
+    'jammy-caracal': 'jammy-updates/caracal',
+    'jammy-caracal/updates': 'jammy-updates/caracal',
+    'jammy-updates/caracal': 'jammy-updates/caracal',
+    'caracal/proposed': 'jammy-proposed/caracal',
+    'jammy-caracal/proposed': 'jammy-proposed/caracal',
+    'jammy-proposed/caracal': 'jammy-proposed/caracal',
 
     # OVN
     'focal-ovn-22.03': 'focal-updates/ovn-22.03',
@@ -279,6 +287,7 @@ OPENSTACK_RELEASES = (
     'zed',
     'antelope',
     'bobcat',
+    'caracal',
 )
 
 
@@ -308,6 +317,7 @@ UBUNTU_OPENSTACK_RELEASE = OrderedDict([
     ('kinetic', 'zed'),
     ('lunar', 'antelope'),
     ('mantic', 'bobcat'),
+    ('noble', 'caracal'),
 ])
 
 

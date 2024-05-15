@@ -256,8 +256,11 @@ def service_resume(service_name, init_dir="/etc/init",
     upstart_file = os.path.join(init_dir, "{}.conf".format(service_name))
     sysv_file = os.path.join(initd_dir, service_name)
     if init_is_systemd(service_name=service_name):
-        service('unmask', service_name)
-        service('enable', service_name)
+        if service('is-enabled', service_name):
+            log('service {} already enabled'.format(service_name), level=DEBUG)
+        else:
+            service('unmask', service_name)
+            service('enable', service_name)
     elif os.path.exists(upstart_file):
         override_path = os.path.join(
             init_dir, '{}.override'.format(service_name))

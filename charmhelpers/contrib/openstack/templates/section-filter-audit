@@ -1,0 +1,6 @@
+{% if audit_middleware and service_name -%}
+[filter:audit]
+paste.filter_factory = keystonemiddleware.audit:filter_factory
+audit_map_file = /etc/{{ service_name }}/api_audit_map.conf
+service_name = {{ service_name }}
+{% endif -%}

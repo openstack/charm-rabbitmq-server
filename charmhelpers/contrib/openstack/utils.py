@@ -161,6 +161,7 @@ OPENSTACK_CODENAMES = OrderedDict([
     ('2022.2', 'zed'),
     ('2023.1', 'antelope'),
     ('2023.2', 'bobcat'),
+    ('2024.1', 'caracal'),
 ])
 
 # The ugly duckling - must list releases oldest to newest
@@ -416,17 +417,6 @@ def get_os_version_codename(codename, version_map=OPENSTACK_CODENAMES,
     error_out(e)
 
 
-def get_os_version_codename_swift(codename):
-    '''Determine OpenStack version number of swift from codename.'''
-    # for k, v in six.iteritems(SWIFT_CODENAMES):
-    for k, v in SWIFT_CODENAMES.items():
-        if k == codename:
-            return v[-1]
-    e = 'Could not derive swift version for '\
-        'codename: %s' % codename
-    error_out(e)
-
-
 def get_swift_codename(version):
     '''Determine OpenStack codename that corresponds to swift version.'''
     codenames = [k for k, v in SWIFT_CODENAMES.items() if version in v]
@@ -585,7 +575,6 @@ def get_installed_os_version():
     return openstack_release().get('OPENSTACK_CODENAME')
 
 
-@cached
 def openstack_release():
     """Return /etc/os-release in a dict."""
     d = {}
@@ -847,14 +836,10 @@ def openstack_upgrade_available(package):
     if not cur_vers:
         # The package has not been installed yet do not attempt upgrade
         return False
-    if "swift" in package:
-        codename = get_os_codename_install_source(src)
-        avail_vers = get_os_version_codename_swift(codename)
-    else:
-        try:
-            avail_vers = get_os_version_install_source(src)
-        except Exception:
-            avail_vers = cur_vers
+    try:
+        avail_vers = get_os_version_install_source(src)
+    except Exception:
+        avail_vers = cur_vers
     apt.init()
     return apt.version_compare(avail_vers, cur_vers) >= 1
 
@@ -1222,12 +1207,14 @@ def _ows_check_services_running(services, ports):
     return ows_check_services_running(services, ports)
 
 
-def ows_check_services_running(services, ports):
+def ows_check_services_running(services, ports, ssl_check_info=None):
     """Check that the services that should be running are actually running
     and that any ports specified are being listened to.
 
     @param services: list of strings OR dictionary specifying services/ports
     @param ports: list of ports
+    @param ssl_check_info: SSLPortCheckInfo object. If provided, port checks
+                           will be done using an SSL connection.
     @returns state, message: strings or None, None
     """
     messages = []
@@ -1243,7 +1230,7 @@ def ows_check_services_running(services, ports):
         # also verify that the ports that should be open are open
         # NB, that ServiceManager objects only OPTIONALLY have ports
         map_not_open, ports_open = (
-            _check_listening_on_services_ports(services))
+            _check_listening_on_services_ports(services, ssl_check_info))
         if not all(ports_open):
             # find which service has missing ports. They are in service
             # order which makes it a bit easier.
@@ -1258,7 +1245,8 @@ def ows_check_services_running(services, ports):
 
     if ports is not None:
         # and we can also check ports which we don't know the service for
-        ports_open, ports_open_bools = _check_listening_on_ports_list(ports)
+        ports_open, ports_open_bools = \
+            _check_listening_on_ports_list(ports, ssl_check_info)
         if not all(ports_open_bools):
             messages.append(
                 "Ports which should be open, but are not: {}"
@@ -1317,7 +1305,8 @@ def _check_running_services(services):
     return list(zip(services, services_running)), services_running
 
 
-def _check_listening_on_services_ports(services, test=False):
+def _check_listening_on_services_ports(services, test=False,
+                                       ssl_check_info=None):
     """Check that the unit is actually listening (has the port open) on the
     ports that the service specifies are open. If test is True then the
     function returns the services with ports that are open rather than
@@ -1327,11 +1316,14 @@ def _check_listening_on_services_ports(services, test=False):
 
     @param services: OrderedDict(service: [port, ...], ...)
     @param test: default=False, if False, test for closed, otherwise open.
+    @param ssl_check_info: SSLPortCheckInfo object. If provided, port checks
+                           will be done using an SSL connection.
     @returns OrderedDict(service: [port-not-open, ...]...), [boolean]
     """
     test = not (not (test))  # ensure test is True or False
     all_ports = list(itertools.chain(*services.values()))
-    ports_states = [port_has_listener('0.0.0.0', p) for p in all_ports]
+    ports_states = [port_has_listener('0.0.0.0', p, ssl_check_info)
+                    for p in all_ports]
     map_ports = OrderedDict()
     matched_ports = [p for p, opened in zip(all_ports, ports_states)
                      if opened == test]  # essentially opened xor test
@@ -1342,16 +1334,19 @@ def _check_listening_on_services_ports(services, test=False):
     return map_ports, ports_states
 
 
-def _check_listening_on_ports_list(ports):
+def _check_listening_on_ports_list(ports, ssl_check_info=None):
     """Check that the ports list given are being listened to
 
     Returns a list of ports being listened to and a list of the
     booleans.
 
+    @param ssl_check_info: SSLPortCheckInfo object. If provided, port checks
+                           will be done using an SSL connection.
     @param ports: LIST of port numbers.
     @returns [(port_num, boolean), ...], [boolean]
     """
-    ports_open = [port_has_listener('0.0.0.0', p) for p in ports]
+    ports_open = [port_has_listener('0.0.0.0', p, ssl_check_info)
+                  for p in ports]
     return zip(ports, ports_open), ports_open
 
 
