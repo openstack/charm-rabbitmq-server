@@ -221,6 +221,13 @@ def https():
         return True
     if config_get('ssl_cert') and config_get('ssl_key'):
         return True
+    # Local import to avoid ciruclar dependency.
+    import charmhelpers.contrib.openstack.cert_utils as cert_utils
+    if (
+        cert_utils.get_certificate_request() and not
+        cert_utils.get_requests_for_local_unit("certificates")
+    ):
+        return False
     for r_id in relation_ids('certificates'):
         for unit in relation_list(r_id):
             ca = relation_get('ca', rid=r_id, unit=unit)
@@ -324,7 +331,7 @@ def valid_hacluster_config():
     '''
     vip = config_get('vip')
     dns = config_get('dns-ha')
-    if not(bool(vip) ^ bool(dns)):
+    if not (bool(vip) ^ bool(dns)):
         msg = ('HA: Either vip or dns-ha must be set but not both in order to '
                'use high availability')
         status_set('blocked', msg)

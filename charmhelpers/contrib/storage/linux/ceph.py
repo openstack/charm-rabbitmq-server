@@ -28,7 +28,6 @@ import os
 import shutil
 import json
 import time
-import uuid
 
 from subprocess import (
     check_call,
@@ -159,15 +158,19 @@ def get_osd_settings(relation_name):
     return _order_dict_by_key(osd_settings)
 
 
-def send_application_name(relid=None):
+def send_application_name(relid=None, app_name=None):
     """Send the application name down the relation.
 
     :param relid: Relation id to set application name in.
     :type relid: str
+    :param app_name: Application name to send in the relation.
+    :type app_name: str
     """
+    if app_name is None:
+        app_name = application_name()
     relation_set(
         relation_id=relid,
-        relation_settings={'application-name': application_name()})
+        relation_settings={'application-name': app_name})
 
 
 def send_osd_settings():
@@ -614,7 +617,8 @@ class Pool(BasePool):
 
 class ReplicatedPool(BasePool):
     def __init__(self, service, name=None, pg_num=None, replicas=None,
-                 percent_data=None, app_name=None, op=None):
+                 percent_data=None, app_name=None, op=None,
+                 profile_name='replicated_rule'):
         """Initialize ReplicatedPool object.
 
         Pool information is either initialized from individual keyword
@@ -631,6 +635,8 @@ class ReplicatedPool(BasePool):
                          to this replicated pool.
         :type replicas: int
         :raises: KeyError
+        :param profile_name: Crush Profile to use
+        :type profile_name: Optional[str]
         """
         # NOTE: Do not perform initialization steps that require live data from
         # a running cluster here. The *Pool classes may be used for validation.
@@ -645,11 +651,20 @@ class ReplicatedPool(BasePool):
             # we will fail with KeyError if it is not provided.
             self.replicas = op['replicas']
             self.pg_num = op.get('pg_num')
+            self.profile_name = op.get('crush-profile') or profile_name
         else:
             self.replicas = replicas or 2
             self.pg_num = pg_num
+            self.profile_name = profile_name or 'replicated_rule'
 
     def _create(self):
+        # Validate if crush profile exists
+        if self.profile_name is None:
+            msg = ("Failed to discover crush profile named "
+                   "{}".format(self.profile_name))
+            log(msg, level=ERROR)
+            raise PoolCreationError(msg)
+
         # Do extra validation on pg_num with data from live cluster
         if self.pg_num:
             # Since the number of placement groups were specified, ensure
@@ -667,12 +682,12 @@ class ReplicatedPool(BasePool):
                 '--pg-num-min={}'.format(
                     min(AUTOSCALER_DEFAULT_PGS, self.pg_num)
                 ),
-                self.name, str(self.pg_num)
+                self.name, str(self.pg_num), self.profile_name
             ]
         else:
             cmd = [
                 'ceph', '--id', self.service, 'osd', 'pool', 'create',
-                self.name, str(self.pg_num)
+                self.name, str(self.pg_num), self.profile_name
             ]
         check_call(cmd)
 
@@ -691,7 +706,7 @@ class ErasurePool(BasePool):
     def __init__(self, service, name=None, erasure_code_profile=None,
                  percent_data=None, app_name=None, op=None,
                  allow_ec_overwrites=False):
-        """Initialize ReplicatedPool object.
+        """Initialize ErasurePool object.
 
         Pool information is either initialized from individual keyword
         arguments or from a individual CephBrokerRq operation Dict.
@@ -777,6 +792,9 @@ def enabled_manager_modules():
     :rtype: List[str]
     """
     cmd = ['ceph', 'mgr', 'module', 'ls']
+    quincy_or_later = cmp_pkgrevno('ceph-common', '17.1.0') >= 0
+    if quincy_or_later:
+        cmd.append('--format=json')
     try:
         modules = check_output(cmd).decode('utf-8')
     except CalledProcessError as e:
@@ -1662,6 +1680,10 @@ class CephBrokerRq(object):
     The API is versioned and defaults to version 1.
     """
 
+    # The below hash is the result of running
+    # `hashlib.sha1('[]'.encode()).hexdigest()`
+    EMPTY_LIST_SHA = '97d170e1550eee4afc0af065b78cda302a97674c'
+
     def __init__(self, api_version=1, request_id=None, raw_request_data=None):
         """Initialize CephBrokerRq object.
 
@@ -1670,8 +1692,12 @@ class CephBrokerRq(object):
 
         :param api_version: API version for request (default: 1).
         :type api_version: Optional[int]
-        :param request_id: Unique identifier for request.
-                           (default: string representation of generated UUID)
+        :param request_id: Unique identifier for request. The identifier will
+                           be updated as ops are added or removed from the
+                           broker request. This ensures that Ceph will
+                           correctly process requests where operations are
+                           added after the initial request is processed.
+                           (default: sha1 of operations)
         :type request_id: Optional[str]
         :param raw_request_data: JSON-encoded string to build request from.
         :type raw_request_data: Optional[str]
@@ -1680,15 +1706,19 @@ class CephBrokerRq(object):
         if raw_request_data:
             request_data = json.loads(raw_request_data)
             self.api_version = request_data['api-version']
-            self.request_id = request_data['request-id']
             self.set_ops(request_data['ops'])
+            self.request_id = request_data['request-id']
         else:
             self.api_version = api_version
             if request_id:
                 self.request_id = request_id
             else:
-                self.request_id = str(uuid.uuid1())
+                self.request_id = CephBrokerRq.EMPTY_LIST_SHA
             self.ops = []
+
+    def _hash_ops(self):
+        """Return the sha1 of the requested Broker ops."""
+        return hashlib.sha1(json.dumps(self.ops, sort_keys=True).encode()).hexdigest()
 
     def add_op(self, op):
         """Add an op if it is not already in the list.
@@ -1698,6 +1728,7 @@ class CephBrokerRq(object):
         """
         if op not in self.ops:
             self.ops.append(op)
+            self.request_id = self._hash_ops()
 
     def add_op_request_access_to_group(self, name, namespace=None,
                                        permission=None, key_name=None,
@@ -1842,7 +1873,7 @@ class CephBrokerRq(object):
         }
 
     def add_op_create_replicated_pool(self, name, replica_count=3, pg_num=None,
-                                      **kwargs):
+                                      crush_profile=None, **kwargs):
         """Adds an operation to create a replicated pool.
 
         Refer to docstring for ``_partial_build_common_op_create`` for
@@ -1856,6 +1887,10 @@ class CephBrokerRq(object):
                        for pool.
         :type pg_num: int
         :raises: AssertionError if provided data is of invalid type/range
+        :param crush_profile: Name of crush profile to use. If not set the
+                              ceph-mon unit handling the broker request will
+                              set its default value.
+        :type crush_profile: Optional[str]
         """
         if pg_num and kwargs.get('weight'):
             raise ValueError('pg_num and weight are mutually exclusive')
@@ -1865,6 +1900,7 @@ class CephBrokerRq(object):
             'name': name,
             'replicas': replica_count,
             'pg_num': pg_num,
+            'crush-profile': crush_profile
         }
         op.update(self._partial_build_common_op_create(**kwargs))
 
@@ -1971,6 +2007,7 @@ class CephBrokerRq(object):
         to allow comparisons to ensure validity.
         """
         self.ops = ops
+        self.request_id = self._hash_ops()
 
     @property
     def request(self):

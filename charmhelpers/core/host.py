@@ -114,6 +114,33 @@ def service_stop(service_name, **kwargs):
     return service('stop', service_name, **kwargs)
 
 
+def service_enable(service_name, **kwargs):
+    """Enable a system service.
+
+    The specified service name is managed via the system level init system.
+    Some init systems (e.g. upstart) require that additional arguments be
+    provided in order to directly control service instances whereas other init
+    systems allow for addressing instances of a service directly by name (e.g.
+    systemd).
+
+    The kwargs allow for the additional parameters to be passed to underlying
+    init systems for those systems which require/allow for them. For example,
+    the ceph-osd upstart script requires the id parameter to be passed along
+    in order to identify which running daemon should be restarted. The follow-
+    ing example restarts the ceph-osd service for instance id=4:
+
+    service_enable('ceph-osd', id=4)
+
+    :param service_name: the name of the service to enable
+    :param **kwargs: additional parameters to pass to the init system when
+                     managing services. These will be passed as key=value
+                     parameters to the init system's commandline. kwargs
+                     are ignored for init systems not allowing additional
+                     parameters via the commandline (systemd).
+    """
+    return service('enable', service_name, **kwargs)
+
+
 def service_restart(service_name, **kwargs):
     """Restart a system service.
 
@@ -134,7 +161,7 @@ def service_restart(service_name, **kwargs):
     :param service_name: the name of the service to restart
     :param **kwargs: additional parameters to pass to the init system when
                      managing services. These will be passed as key=value
-                     parameters to the  init system's commandline. kwargs
+                     parameters to the init system's commandline. kwargs
                      are ignored for init systems not allowing additional
                      parameters via the commandline (systemd).
     """
@@ -229,8 +256,11 @@ def service_resume(service_name, init_dir="/etc/init",
     upstart_file = os.path.join(init_dir, "{}.conf".format(service_name))
     sysv_file = os.path.join(initd_dir, service_name)
     if init_is_systemd(service_name=service_name):
-        service('unmask', service_name)
-        service('enable', service_name)
+        if service('is-enabled', service_name):
+            log('service {} already enabled'.format(service_name), level=DEBUG)
+        else:
+            service('unmask', service_name)
+            service('enable', service_name)
     elif os.path.exists(upstart_file):
         override_path = os.path.join(
             init_dir, '{}.override'.format(service_name))
@@ -250,7 +280,7 @@ def service_resume(service_name, init_dir="/etc/init",
     return started
 
 
-def service(action, service_name, **kwargs):
+def service(action, service_name=None, **kwargs):
     """Control a system service.
 
     :param action: the action to take on the service
@@ -259,7 +289,9 @@ def service(action, service_name, **kwargs):
                     the form of key=value.
     """
     if init_is_systemd(service_name=service_name):
-        cmd = ['systemctl', action, service_name]
+        cmd = ['systemctl', action]
+        if service_name is not None:
+            cmd.append(service_name)
     else:
         cmd = ['service', service_name, action]
         for key, value in kwargs.items():
@@ -925,7 +957,7 @@ def pwgen(length=None):
     random_generator = random.SystemRandom()
     random_chars = [
         random_generator.choice(alphanumeric_chars) for _ in range(length)]
-    return(''.join(random_chars))
+    return ''.join(random_chars)
 
 
 def is_phy_iface(interface):

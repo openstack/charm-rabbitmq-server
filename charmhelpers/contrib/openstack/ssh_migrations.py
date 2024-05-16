@@ -310,7 +310,7 @@ def ssh_known_hosts_lines(application_name, user=None):
         for hosts_line in hosts:
             if hosts_line.rstrip():
                 known_hosts_list.append(hosts_line.rstrip())
-    return(known_hosts_list)
+    return known_hosts_list
 
 
 def ssh_authorized_keys_lines(application_name, user=None):
@@ -327,7 +327,7 @@ def ssh_authorized_keys_lines(application_name, user=None):
         for authkey_line in keys:
             if authkey_line.rstrip():
                 authorized_keys_list.append(authkey_line.rstrip())
-    return(authorized_keys_list)
+    return authorized_keys_list
 
 
 def ssh_compute_remove(public_key, application_name, user=None):

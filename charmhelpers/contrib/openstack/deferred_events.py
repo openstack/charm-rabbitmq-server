@@ -127,7 +127,9 @@ def deferred_events():
     """
     events = []
     for defer_file in deferred_events_files():
-        events.append((defer_file, read_event_file(defer_file)))
+        event = read_event_file(defer_file)
+        if event.policy_requestor_name == hookenv.service_name():
+            events.append((defer_file, event))
     return events
 
 

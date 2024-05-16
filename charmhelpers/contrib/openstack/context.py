@@ -25,6 +25,7 @@ import socket
 import time
 
 from base64 import b64decode
+from distutils.version import LooseVersion
 from subprocess import (
     check_call,
     check_output,
@@ -39,6 +40,7 @@ from charmhelpers.contrib.openstack.audits.openstack_security_guide import (
 from charmhelpers.fetch import (
     apt_install,
     filter_installed_packages,
+    get_installed_version,
 )
 from charmhelpers.core.hookenv import (
     NoNetworkBinding,
@@ -59,6 +61,7 @@ from charmhelpers.core.hookenv import (
     network_get_primary_address,
     WARNING,
     service_name,
+    remote_service_name,
 )
 
 from charmhelpers.core.sysctl import create as sysctl_create
@@ -118,12 +121,7 @@ from charmhelpers.contrib.openstack.utils import (
 )
 from charmhelpers.core.unitdata import kv
 
-try:
-    from sriov_netplan_shim import pci
-except ImportError:
-    # The use of the function and contexts that require the pci module is
-    # optional.
-    pass
+from charmhelpers.contrib.hardware import pci
 
 try:
     import psutil
@@ -135,6 +133,7 @@ CA_CERT_PATH = '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
 ADDRESS_TYPES = ['admin', 'internal', 'public']
 HAPROXY_RUN_DIR = '/var/run/haproxy/'
 DEFAULT_OSLO_MESSAGING_DRIVER = "messagingv2"
+DEFAULT_HAPROXY_EXPORTER_STATS_PORT = 8404
 
 
 def ensure_packages(packages):
@@ -201,6 +200,21 @@ class OSContextGenerator(object):
             log("{} {}"
                 "".format(self, e), 'INFO')
             return self.related
+
+
+class KeystoneAuditMiddleware(OSContextGenerator):
+    def __init__(self, service: str) -> None:
+        self.service_name = service
+
+    def __call__(self):
+        """Return context dictionary containing configuration status of
+        audit-middleware and the charm service name.
+        """
+        ctxt = {
+            'audit_middleware': config('audit-middleware') or False,
+            'service_name': self.service_name
+        }
+        return ctxt
 
 
 class SharedDBContext(OSContextGenerator):
@@ -350,6 +364,14 @@ def db_ssl(rdata, ctxt, ssl_dir):
 
 class IdentityServiceContext(OSContextGenerator):
 
+    _forward_compat_remaps = {
+        'admin_user': 'admin-user-name',
+        'service_username': 'service-user-name',
+        'service_tenant': 'service-project-name',
+        'service_tenant_id': 'service-project-id',
+        'service_domain': 'service-domain-name',
+    }
+
     def __init__(self,
                  service=None,
                  service_user=None,
@@ -402,11 +424,16 @@ class IdentityServiceContext(OSContextGenerator):
         # 'www_authenticate_uri' replaced 'auth_uri' since Stein,
         # see keystonemiddleware upstream sources for more info
         if CompareOpenStackReleases(keystonemiddleware_os_rel) >= 'stein':
-            c.update((
-                ('www_authenticate_uri', "{}://{}:{}/v3".format(
-                    ctxt.get('service_protocol', ''),
-                    ctxt.get('service_host', ''),
-                    ctxt.get('service_port', ''))),))
+            if 'public_auth_url' in ctxt:
+                c.update((
+                    ('www_authenticate_uri', '{}/v3'.format(
+                        ctxt.get('public_auth_url'))),))
+            else:
+                c.update((
+                    ('www_authenticate_uri', "{}://{}:{}/v3".format(
+                        ctxt.get('service_protocol', ''),
+                        ctxt.get('service_host', ''),
+                        ctxt.get('service_port', ''))),))
         else:
             c.update((
                 ('auth_uri', "{}://{}:{}/v3".format(
@@ -414,17 +441,26 @@ class IdentityServiceContext(OSContextGenerator):
                     ctxt.get('service_host', ''),
                     ctxt.get('service_port', ''))),))
 
+        if 'internal_auth_url' in ctxt:
+            c.update((
+                ('auth_url', ctxt.get('internal_auth_url')),))
+        else:
+            c.update((
+                ('auth_url', "{}://{}:{}/v3".format(
+                    ctxt.get('auth_protocol', ''),
+                    ctxt.get('auth_host', ''),
+                    ctxt.get('auth_port', ''))),))
+
         c.update((
-            ('auth_url', "{}://{}:{}/v3".format(
-                ctxt.get('auth_protocol', ''),
-                ctxt.get('auth_host', ''),
-                ctxt.get('auth_port', ''))),
             ('project_domain_name', ctxt.get('admin_domain_name', '')),
             ('user_domain_name', ctxt.get('admin_domain_name', '')),
             ('project_name', ctxt.get('admin_tenant_name', '')),
             ('username', ctxt.get('admin_user', '')),
             ('password', ctxt.get('admin_password', '')),
             ('signing_dir', ctxt.get('signing_dir', '')),))
+
+        if ctxt.get('service_type'):
+            c.update((('service_type', ctxt.get('service_type')),))
 
         return c
 
@@ -443,38 +479,88 @@ class IdentityServiceContext(OSContextGenerator):
         for rid in relation_ids(self.rel_name):
             self.related = True
             for unit in related_units(rid):
+                rdata = {}
+                # NOTE(jamespage):
+                # forwards compat with application data
+                # bag driven approach to relation.
+                _adata = relation_get(rid=rid, app=remote_service_name(rid))
+                adata = {}
+                # if no app data bag presented - fallback
+                # to legacy unit based relation data
                 rdata = relation_get(rid=rid, unit=unit)
-                serv_host = rdata.get('service_host')
+                if _adata:
+                    # New app data bag uses - instead of _
+                    # in key names - remap for compat with
+                    # existing relation data keys
+                    for key, value in _adata.items():
+                        if key == 'api-version':
+                            adata[key.replace('-', '_')] = value.strip('v')
+                        else:
+                            adata[key.replace('-', '_')] = value
+                    # Re-map some keys for backwards compatibility
+                    for target, source in self._forward_compat_remaps.items():
+                        adata[target] = _adata.get(source)
+                # Now preferentially get data from the app data bag, but if
+                # it's not available, get it from the legacy based relation
+                # data.
+
+                def _resolve(key):
+                    return adata.get(key) or rdata.get(key)
+
+                serv_host = _resolve('service_host')
                 serv_host = format_ipv6_addr(serv_host) or serv_host
-                auth_host = rdata.get('auth_host')
+                auth_host = _resolve('auth_host')
                 auth_host = format_ipv6_addr(auth_host) or auth_host
-                int_host = rdata.get('internal_host')
+                int_host = _resolve('internal_host',)
                 int_host = format_ipv6_addr(int_host) or int_host
-                svc_protocol = rdata.get('service_protocol') or 'http'
-                auth_protocol = rdata.get('auth_protocol') or 'http'
-                int_protocol = rdata.get('internal_protocol') or 'http'
-                api_version = rdata.get('api_version') or '2.0'
-                ctxt.update({'service_port': rdata.get('service_port'),
+                svc_protocol = _resolve('service_protocol') or 'http'
+                auth_protocol = _resolve('auth_protocol') or 'http'
+                admin_role = _resolve('admin_role') or 'Admin'
+                int_protocol = _resolve('internal_protocol') or 'http'
+                api_version = _resolve('api_version') or '2.0'
+                ctxt.update({'service_port': _resolve('service_port'),
                              'service_host': serv_host,
                              'auth_host': auth_host,
-                             'auth_port': rdata.get('auth_port'),
+                             'auth_port': _resolve('auth_port'),
                              'internal_host': int_host,
-                             'internal_port': rdata.get('internal_port'),
-                             'admin_tenant_name': rdata.get('service_tenant'),
-                             'admin_user': rdata.get('service_username'),
-                             'admin_password': rdata.get('service_password'),
+                             'internal_port': _resolve('internal_port'),
+                             'admin_tenant_name': _resolve('service_tenant'),
+                             'admin_user': _resolve('service_username'),
+                             'admin_password': _resolve('service_password'),
+                             'admin_role': admin_role,
                              'service_protocol': svc_protocol,
                              'auth_protocol': auth_protocol,
                              'internal_protocol': int_protocol,
                              'api_version': api_version})
 
+                service_type = _resolve('service_type')
+                if service_type:
+                    ctxt['service_type'] = service_type
+
                 if float(api_version) > 2:
                     ctxt.update({
-                        'admin_domain_name': rdata.get('service_domain'),
-                        'service_project_id': rdata.get('service_tenant_id'),
-                        'service_domain_id': rdata.get('service_domain_id')})
+                        'admin_domain_name': _resolve('service_domain'),
+                        'service_project_id': _resolve('service_tenant_id'),
+                        'service_domain_id': _resolve('service_domain_id')})
 
-                # we keep all veriables in ctxt for compatibility and
+                # NOTE:
+                # keystone-k8s operator presents full URLS
+                # for all three endpoints - public and internal are
+                # externally addressable for machine based charm
+                public_auth_url = _resolve('public_auth_url')
+                # if 'public_auth_url' in rdata:
+                if public_auth_url:
+                    ctxt.update({
+                        'public_auth_url': public_auth_url,
+                    })
+                internal_auth_url = _resolve('internal_auth_url')
+                # if 'internal_auth_url' in rdata:
+                if internal_auth_url:
+                    ctxt.update({
+                        'internal_auth_url': internal_auth_url,
+                    })
+
+                # we keep all variables in ctxt for compatibility and
                 # add nested dictionary for keystone_authtoken generic
                 # templating
                 if keystonemiddleware_os_release:
@@ -486,8 +572,9 @@ class IdentityServiceContext(OSContextGenerator):
                     # NOTE(jamespage) this is required for >= icehouse
                     # so a missing value just indicates keystone needs
                     # upgrading
-                    ctxt['admin_tenant_id'] = rdata.get('service_tenant_id')
-                    ctxt['admin_domain_id'] = rdata.get('service_domain_id')
+                    ctxt['admin_user_id'] = _resolve('service_user_id')
+                    ctxt['admin_tenant_id'] = _resolve('service_tenant_id')
+                    ctxt['admin_domain_id'] = _resolve('service_domain_id')
                     return ctxt
 
         return {}
@@ -538,6 +625,9 @@ class IdentityCredentialsContext(IdentityServiceContext):
                     'auth_protocol': auth_protocol,
                     'api_version': api_version
                 })
+
+                if rdata.get('service_type'):
+                    ctxt['service_type'] = rdata.get('service_type')
 
                 if float(api_version) > 2:
                     ctxt.update({'admin_domain_name':
@@ -856,9 +946,14 @@ class HAProxyContext(OSContextGenerator):
     interfaces = ['cluster']
 
     def __init__(self, singlenode_mode=False,
-                 address_types=ADDRESS_TYPES):
+                 address_types=None,
+                 exporter_stats_port=DEFAULT_HAPROXY_EXPORTER_STATS_PORT):
+        if address_types is None:
+            address_types = ADDRESS_TYPES[:]
+
         self.address_types = address_types
         self.singlenode_mode = singlenode_mode
+        self.exporter_stats_port = exporter_stats_port
 
     def __call__(self):
         if not os.path.isdir(HAPROXY_RUN_DIR):
@@ -953,9 +1048,19 @@ class HAProxyContext(OSContextGenerator):
         db = kv()
         ctxt['stat_password'] = db.get('stat-password')
         if not ctxt['stat_password']:
-            ctxt['stat_password'] = db.set('stat-password',
-                                           pwgen(32))
+            ctxt['stat_password'] = db.set('stat-password', pwgen(32))
             db.flush()
+
+        # NOTE(rgildein): configure prometheus exporter for haproxy > 2.0.0
+        #                 New bind will be created and a prometheus-exporter
+        #                 will be used for path /metrics. At the same time,
+        #                 prometheus-exporter avoids using auth.
+        haproxy_version = get_installed_version("haproxy")
+        if (haproxy_version and
+                haproxy_version.ver_str >= LooseVersion("2.0.0") and
+                is_relation_made("haproxy-exporter")):
+            ctxt["stats_exporter_host"] = get_relation_ip("haproxy-exporter")
+            ctxt["stats_exporter_port"] = self.exporter_stats_port
 
         for frontend in cluster_hosts:
             if (len(cluster_hosts[frontend]['backends']) > 1 or
@@ -1659,6 +1764,9 @@ class WSGIWorkerConfigContext(WorkerConfigContext):
 
     def __call__(self):
         total_processes = _calculate_workers()
+        enable_wsgi_socket_rotation = config('wsgi-socket-rotation')
+        if enable_wsgi_socket_rotation is None:
+            enable_wsgi_socket_rotation = True
         ctxt = {
             "service_name": self.service_name,
             "user": self.user,
@@ -1672,6 +1780,7 @@ class WSGIWorkerConfigContext(WorkerConfigContext):
             "public_processes": int(math.ceil(self.public_process_weight *
                                               total_processes)),
             "threads": 1,
+            "wsgi_socket_rotation": enable_wsgi_socket_rotation,
         }
         return ctxt
 
@@ -2556,14 +2665,18 @@ class OVSDPDKDeviceContext(OSContextGenerator):
         :rtype: List[int]
         """
         cores = []
-        ranges = cpulist.split(',')
-        for cpu_range in ranges:
-            if "-" in cpu_range:
-                cpu_min_max = cpu_range.split('-')
-                cores += range(int(cpu_min_max[0]),
-                               int(cpu_min_max[1]) + 1)
-            else:
-                cores.append(int(cpu_range))
+        if cpulist and re.match(r"^[0-9,\-^]*$", cpulist):
+            ranges = cpulist.split(',')
+            for cpu_range in ranges:
+                if "-" in cpu_range:
+                    cpu_min_max = cpu_range.split('-')
+                    cores += range(int(cpu_min_max[0]),
+                                   int(cpu_min_max[1]) + 1)
+                elif "^" in cpu_range:
+                    cpu_rm = cpu_range.split('^')
+                    cores.remove(int(cpu_rm[1]))
+                else:
+                    cores.append(int(cpu_range))
         return cores
 
     def _numa_node_cores(self):
@@ -2582,36 +2695,32 @@ class OVSDPDKDeviceContext(OSContextGenerator):
 
     def cpu_mask(self):
         """Get hex formatted CPU mask
-
         The mask is based on using the first config:dpdk-socket-cores
         cores of each NUMA node in the unit.
         :returns: hex formatted CPU mask
         :rtype: str
         """
-        return self.cpu_masks()['dpdk_lcore_mask']
-
-    def cpu_masks(self):
-        """Get hex formatted CPU masks
-
-        The mask is based on using the first config:dpdk-socket-cores
-        cores of each NUMA node in the unit, followed by the
-        next config:pmd-socket-cores
-
-        :returns: Dict of hex formatted CPU masks
-        :rtype: Dict[str, str]
-        """
-        num_lcores = config('dpdk-socket-cores')
-        pmd_cores = config('pmd-socket-cores')
-        lcore_mask = 0
-        pmd_mask = 0
+        num_cores = config('dpdk-socket-cores')
+        mask = 0
         for cores in self._numa_node_cores().values():
-            for core in cores[:num_lcores]:
-                lcore_mask = lcore_mask | 1 << core
-            for core in cores[num_lcores:][:pmd_cores]:
-                pmd_mask = pmd_mask | 1 << core
-        return {
-            'pmd_cpu_mask': format(pmd_mask, '#04x'),
-            'dpdk_lcore_mask': format(lcore_mask, '#04x')}
+            for core in cores[:num_cores]:
+                mask = mask | 1 << core
+        return format(mask, '#04x')
+
+    @classmethod
+    def pmd_cpu_mask(cls):
+        """Get hex formatted pmd CPU mask
+
+        The mask is based on config:pmd-cpu-set.
+        :returns: hex formatted CPU mask
+        :rtype: str
+        """
+        mask = 0
+        cpu_list = cls._parse_cpu_list(config('pmd-cpu-set'))
+        if cpu_list:
+            for core in cpu_list:
+                mask = mask | 1 << core
+        return format(mask, '#x')
 
     def socket_memory(self):
         """Formatted list of socket memory configuration per socket.
@@ -2690,6 +2799,7 @@ class OVSDPDKDeviceContext(OSContextGenerator):
             ctxt['device_whitelist'] = self.device_whitelist()
             ctxt['socket_memory'] = self.socket_memory()
             ctxt['cpu_mask'] = self.cpu_mask()
+            ctxt['pmd_cpu_mask'] = self.pmd_cpu_mask()
         return ctxt
 
 
@@ -3120,7 +3230,7 @@ class SRIOVContext(OSContextGenerator):
         """Determine number of Virtual Functions (VFs) configured for device.
 
         :param device: Object describing a PCI Network interface card (NIC)/
-        :type device: sriov_netplan_shim.pci.PCINetDevice
+        :type device: contrib.hardware.pci.PCINetDevice
         :param sriov_numvfs: Number of VFs requested for blanket configuration.
         :type sriov_numvfs: int
         :returns: Number of VFs to configure for device

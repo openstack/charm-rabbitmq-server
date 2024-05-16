@@ -122,13 +122,12 @@ class Cache(object):
         :raises: subprocess.CalledProcessError
         """
         pkgs = {}
-        cmd = ['dpkg-query', '--list']
+        cmd = [
+            'dpkg-query', '--show',
+            '--showformat',
+            r'${db:Status-Abbrev}\t${Package}\t${Version}\t${Architecture}\t${binary:Summary}\n'
+        ]
         cmd.extend(packages)
-        if locale.getlocale() == (None, None):
-            # subprocess calls out to locale.getpreferredencoding(False) to
-            # determine encoding.  Workaround for Trusty where the
-            # environment appears to not be set up correctly.
-            locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         try:
             output = subprocess.check_output(cmd,
                                              stderr=subprocess.STDOUT,
@@ -140,24 +139,17 @@ class Cache(object):
             if cp.returncode != 1:
                 raise
             output = cp.output
-        headings = []
         for line in output.splitlines():
-            if line.startswith('||/'):
-                headings = line.split()
-                headings.pop(0)
+            # only process lines for successfully installed packages
+            if not (line.startswith('ii ') or line.startswith('hi ')):
                 continue
-            elif (line.startswith('|') or line.startswith('+') or
-                  line.startswith('dpkg-query:')):
-                continue
-            else:
-                data = line.split(None, 4)
-                status = data.pop(0)
-                if status not in ('ii', 'hi'):
-                    continue
-                pkg = {}
-                pkg.update({k.lower(): v for k, v in zip(headings, data)})
-                if 'name' in pkg:
-                    pkgs.update({pkg['name']: pkg})
+            status, name, version, arch, desc = line.split('\t', 4)
+            pkgs[name] = {
+                'name': name,
+                'version': version,
+                'architecture': arch,
+                'description': desc,
+            }
         return pkgs
 
     def _apt_cache_show(self, packages):

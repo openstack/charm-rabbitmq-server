@@ -15,7 +15,8 @@
 import os
 import json
 import inspect
-from collections import Iterable, OrderedDict
+from collections import OrderedDict
+from collections.abc import Iterable
 
 from charmhelpers.core import host
 from charmhelpers.core import hookenv

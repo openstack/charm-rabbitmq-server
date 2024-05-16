@@ -151,6 +151,7 @@ import contextlib
 import datetime
 import itertools
 import json
+import logging
 import os
 import pprint
 import sqlite3
@@ -171,8 +172,9 @@ class Storage(object):
     path parameter which causes sqlite3 to only build the db in memory.
     This should only be used for testing purposes.
     """
-    def __init__(self, path=None):
+    def __init__(self, path=None, keep_revisions=False):
         self.db_path = path
+        self.keep_revisions = keep_revisions
         if path is None:
             if 'UNIT_STATE_DB' in os.environ:
                 self.db_path = os.environ['UNIT_STATE_DB']
@@ -242,7 +244,7 @@ class Storage(object):
         Remove a key from the database entirely.
         """
         self.cursor.execute('delete from kv where key=?', [key])
-        if self.revision and self.cursor.rowcount:
+        if self.keep_revisions and self.revision and self.cursor.rowcount:
             self.cursor.execute(
                 'insert into kv_revisions values (?, ?, ?)',
                 [key, self.revision, json.dumps('DELETED')])
@@ -259,14 +261,14 @@ class Storage(object):
         if keys is not None:
             keys = ['%s%s' % (prefix, key) for key in keys]
             self.cursor.execute('delete from kv where key in (%s)' % ','.join(['?'] * len(keys)), keys)
-            if self.revision and self.cursor.rowcount:
+            if self.keep_revisions and self.revision and self.cursor.rowcount:
                 self.cursor.execute(
                     'insert into kv_revisions values %s' % ','.join(['(?, ?, ?)'] * len(keys)),
                     list(itertools.chain.from_iterable((key, self.revision, json.dumps('DELETED')) for key in keys)))
         else:
             self.cursor.execute('delete from kv where key like ?',
                                 ['%s%%' % prefix])
-            if self.revision and self.cursor.rowcount:
+            if self.keep_revisions and self.revision and self.cursor.rowcount:
                 self.cursor.execute(
                     'insert into kv_revisions values (?, ?, ?)',
                     ['%s%%' % prefix, self.revision, json.dumps('DELETED')])
@@ -299,7 +301,7 @@ class Storage(object):
             where key = ?''', [serialized, key])
 
         # Save
-        if not self.revision:
+        if (not self.keep_revisions) or (not self.revision):
             return value
 
         self.cursor.execute(
@@ -520,6 +522,42 @@ _KV = None
 
 def kv():
     global _KV
+
+    # If we are running unit tests, it is useful to go into memory-backed KV store to
+    # avoid concurrency issues when running multiple tests. This is not a
+    # problem when juju is running normally.
+
+    env_var = os.environ.get("CHARM_HELPERS_TESTMODE", "auto").lower()
+    if env_var not in ["auto", "no", "yes"]:
+        logging.warning("Unknown value for CHARM_HELPERS_TESTMODE '%s'"
+                        ", assuming 'no'", env_var)
+        env_var = "no"
+
+    if env_var == "no":
+        in_memory_db = False
+    elif env_var == "yes":
+        in_memory_db = True
+    elif env_var == "auto":
+        # If UNIT_STATE_DB is set, respect this request
+        if "UNIT_STATE_DB" in os.environ:
+            in_memory_db = False
+        # Autodetect normal juju execution by looking for juju variables
+        elif "JUJU_CHARM_DIR" in os.environ or "JUJU_UNIT_NAME" in os.environ:
+            in_memory_db = False
+        else:
+            # We are probably running in unit test mode
+            logging.warning("Auto-detected unit test environment for KV store.")
+            in_memory_db = True
+    else:
+        # Help the linter realise that in_memory_db is always set
+        raise Exception("Cannot reach this line")
+
     if _KV is None:
-        _KV = Storage()
+        if in_memory_db:
+            _KV = Storage(":memory:")
+        else:
+            _KV = Storage()
+    else:
+        if in_memory_db and _KV.db_path != ":memory:":
+            logging.warning("Running with in_memory_db and KV is not set to :memory:")
     return _KV

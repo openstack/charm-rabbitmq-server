@@ -19,6 +19,7 @@
 
 import glob
 import grp
+import json
 import os
 import pwd
 import re
@@ -30,6 +31,7 @@ import yaml
 from charmhelpers.core.hookenv import (
     application_name,
     config,
+    ERROR,
     hook_name,
     local_unit,
     log,
@@ -416,6 +418,20 @@ def add_init_service_checks(nrpe, services, unit_name, immediate_check=True):
     :param str unit_name: Unit name to use in check description
     :param bool immediate_check: For sysv init, run the service check immediately
     """
+    # check_haproxy is redundant in the presence of check_crm. See LP Bug#1880601 for details.
+    # just remove check_haproxy if haproxy is added as a lsb resource in hacluster.
+    for rid in relation_ids("ha"):
+        ha_resources = relation_get("json_resources", rid=rid, unit=local_unit())
+        if ha_resources:
+            try:
+                ha_resources_parsed = json.loads(ha_resources)
+            except ValueError as e:
+                log('Could not parse JSON from ha resources. {}'.format(e), level=ERROR)
+                raise
+            if "lsb:haproxy" in ha_resources_parsed.values():
+                if "haproxy" in services:
+                    log("removed check_haproxy. This service will be monitored by check_crm")
+                    services.remove("haproxy")
     for svc in services:
         # Don't add a check for these services from neutron-gateway
         if svc in ['ext-port', 'os-charm-phy-nic-mtu']:

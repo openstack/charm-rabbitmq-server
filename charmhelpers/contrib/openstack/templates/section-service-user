@@ -1,0 +1,11 @@
+{% if auth_host -%}
+[service_user]
+send_service_user_token = true
+auth_type = password
+auth_url = {{ auth_protocol }}://{{ auth_host }}:{{ auth_port }}
+project_domain_name = service_domain
+user_domain_name = service_domain
+project_name = {{ admin_tenant_name }}
+username = {{ admin_user }}
+password = {{ admin_password }}
+{% endif -%}

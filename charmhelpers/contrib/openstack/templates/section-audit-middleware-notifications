@@ -1,0 +1,4 @@
+{% if audit_middleware -%}
+[audit_middleware_notifications]
+driver = log
+{% endif -%}

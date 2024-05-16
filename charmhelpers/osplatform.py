@@ -9,19 +9,13 @@ def get_platform():
     will be returned (which is the name of the module).
     This string is used to decide which platform module should be imported.
     """
-    # linux_distribution is deprecated and will be removed in Python 3.7
-    # Warnings *not* disabled, as we certainly need to fix this.
-    if hasattr(platform, 'linux_distribution'):
-        tuple_platform = platform.linux_distribution()
-        current_platform = tuple_platform[0]
-    else:
-        current_platform = _get_platform_from_fs()
+    current_platform = _get_current_platform()
 
     if "Ubuntu" in current_platform:
         return "ubuntu"
     elif "CentOS" in current_platform:
         return "centos"
-    elif "debian" in current_platform:
+    elif "debian" in current_platform or "Debian" in current_platform:
         # Stock Python does not detect Ubuntu and instead returns debian.
         # Or at least it does in some build environments like Travis CI
         return "ubuntu"
@@ -34,6 +28,24 @@ def get_platform():
     else:
         raise RuntimeError("This module is not supported on {}."
                            .format(current_platform))
+
+
+def _get_current_platform():
+    """Return the current platform information for the OS.
+
+    Attempts to lookup linux distribution information from the platform
+    module for releases of python < 3.7. For newer versions of python,
+    the platform is determined from the /etc/os-release file.
+    """
+    # linux_distribution is deprecated and will be removed in Python 3.7
+    # Warnings *not* disabled, as we certainly need to fix this.
+    if hasattr(platform, 'linux_distribution'):
+        tuple_platform = platform.linux_distribution()
+        current_platform = tuple_platform[0]
+    else:
+        current_platform = _get_platform_from_fs()
+
+    return current_platform
 
 
 def _get_platform_from_fs():

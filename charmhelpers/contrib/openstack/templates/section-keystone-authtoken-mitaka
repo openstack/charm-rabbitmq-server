@@ -6,6 +6,9 @@ auth_uri = {{ service_protocol }}://{{ service_host }}:{{ service_port }}/v3
 auth_url = {{ auth_protocol }}://{{ auth_host }}:{{ auth_port }}/v3
 project_domain_name = {{ admin_domain_name }}
 user_domain_name = {{ admin_domain_name }}
+{% if service_type -%}
+service_type = {{ service_type }}
+{% endif -%}
 {% else -%}
 auth_uri = {{ service_protocol }}://{{ service_host }}:{{ service_port }}
 auth_url = {{ auth_protocol }}://{{ auth_host }}:{{ auth_port }}
@@ -18,5 +21,9 @@ password = {{ admin_password }}
 signing_dir = {{ signing_dir }}
 {% if use_memcache == true %}
 memcached_servers = {{ memcache_url }}
+{% endif -%}
+{% if admin_role -%}
+service_token_roles = {{ admin_role }}
+service_token_roles_required = True
 {% endif -%}
 {% endif -%}
