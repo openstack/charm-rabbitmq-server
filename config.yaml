@@ -166,6 +166,16 @@ options:
       internally to the charm if no value is set here. Also, if this value is
       left unset and this application is running inside a container, the number
       of threads will be capped based on a maximum of 2 cores.
+  consumer-timeout:
+    type: int
+    default:
+    description: |
+      Timeout value in milliseconds. If a consumer does not ack its delivery
+      for more than the timeout value, its channel will be closed. If the value
+      is not specified and rabbitmq version is 3.9 and above, then 30 minutes is the
+      default. For 3.8 the default value is unlimited. For before that then this feature
+      is not supported (timeout is unlimited). (See
+      https://www.rabbitmq.com/docs/consumers#acknowledgement-timeout for more info).
   # SSL configuration
   ssl:
     type: string

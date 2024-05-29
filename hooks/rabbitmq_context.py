@@ -200,6 +200,9 @@ class RabbitMQClusterContext(object):
         if config('connection-backlog'):
             ctxt['connection_backlog'] = config('connection-backlog')
 
+        if config('consumer-timeout'):
+            ctxt['consumer_timeout'] = config('consumer-timeout')
+
         if cmp_pkgrevno('rabbitmq-server', '3.6') >= 0:
             ctxt['queue_master_locator'] = config('queue-master-locator')
 

@@ -117,6 +117,7 @@ class TestRabbitMQClusterContext(unittest.TestCase):
         mock_leader_get.return_value = 'ignore'
         config_data = {'cluster-partition-handling': 'ignore',
                        'connection-backlog': 200,
+                       'consumer-timeout': 20000,
                        'mnesia-table-loading-retry-timeout': 25000,
                        'mnesia-table-loading-retry-limit': 12,
                        'queue-master-locator': 'client-local'}
@@ -129,6 +130,7 @@ class TestRabbitMQClusterContext(unittest.TestCase):
                 'mnesia_table_loading_retry_timeout': 25000,
                 'mnesia_table_loading_retry_limit': 12,
                 'connection_backlog': 200,
+                'consumer_timeout': 20000,
                 'queue_master_locator': 'client-local',
             })
 
