@@ -33,6 +33,8 @@ UBUNTU_RELEASES = (
     'kinetic',
     'lunar',
     'mantic',
+    'noble',
+    'oracular',
 )
 
 

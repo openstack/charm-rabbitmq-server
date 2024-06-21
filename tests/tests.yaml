@@ -1,20 +1,16 @@
 charm_name: rabbitmq-server
 
 smoke_bundles:
-  - focal-yoga
+  - noble-caracal
 
 gate_bundles:
-  - focal-yoga
+  - noble-caracal
 
 dev_bundles:
-  - jammy-yoga
+  - noble-caracal
 
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RabbitMQDeferredRestartTest
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RmqTests
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RmqRotateServiceUserPasswordTests
 
-tests_options:
-  force_deploy:
-    # nrpe charm doesn't support hirsute->jammy and needs to be force installed
-    - jammy-yoga

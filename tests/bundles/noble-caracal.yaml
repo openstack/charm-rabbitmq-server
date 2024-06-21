@@ -1,7 +1,7 @@
 variables:
-  openstack-origin: &openstack-origin cloud:focal-yoga
+  openstack-origin: &openstack-origin distro
 
-series: focal
+series: noble
 
 comment:
 - 'machines section to decide order of deployment. database sooner = faster'
@@ -17,9 +17,6 @@ machines:
   '5':
   '6':
   '7':
-  '8':
-    series: bionic  # nagios not supported on focal yet
-
 
 applications:
 
@@ -62,7 +59,7 @@ applications:
       openstack-origin: *openstack-origin
     to:
       - '6'
-    channel: yoga/edge
+    channel: latest/edge
 
   keystone:
     charm: ch:keystone
@@ -72,17 +69,7 @@ applications:
       admin-password: openstack
     to:
       - '7'
-    channel: yoga/edge
-
-  nagios:
-    charm: ch:nagios
-    series: bionic  # not supported on focal yet
-    num_units: 1
-    to:
-      - '8'
-
-  nrpe:
-    charm: ch:nrpe
+    channel: latest/edge
 
 relations:
 
@@ -98,7 +85,3 @@ relations:
     - 'keystone-mysql-router:shared-db'
   - - 'keystone-mysql-router:db-router'
     - 'mysql-innodb-cluster:db-router'
-  - - 'nrpe:nrpe-external-master'
-    - 'rabbitmq-server:nrpe-external-master'
-  - - 'nrpe:monitors'
-    - 'nagios:monitors'
