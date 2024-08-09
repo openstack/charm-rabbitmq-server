@@ -374,3 +374,31 @@ class TestRabbitMQEnvContext(unittest.TestCase):
         self.assertEqual(ctxt['settings'],
                          {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
                           "'+A 480'"})
+
+    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 48)
+    @mock.patch.object(rabbitmq_context, 'relation_ids', lambda *args: [])
+    @mock.patch.object(rabbitmq_context.rabbit_utils, 'use_long_node_name')
+    @mock.patch.object(rabbitmq_context, 'service_name')
+    @mock.patch.object(rabbitmq_context, 'config')
+    def test_rabbitmqenv_long_nodename(self, mock_config, mock_service_name,
+                                       use_long_node_name):
+        config = dict()
+
+        def fake_config(key):
+            return config.get(key)
+
+        mock_config.side_effect = fake_config
+        mock_service_name.return_value = 'svc_bar'
+        use_long_node_name.return_value = True
+
+        ctxt = rabbitmq_context.RabbitMQEnvContext()()
+        self.assertEqual(ctxt['settings'], {
+            'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS': "'+A 1024'",
+            'RABBITMQ_USE_LONGNAME': "true",
+        })
+
+        use_long_node_name.return_value = False
+        ctxt = rabbitmq_context.RabbitMQEnvContext()()
+        self.assertEqual(ctxt['settings'], {
+            'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS': "'+A 1024'",
+        })
