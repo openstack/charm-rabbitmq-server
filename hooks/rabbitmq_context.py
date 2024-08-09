@@ -269,6 +269,9 @@ class RabbitMQEnvContext(object):
             key = 'RABBITMQ_SERVER_START_ARGS'
             context['settings'][key] = "'-proto_dist inet6_tcp'"
 
+        if rabbit_utils.use_long_node_name():
+            context['settings']['RABBITMQ_USE_LONGNAME'] = "true"
+
         # TODO: this is legacy HA and should be removed since it is now
         # deprecated.
         if relation_ids('ha'):

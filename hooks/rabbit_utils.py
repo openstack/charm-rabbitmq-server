@@ -948,7 +948,7 @@ def wait_app():
         pid_file = run_dir + 'pid'
     else:
         pid_file = '/var/lib/rabbitmq/mnesia/rabbit@' \
-                   + socket.gethostname() + '.pid'
+                   + get_unit_hostname() + '.pid'
     log('Waiting for rabbitmq app to start: {}'.format(pid_file), DEBUG)
     try:
         rabbitmqctl('wait', pid_file)
@@ -1703,6 +1703,16 @@ def get_unit_hostname():
     @returns hostname
     """
     return socket.gethostname()
+
+
+def use_long_node_name():
+    """Return True if the rabbitmq server should use the long node name.
+
+    Determines if the socket.gethostname() returns an FQDN and configures
+    the node to use the long node name if this is the case.
+    """
+    node_name = get_unit_hostname()
+    return len(node_name.split('.')) > 1
 
 
 def is_sufficient_peers():
