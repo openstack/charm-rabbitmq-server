@@ -44,6 +44,7 @@ TO_PATCH = [
     'related_units',
     'coordinator',
     'deferred_events',
+    'log',
 ]
 
 
@@ -57,6 +58,55 @@ class RelationUtil(CharmTestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir)
         super(RelationUtil, self).tearDown()
+
+    @patch('charmhelpers.contrib.hardening.harden.config')
+    @patch('rabbitmq_server_relations.config')
+    @patch('rabbitmq_server_relations.pre_install_hooks')
+    @patch('rabbitmq_server_relations.add_source')
+    @patch('rabbitmq_server_relations.leader_get')
+    @patch('rabbitmq_server_relations.leader_set')
+    @patch('rabbitmq_server_relations.service_restart')
+    @patch('rabbitmq_server_relations.rabbit')
+    def test_install_shortnames(self, rabbit, service_restart, leader_set,
+                                leader_get, add_source, pre_install_hooks,
+                                config, _):
+        config.side_effect = ['', '']
+        self.is_leader.return_value = False
+        rabbit.use_long_node_name.return_value = False
+
+        rabbitmq_server_relations.install()
+
+        pre_install_hooks.assert_called_once()
+        add_source.assert_called_once_with('', '')
+        leader_set.assert_not_called()
+        leader_get.assert_not_called()
+        rabbit.install_or_upgrade_packages.assert_called()
+        rabbit.ConfigRender.write_all.assert_not_called()
+        service_restart.assert_not_called()
+
+    @patch('charmhelpers.contrib.hardening.harden.config')
+    @patch('rabbitmq_server_relations.config')
+    @patch('rabbitmq_server_relations.pre_install_hooks')
+    @patch('rabbitmq_server_relations.add_source')
+    @patch('rabbitmq_server_relations.leader_get')
+    @patch('rabbitmq_server_relations.leader_set')
+    @patch('rabbitmq_server_relations.service_restart')
+    @patch('rabbitmq_server_relations.rabbit')
+    def test_install_longnames(self, rabbit, service_restart, leader_set,
+                               leader_get, add_source, pre_install_hooks,
+                               config, _):
+        config.side_effect = ['', '']
+        self.is_leader.return_value = False
+        rabbit.use_long_node_name.return_value = True
+
+        rabbitmq_server_relations.install()
+
+        pre_install_hooks.assert_called_once()
+        add_source.assert_called_once_with('', '')
+        leader_set.assert_not_called()
+        leader_get.assert_not_called()
+        rabbit.install_or_upgrade_packages.assert_called_once()
+        service_restart.assert_called_once_with('rabbitmq-server')
 
     @patch('rabbitmq_server_relations.is_hook_allowed')
     @patch('rabbitmq_server_relations.rabbit.leader_node_is_ready')

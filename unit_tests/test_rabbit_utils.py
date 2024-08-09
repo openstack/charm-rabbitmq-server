@@ -87,17 +87,18 @@ class ConfigRendererTests(CharmTestCase):
         self.assertTrue(log.called)
 
 
-RABBITMQCTL_CLUSTERSTATUS_RUNNING = b"""Cluster status of node 'rabbit@juju-devel3-machine-19' ...
-[{nodes,
-    [{disc,
+RABBITMQCTL_CLUSTERSTATUS_RUNNING = \
+    b"""Cluster status of node 'rabbit@juju-devel3-machine-19' ...
+    [{nodes,
+        [{disc,
+            ['rabbit@juju-devel3-machine-14','rabbit@juju-devel3-machine-19']},
+         {ram,
+            ['rabbit@juju-devel3-machine-42']}]},
+     {running_nodes,
         ['rabbit@juju-devel3-machine-14','rabbit@juju-devel3-machine-19']},
-     {ram,
-        ['rabbit@juju-devel3-machine-42']}]},
- {running_nodes,
-    ['rabbit@juju-devel3-machine-14','rabbit@juju-devel3-machine-19']},
- {cluster_name,<<"rabbit@juju-devel3-machine-14.openstacklocal">>},
- {partitions,[]}]
- """
+     {cluster_name,<<"rabbit@juju-devel3-machine-14.openstacklocal">>},
+     {partitions,[]}]
+     """
 
 RABBITMQCTL_CLUSTERSTATUS_RUNNING_382 = b"""
 {"running_nodes": [
@@ -111,12 +112,13 @@ RABBITMQCTL_CLUSTERSTATUS_RUNNING_382 = b"""
 """
 
 
-RABBITMQCTL_CLUSTERSTATUS_SOLO = b"""Cluster status of node 'rabbit@juju-devel3-machine-14' ...
-[{nodes,[{disc,['rabbit@juju-devel3-machine-14']}]},
- {running_nodes,['rabbit@juju-devel3-machine-14']},
- {cluster_name,<<"rabbit@juju-devel3-machine-14.openstacklocal">>},
- {partitions,[]}]
- """
+RABBITMQCTL_CLUSTERSTATUS_SOLO = \
+    b"""Cluster status of node 'rabbit@juju-devel3-machine-14' ...
+    [{nodes,[{disc,['rabbit@juju-devel3-machine-14']}]},
+     {running_nodes,['rabbit@juju-devel3-machine-14']},
+     {cluster_name,<<"rabbit@juju-devel3-machine-14.openstacklocal">>},
+     {partitions,[]}]
+     """
 
 
 RABBITMQCTL_CLUSTERSTATUS_SOLO_382 = b"""
@@ -453,6 +455,14 @@ class UtilsTests(CharmTestCase):
         self.assertEqual(rabbit_utils.get_node_hostname('192.168.20.50'),
                          'juju-devel3-machine-13')
         mock_get_hostname.assert_called_with('192.168.20.50', fqdn=False)
+
+    @mock.patch('socket.gethostname')
+    def test_use_long_node_name(self, mock_gethostname):
+        mock_gethostname.return_value = 'foo.bar'
+        self.assertTrue(rabbit_utils.use_long_node_name())
+
+        mock_gethostname.return_value = 'foo'
+        self.assertFalse(rabbit_utils.use_long_node_name())
 
     @mock.patch('rabbit_utils.peer_retrieve')
     def test_leader_node(self, mock_peer_retrieve):

@@ -144,6 +144,13 @@ def install():
             rabbit.CLUSTER_MODE_FOR_INSTALL))
         leader_set({rabbit.CLUSTER_MODE_KEY: rabbit.CLUSTER_MODE_FOR_INSTALL})
     rabbit.install_or_upgrade_packages()
+    # In the scenario that the long hostname is used, configure the
+    # rabbitmq-env configuration file and restart the rabbitmq-service to
+    # cause the node to use the new name.
+    if rabbit.use_long_node_name():
+        log("Long name is in use for node... configuring for long node names")
+        rabbit.ConfigRenderer(rabbit.CONFIG_FILES()).write_all()
+        service_restart('rabbitmq-server')
 
 
 def manage_restart(coordinate_restart=True):
