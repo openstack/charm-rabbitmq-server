@@ -230,7 +230,7 @@ class TestRabbitMQClusterContext(unittest.TestCase):
 
 class TestRabbitMQEnvContext(unittest.TestCase):
 
-    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 2)
+    @mock.patch.object(rabbitmq_context.psutil, 'cpu_count', lambda *args: 2)
     @mock.patch.object(rabbitmq_context, 'relation_ids', lambda *args: [])
     @mock.patch.object(rabbitmq_context, 'service_name')
     @mock.patch.object(rabbitmq_context, 'config')
@@ -254,7 +254,7 @@ class TestRabbitMQEnvContext(unittest.TestCase):
                                   'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
                                   "'+A 72'"})
 
-    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 2)
+    @mock.patch.object(rabbitmq_context.psutil, 'cpu_count', lambda *args: 2)
     @mock.patch.object(rabbitmq_context, 'relation_ids')
     @mock.patch.object(rabbitmq_context, 'service_name')
     @mock.patch.object(rabbitmq_context, 'config')
@@ -290,7 +290,7 @@ class TestRabbitMQEnvContext(unittest.TestCase):
                                  {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
                                   "'+A 48'"})
 
-    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 2)
+    @mock.patch.object(rabbitmq_context.psutil, 'cpu_count', lambda *args: 2)
     @mock.patch.object(rabbitmq_context, 'relation_ids')
     @mock.patch.object(rabbitmq_context, 'service_name')
     @mock.patch.object(rabbitmq_context, 'config')
@@ -317,7 +317,7 @@ class TestRabbitMQEnvContext(unittest.TestCase):
                                   "'+A 48'"})
 
     @mock.patch.object(rabbitmq_context, 'relation_ids', lambda *args: [])
-    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 40)
+    @mock.patch.object(rabbitmq_context.psutil, 'cpu_count', lambda *args: 40)
     @mock.patch.object(rabbitmq_context, 'service_name')
     @mock.patch.object(rabbitmq_context, 'config')
     def test_rabbitmqenv_in_container(self, mock_config, mock_service_name):
@@ -351,7 +351,7 @@ class TestRabbitMQEnvContext(unittest.TestCase):
                              {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
                               "'+A 960'"})
 
-    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 48)
+    @mock.patch.object(rabbitmq_context.psutil, 'cpu_count', lambda *args: 48)
     @mock.patch.object(rabbitmq_context, 'relation_ids', lambda *args: [])
     @mock.patch.object(rabbitmq_context, 'service_name')
     @mock.patch.object(rabbitmq_context, 'config')
@@ -375,7 +375,7 @@ class TestRabbitMQEnvContext(unittest.TestCase):
                          {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS':
                           "'+A 480'"})
 
-    @mock.patch.object(rabbitmq_context.psutil, 'NUM_CPUS', 48)
+    @mock.patch.object(rabbitmq_context.psutil, 'cpu_count', lambda *args: 48)
     @mock.patch.object(rabbitmq_context, 'relation_ids', lambda *args: [])
     @mock.patch.object(rabbitmq_context.rabbit_utils, 'use_long_node_name')
     @mock.patch.object(rabbitmq_context, 'service_name')

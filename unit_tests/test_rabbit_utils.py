@@ -1015,7 +1015,7 @@ class UtilsTests(CharmTestCase):
             rabbit_utils.check_cluster_memberships())
 
     @mock.patch.object(rabbit_utils, 'cmp_pkgrevno')
-    @mock.patch('rabbitmq_context.psutil.NUM_CPUS', 2)
+    @mock.patch('rabbitmq_context.psutil.cpu_count', lambda *args: 2)
     @mock.patch('rabbitmq_context.relation_ids')
     @mock.patch('rabbitmq_context.config')
     def test_render_rabbitmq_env(self, mock_config, mock_relation_ids,
