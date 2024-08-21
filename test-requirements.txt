@@ -3,22 +3,10 @@
 # choices of *requirements.txt files for OpenStack Charms:
 #     https://github.com/openstack-charmers/release-tools
 #
-# TODO: Distill the func test requirements from the lint/unit test
-#       requirements.  They are intertwined.  Also, Zaza itself should specify
-#       all of its own requirements and if it doesn't, fix it there.
-#
-pyparsing<3.0.0  # aodhclient is pinned in zaza and needs pyparsing < 3.0.0, but cffi also needs it, so pin here.
+pyparsing<3.0.0  # cffi needs pyparsing < 3.0.0.
 cffi==1.14.6; python_version < '3.6'  # cffi 1.15.0 drops support for py35.
 setuptools<50.0.0  # https://github.com/pypa/setuptools/commit/04e3df22df840c6bb244e9b27bc56750c44b7c85
 
-requests>=2.18.4
-
-# Newer mock seems to have some syntax which is newer than python3.5 (e.g.
-# f'{something}'
-mock>=1.2,<4.0.0; python_version < '3.6'
-mock>=1.2; python_version >= '3.6'
-
-testtools<2.6; python_version < '3.10'
 stestr>=2.2.0
 
 # Dependency of stestr. Workaround for
@@ -37,14 +25,19 @@ stevedore<1.31.0;python_version<'3.6'
 debtcollector<1.22.0;python_version<'3.6'
 oslo.utils<=3.41.0;python_version<'3.6'
 
-coverage>=4.5.2
-pyudev              # for ceph-* charm unit tests (need to fix the ceph-* charm unit tests/mocking)
-git+https://github.com/openstack-charmers/zaza.git@stable/ussuri#egg=zaza
-git+https://github.com/openstack-charmers/zaza-openstack-tests.git@stable/ussuri#egg=zaza.openstack
+requests>=2.18.4
+charms.reactive
 
-# Needed for charm-glance:
-git+https://opendev.org/openstack/tempest.git#egg=tempest;python_version>='3.8'
-tempest<31.0.0;python_version<'3.8' and python_version>='3.6'
-tempest<24.0.0;python_version<'3.6'
+# Newer mock seems to have some syntax which is newer than python3.5 (e.g.
+# f'{something}'
+mock>=1.2,<4.0.0; python_version < '3.6'
+mock>=1.2; python_version >= '3.6'
+
+nose>=1.3.7
+coverage>=4.5.2
+
+git+https://github.com/openstack-charmers/zaza.git@stable/yoga#egg=zaza
+git+https://github.com/openstack-charmers/zaza-openstack-tests.git@stable/yoga#egg=zaza.openstack
 
 croniter            # needed for charm-rabbitmq-server unit tests
+
