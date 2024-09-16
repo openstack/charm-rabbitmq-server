@@ -100,7 +100,8 @@ if __name__ == '__main__':
     if (partitions > 0 or cluster < 0):
         print(
             "CRITICAL: %d partitions detected, %d nodes online."
-        ) % (partitions, cluster)
+            % (partitions, cluster)
+        )
         sys.exit(2)
     else:
         print("OK: No partitions detected")
