@@ -1378,7 +1378,6 @@ class UtilsTests(CharmTestCase):
         # default config value should show 10 minutes
         max_age = rabbit_utils.get_max_stats_file_age()
         self.assertEqual(600, max_age)
-
         # changing to run every 15 minutes shows 30 minutes
         self.test_config.set('stats_cron_schedule', '*/15 * * * *')
         max_age = rabbit_utils.get_max_stats_file_age()
@@ -1485,3 +1484,10 @@ class UtilsTests(CharmTestCase):
         mock_get_usernames_for_passwords_on_disk.return_value = ['a']
         self.assertEqual(rabbit_utils.get_usernames_for_passwords(),
                          ['b', 'c'])
+
+    @mock.patch('rabbit_utils.caching_cmp_pkgrevno')
+    def test_rabbit_supports_json(self, mock_cmp_pkgrevno):
+        mock_cmp_pkgrevno.return_value = 1
+        self.assertTrue(rabbit_utils.rabbit_supports_json())
+        mock_cmp_pkgrevno.return_value = -1
+        self.assertFalse(rabbit_utils.rabbit_supports_json())
