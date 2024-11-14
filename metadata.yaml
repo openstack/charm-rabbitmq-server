@@ -22,6 +22,12 @@ provides:
   nrpe-external-master:
     interface: nrpe-external-master
     scope: container
+  dashboards:
+    interface: grafana-dashboard
+  scrape:
+    interface: http
+  prometheus-rules:
+    interface: prometheus-rules
 requires:
   ha:
     interface: hacluster
