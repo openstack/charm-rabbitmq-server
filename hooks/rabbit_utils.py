@@ -1355,11 +1355,25 @@ def get_cluster_status(cmd_timeout=None):
     :raises: NotImplementedError, subprocess.TimeoutExpired,
     """
     if caching_cmp_pkgrevno('rabbitmq-server', '3.8.2') >= 0:
-        cmd = [RABBITMQ_CTL, 'cluster_status', '--formatter=json']
-        output = subprocess.check_output(
-            cmd,
-            timeout=cmd_timeout).decode('utf-8')
-        return json.loads(output)
+        try:
+            cmd = [RABBITMQ_CTL, 'cluster_status', '--formatter=json']
+            output = subprocess.check_output(
+                cmd,
+                timeout=cmd_timeout).decode('utf-8')
+            return json.loads(output)
+        except subprocess.CalledProcessError as ex:
+            log(str(ex), level=DEBUG)
+            if ex.returncode == 64:
+                # Error: this command requires the 'rabbit' app to be running
+                # on the target node. Start it with 'rabbitmqctl start_app'.
+                # Arguments given:
+                #   cluster_status --formatter=json
+                return {'running_nodes': [],
+                        'disk_nodes': [],
+                        'ram_nodes': [],
+                        'partitions': {}}
+            else:
+                raise
     else:
         # rabbitmqctl has not implemented the formatter option.
         raise NotImplementedError
