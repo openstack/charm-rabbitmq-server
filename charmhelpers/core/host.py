@@ -357,7 +357,7 @@ def init_is_systemd(service_name=None):
     return os.path.isdir(SYSTEMD_SYSTEM)
 
 
-def adduser(username, password=None, shell='/bin/bash',
+def adduser(username, password=None, shell=None,
             system_user=False, primary_group=None,
             secondary_groups=None, uid=None, home_dir=None):
     """Add a user to the system.
@@ -389,11 +389,14 @@ def adduser(username, password=None, shell='/bin/bash',
         if home_dir:
             cmd.extend(['--home', str(home_dir)])
         if system_user or password is None:
-            cmd.append('--system')
+            cmd.extend([
+                '--system',
+                '--shell', shell if shell else '/usr/sbin/nologin'
+            ])
         else:
             cmd.extend([
                 '--create-home',
-                '--shell', shell,
+                '--shell', shell if shell else '/bin/bash',
                 '--password', password,
             ])
         if not primary_group:

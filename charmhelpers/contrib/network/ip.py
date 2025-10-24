@@ -134,6 +134,8 @@ def get_address_in_network(network, fallback=None, fatal=False):
 
 def is_ipv6(address):
     """Determine whether provided address is IPv6 or not."""
+    if not address:
+        return False
     try:
         address = netaddr.IPAddress(address)
     except netaddr.AddrFormatError:
@@ -467,8 +469,20 @@ def ns_query(address):
         return None
 
     try:
-        answers = dns.resolver.query(address, rtype)
+        resolv = dns.resolver.Resolver()
+        # The dnspython library sets a default DNS query lifetime of 5.0 seconds,
+        # as defined in BaseResolver.reset() (see https://github.com/rthalley/
+        # dnspython/blob/7ed1648b/dns/resolver.py#L709, commit 7ed1648b).
+        resolv.lifetime = config('dns-query-timeout') or 5.0
+        if hasattr(resolv, 'resolve'):
+            answers = resolv.resolve(address, rtype)
+        else:
+            answers = resolv.query(address, rtype)
     except (dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+        return None
+    except dns.exception.Timeout:
+        log("DNS query timed out for address {} with rtype {} and timeout "
+            "{}".format(address, rtype, resolv.lifetime), level=WARNING)
         return None
 
     if answers:
@@ -618,7 +632,7 @@ def get_relation_ip(interface, cidr_network=None):
         # Currently IPv6 has priority, eventually we want IPv6 to just be
         # another network space.
         assert_charm_supports_ipv6()
-        return get_ipv6_addr()[0]
+        return get_ipv6_addr(dynamic_only=False)[0]
     elif cidr_network:
         # If a specific CIDR network is passed get the address from that
         # network.

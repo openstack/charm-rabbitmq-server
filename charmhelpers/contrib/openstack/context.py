@@ -25,7 +25,10 @@ import socket
 import time
 
 from base64 import b64decode
-from distutils.version import LooseVersion
+try:
+    from distutils.version import LooseVersion
+except ImportError:
+    from looseversion import LooseVersion
 from subprocess import (
     check_call,
     check_output,
