@@ -934,3 +934,15 @@ class RelationUtil(CharmTestCase):
 
         mock_add_nrpe_access.assert_called_once()
         mock_fix_nrpe_owner.assert_called_once()
+
+    @patch('rabbitmq_server_relations.relation_set')
+    def test_dashboards_relation_joined(self, mock_relation_set):
+        rabbitmq_server_relations.dashboards_relation_joined()
+
+        mock_relation_set.assert_called_once()
+        call_kwargs = mock_relation_set.call_args
+        dashboard = call_kwargs[1]['relation_settings']['dashboard']
+        self.assertIn('rabbitmq_global_publishers', dashboard)
+        self.assertEqual(
+            call_kwargs[1]['relation_settings']['name'],
+            'RabbitMQ-Overview')
