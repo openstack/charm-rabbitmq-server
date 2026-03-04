@@ -27,3 +27,4 @@ git+https://opendev.org/openstack/tempest.git#egg=tempest
 
 croniter            # needed for charm-rabbitmq-server unit tests
 psutil
+setuptools<82       # needed for pkg_resources on Python 3.12+
