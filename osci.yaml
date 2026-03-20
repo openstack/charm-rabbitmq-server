@@ -7,3 +7,4 @@
       needs_charm_build: true
       charm_build_name: rabbitmq-server
       build_type: charmcraft
+      charmcraft_channel: 3.x/stable
