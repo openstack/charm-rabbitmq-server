@@ -178,7 +178,7 @@ class RabbitMQSSLContext(object):
 
         ctxt.update(self.enable_ssl(
             ssl_key, ssl_cert, ssl_port, ssl_ca,
-            ssl_only=(ssl_mode == "only"), ssl_client=False
+            ssl_only=(config('ssl') == "only"), ssl_client=False
         ))
         ssl_utils.reconfigure_client_ssl(True)
         open_port(ssl_port)
