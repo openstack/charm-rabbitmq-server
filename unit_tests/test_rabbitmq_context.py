@@ -107,6 +107,113 @@ class TestRabbitMQSSLContext(unittest.TestCase):
 
         cmp_pkgrevno.assert_called_with("erlang-base", "23.0")
 
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
+    @mock.patch("rabbitmq_context.open_port")
+    @mock.patch("rabbitmq_context.os.chmod")
+    @mock.patch("rabbitmq_context.os.chown")
+    @mock.patch("rabbitmq_context.os.path.exists")
+    @mock.patch("rabbitmq_context.pwd.getpwnam")
+    @mock.patch("rabbitmq_context.grp.getgrnam")
+    @mock.patch("rabbitmq_context.config")
+    @mock.patch("rabbitmq_context.close_port")
+    @mock.patch("rabbitmq_context.ssl_utils.reconfigure_client_ssl")
+    @mock.patch("rabbitmq_context.ssl_utils.get_ssl_mode")
+    def test_context_ssl_only(self, get_ssl_mode, reconfig_ssl, close_port,
+                              config, gr, pw, exists, chown, chmod, open_port,
+                              cmp_pkgrevno):
+        # ssl_only is True when ssl_mode is 'only' (regular config path)
+        exists.return_value = True
+        get_ssl_mode.return_value = ("only", "only")
+        cmp_pkgrevno.return_value = 1
+
+        config_data = {'ssl': 'only', 'ssl_port': 5671}
+        config.side_effect = config_data.get
+
+        m = mock.mock_open()
+        with mock.patch('rabbitmq_context.open', m, create=True):
+            result = rabbitmq_context.RabbitMQSSLContext().__call__()
+
+        self.assertTrue(result['ssl_only'])
+        self.assertEqual(result['ssl_mode'], 'only')
+
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
+    @mock.patch("rabbitmq_context.open_port")
+    @mock.patch("rabbitmq_context.os.chmod")
+    @mock.patch("rabbitmq_context.os.chown")
+    @mock.patch("rabbitmq_context.os.path.exists")
+    @mock.patch("rabbitmq_context.pwd.getpwnam")
+    @mock.patch("rabbitmq_context.grp.getgrnam")
+    @mock.patch("rabbitmq_context.config")
+    @mock.patch("rabbitmq_context.close_port")
+    @mock.patch("rabbitmq_context.ssl_utils.reconfigure_client_ssl")
+    @mock.patch("rabbitmq_context.ssl_utils.get_relation_cert_data")
+    @mock.patch("rabbitmq_context.ssl_utils.get_ssl_mode")
+    def test_context_certs_from_relation_ssl_only(
+            self, get_ssl_mode, get_relation_cert_data, reconfig_ssl,
+            close_port, config, gr, pw, exists, chown, chmod, open_port,
+            cmp_pkgrevno):
+        # ssl_only is True when certs come from a relation and ssl='only'
+        # Regression test: the old code used ssl_mode == "only" which was
+        # always False when ssl_mode == CERTS_FROM_RELATION
+        exists.return_value = True
+        get_ssl_mode.return_value = (
+            rabbitmq_context.ssl_utils.CERTS_FROM_RELATION, True
+        )
+        get_relation_cert_data.return_value = {
+            'key': None,
+            'cert': None,
+            'ca': None
+        }
+        cmp_pkgrevno.return_value = 1
+
+        config_data = {'ssl': 'only', 'ssl_port': 5671}
+        config.side_effect = config_data.get
+
+        m = mock.mock_open()
+        with mock.patch('rabbitmq_context.open', m, create=True):
+            result = rabbitmq_context.RabbitMQSSLContext().__call__()
+
+        self.assertTrue(result['ssl_only'])
+        self.assertEqual(result['ssl_mode'], 'on')
+
+    @mock.patch.object(rabbitmq_context, 'cmp_pkgrevno')
+    @mock.patch("rabbitmq_context.open_port")
+    @mock.patch("rabbitmq_context.os.chmod")
+    @mock.patch("rabbitmq_context.os.chown")
+    @mock.patch("rabbitmq_context.os.path.exists")
+    @mock.patch("rabbitmq_context.pwd.getpwnam")
+    @mock.patch("rabbitmq_context.grp.getgrnam")
+    @mock.patch("rabbitmq_context.config")
+    @mock.patch("rabbitmq_context.close_port")
+    @mock.patch("rabbitmq_context.ssl_utils.reconfigure_client_ssl")
+    @mock.patch("rabbitmq_context.ssl_utils.get_relation_cert_data")
+    @mock.patch("rabbitmq_context.ssl_utils.get_ssl_mode")
+    def test_context_certs_from_relation_ssl_on(
+            self, get_ssl_mode, get_relation_cert_data, reconfig_ssl,
+            close_port, config, gr, pw, exists, chown, chmod, open_port,
+            cmp_pkgrevno):
+        # ssl_only is False when certs come from a relation and ssl='on'
+        exists.return_value = True
+        get_ssl_mode.return_value = (
+            rabbitmq_context.ssl_utils.CERTS_FROM_RELATION, True
+        )
+        get_relation_cert_data.return_value = {
+            'key': None,
+            'cert': None,
+            'ca': None
+        }
+        cmp_pkgrevno.return_value = 1
+
+        config_data = {'ssl': 'on', 'ssl_port': 5671}
+        config.side_effect = config_data.get
+
+        m = mock.mock_open()
+        with mock.patch('rabbitmq_context.open', m, create=True):
+            result = rabbitmq_context.RabbitMQSSLContext().__call__()
+
+        self.assertFalse(result['ssl_only'])
+        self.assertEqual(result['ssl_mode'], 'on')
+
 
 class TestRabbitMQClusterContext(unittest.TestCase):
 
