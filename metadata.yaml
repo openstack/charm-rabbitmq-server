@@ -11,10 +11,8 @@ tags:
 - amqp
 - misc
 series:
-- focal
 - jammy
-- lunar
-- mantic
+- noble
 provides:
   amqp:
     interface: rabbitmq
