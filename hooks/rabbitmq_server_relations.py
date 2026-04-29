@@ -270,7 +270,7 @@ def configure_amqp(username, vhost, relation_id, admin=False,
     :param admin: boolean value defining whether the new user is admin.
     :param ttlname: the name of ttl
     :param ttlreg: the regular expression of ttl
-    :param ttl: the vaule of ttl
+    :param ttl: the value of ttl
     :returns: user password
     """
     log("Configuring rabbitmq for user '{}' vhost '{}' (rid={})".
