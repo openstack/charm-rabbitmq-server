@@ -5,33 +5,24 @@ parts:
     plugin: dump
     source: .
     prime:
-    - actions/*
-    - charmhelpers/*
-    - files/*
-    - hooks/*
-    - lib/*
-    - templates/*
-    - actions.yaml
-    - config.yaml
-    - copyright
-    - hardening.yaml
-    - icon.svg
-    - LICENSE
-    - Makefile
-    - metadata.yaml
-    - README.md
+      - actions/*
+      - charmhelpers/*
+      - files/*
+      - hooks/*
+      - lib/*
+      - templates/*
+      - actions.yaml
+      - config.yaml
+      - copyright
+      - hardening.yaml
+      - icon.svg
+      - LICENSE
+      - Makefile
+      - metadata.yaml
+      - README.md
 
-base: ubuntu@24.04
 platforms:
-  amd64:
-    build-on: amd64
-    build-for: amd64
-  arm64:
-    build-on: arm64
-    build-for: arm64
-  ppc64el:
-    build-on: ppc64el
-    build-for: ppc64el
-  s390x:
-    build-on: s390x
-    build-for: s390x
+  ubuntu@24.04:amd64:
+  ubuntu@24.04:arm64:
+  ubuntu@24.04:ppc64el:
+  ubuntu@24.04:s390x:
