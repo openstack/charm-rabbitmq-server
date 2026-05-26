@@ -1,13 +1,12 @@
 charm_name: rabbitmq-server
 
 smoke_bundles:
-  - focal-yoga
+  - jammy-yoga
 
 gate_bundles:
-  - focal-yoga
-
-dev_bundles:
   - jammy-yoga
+
+dev_bundles: []
 
 tests:
   - zaza.openstack.charm_tests.rabbitmq_server.tests.RabbitMQDeferredRestartTest
