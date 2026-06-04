@@ -6,7 +6,7 @@
 #
 aiohappyeyeballs==2.6.2
     # via aiohttp
-aiohttp==3.13.5
+aiohttp==3.14.0
     # via
     #   python-libmaas
     #   zaza
@@ -208,6 +208,8 @@ jsonschema==4.17.3
     #   python-ironicclient
     #   tempest
     #   warlock
+juju==3.6.1.3
+    # via zaza
 juju-wait==2.8.4
     # via zaza
 jujubundlelib==0.5.7
@@ -235,6 +237,8 @@ keystoneauth1==5.14.0
     #   python-octaviaclient
     #   python-openstackclient
     #   python-watcherclient
+kubernetes==30.1.0
+    # via juju
 lxml==6.1.1
     # via zaza-openstack
 macaroonbakery==1.3.4
@@ -435,8 +439,6 @@ pbr==7.0.3
     #   tempest
 pika==1.4.0
     # via zaza-openstack
-pip==26.1.1
-    # via charm-tools
 platformdirs==4.9.6
     # via
     #   openstacksdk
@@ -715,6 +717,7 @@ types-setuptools==82.0.0.20260518
     # via requirements-parser
 typing-extensions==4.15.0
     # via
+    #   aiohttp
     #   aiosignal
     #   juju
     #   keystoneauth1
@@ -760,6 +763,11 @@ zaza-openstack @ git+https://github.com/openstack-charmers/zaza-openstack-tests.
     # via -r test-requirements.in
 
 # The following packages are considered to be unsafe in a requirements file:
-# juju
-# kubernetes
-# setuptools
+pip==26.1.1
+    # via charm-tools
+setuptools==81.0.0
+    # via
+    #   -r test-requirements.in
+    #   charm-tools
+    #   colander
+    #   pbr
