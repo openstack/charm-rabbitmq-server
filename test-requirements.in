@@ -29,6 +29,6 @@ tempest<46.1.0
 
 croniter            # needed for charm-rabbitmq-server unit tests
 psutil
-setuptools<82       # needed for pkg_resources on Python 3.12+
+setuptools<82.0.0
 git+https://github.com/juju/charm-tools.git
 flake8==7.1.1
